@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink - Smart Living, Simplified</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#1A73E8">
+    <meta name="description" content="Manage your properties and tenant relationships with our modern, cloud-based platform">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="CasaLink">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-TileColor" content="#1A73E8">
+    <meta name="msapplication-tap-highlight" content="no">
+    
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="icons/icon-72x72.png" sizes="72x72">
+    <link rel="icon" type="image/png" href="icons/icon-96x96.png" sizes="96x96">
+    <link rel="icon" type="image/png" href="icons/icon-128x128.png" sizes="128x128">
+    <link rel="icon" type="image/png" href="icons/icon-144x144.png" sizes="144x144">
+    <link rel="icon" type="image/png" href="icons/icon-152x152.png" sizes="152x152">
+    <link rel="icon" type="image/png" href="icons/icon-192x192.png" sizes="192x192">
+    <link rel="icon" type="image/png" href="icons/icon-384x384.png" sizes="384x384">
+    <link rel="icon" type="image/png" href="icons/icon-512x512.png" sizes="512x512">
+    <link rel="apple-touch-icon" href="icons/icon-152x152.png">
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Styles & Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+    
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { auth, db } from './config/firebase.js';
+        window.firebaseAuth = auth;
+        window.firebaseDb = db;
+    </script>
+</head>
+<body>
+    <div id="app">
+        <!-- Loading spinner -->
+        <div class="loading-spinner" id="loadingSpinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Loading CasaLink...</p>
+        </div>
+    </div>
+
+    <!-- PWA Install Prompt -->
+    <div class="pwa-install-prompt" id="pwaPrompt">
+        <div class="pwa-header">
+            <div class="pwa-logo">
+                <i class="fas fa-home"></i>
+            </div>
+            <div>
+                <div class="pwa-title">Install CasaLink</div>
+                <div style="font-size: 0.9rem; color: var(--dark-gray);">Get the full app experience</div>
+            </div>
+        </div>
+        <p>Install CasaLink on your home screen for quick and easy access when you're on the go.</p>
+        <div class="pwa-actions">
+            <button class="btn btn-secondary" onclick="PWAManager.hideInstallPromotion()">Not Now</button>
+            <button class="btn btn-primary" onclick="PWAManager.installPWA()">Install</button>
+        </div>
+    </div>
+
+    <!-- Offline Indicator -->
+    <div class="offline-indicator" id="offlineIndicator">
+        <i class="fas fa-wifi"></i> You're offline. Changes will sync when you're back online.
+    </div>
+
+    <!-- Sync Status Indicator -->
+    <div class="sync-status" id="syncStatus">
+        <i class="fas fa-sync-alt"></i> <span id="syncCount">0</span> pending
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/pwaManager.js"></script>
+    <script src="js/modalManager.js"></script>
+    <script src="js/notificationManager.js"></script>
+    <script src="js/analytics.js"></script>
+    <script src="js/performance.js"></script>
+    <script src="js/dataManager.js" type="module"></script>
+    <script src="js/auth.js" type="module"></script>
+    <script src="js/app.js" type="module"></script>
+
+    <script>
+        // Initialize PWA features
+        document.addEventListener('DOMContentLoaded', () => {
+            if (window.PWAManager) {
+                PWAManager.init();
+            }
+            if (window.AnalyticsManager) {
+                AnalyticsManager.init();
+            }
+            if (window.PerformanceOptimizer) {
+                PerformanceOptimizer.init();
+            }
+            
+            // Hide loading spinner after app initializes
+            setTimeout(() => {
+                const spinner = document.getElementById('loadingSpinner');
+                if (spinner) {
+                    spinner.style.display = 'none';
+                }
+            }, 1000);
+        });
+
+        // Global error handler
+        window.addEventListener('error', (event) => {
+            console.error('Global error:', event.error);
+            if (window.casaLink) {
+                window.casaLink.showNotification('An error occurred. Please refresh the page.', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

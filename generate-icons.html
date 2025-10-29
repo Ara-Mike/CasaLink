@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate CasaLink Icons</title>
+</head>
+<body>
+    <h1>Generate CasaLink Icons</h1>
+    <p>Right-click each icon and "Save image as..." to your icons folder</p>
+    
+    <div id="icons-container"></div>
+    
+    <script>
+        function generateIcon(size, name) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#1A73E8');
+            gradient.addColorStop(1, '#0d62d4');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Home icon
+            ctx.fillStyle = '#FFFFFF';
+            const iconSize = size * 0.5;
+            const x = (size - iconSize) / 2;
+            const y = (size - iconSize) / 2;
+            
+            // Draw home shape
+            ctx.beginPath();
+            ctx.moveTo(x + iconSize/2, y + iconSize*0.2);
+            ctx.lineTo(x + iconSize*0.8, y + iconSize*0.5);
+            ctx.lineTo(x + iconSize*0.8, y + iconSize*0.9);
+            ctx.lineTo(x + iconSize*0.2, y + iconSize*0.9);
+            ctx.lineTo(x + iconSize*0.2, y + iconSize*0.5);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Door
+            ctx.fillStyle = '#1A73E8';
+            const doorWidth = iconSize * 0.25;
+            const doorHeight = iconSize * 0.4;
+            ctx.fillRect(x + iconSize/2 - doorWidth/2, y + iconSize*0.6, doorWidth, doorHeight);
+            
+            // Create download link
+            const container = document.createElement('div');
+            container.style.cssText = 'margin: 20px; display: inline-block; text-align: center;';
+            
+            const link = document.createElement('a');
+            link.download = name;
+            link.href = canvas.toDataURL('image/png');
+            link.innerHTML = `<div style="margin-bottom: 10px;">${name}</div>`;
+            link.appendChild(canvas);
+            
+            container.appendChild(link);
+            document.getElementById('icons-container').appendChild(container);
+            
+            return canvas;
+        }
+        
+        // Generate all required icons
+        const sizes = [72, 96, 128, 144, 152, 192, 384, 512];
+        sizes.forEach(size => {
+            generateIcon(size, `icon-${size}x${size}.png`);
+        });
+    </script>
+</body>
+</html>
