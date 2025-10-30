@@ -1,4 +1,4 @@
-// js/modalManager.js
+// js/modalManager.js - NON-MODULE VERSION
 class ModalManager {
     static openModal(content, options = {}) {
         const modal = document.createElement('div');
@@ -51,4 +51,4 @@ class ModalManager {
         }
     }
 }
-export { ModalManager };
+window.ModalManager = ModalManager;

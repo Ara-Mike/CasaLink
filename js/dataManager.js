@@ -1,19 +1,4 @@
-// js/dataManager.js
-import { 
-    collection, 
-    doc, 
-    getDocs, 
-    getDoc, 
-    addDoc, 
-    updateDoc, 
-    deleteDoc,
-    query,
-    where,
-    orderBy,
-    onSnapshot
-} from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
-import { db } from '../config/firebase.js';
-
+// js/dataManager.js - COMPAT VERSION
 class DataManager {
     static isOnline = navigator.onLine;
 
@@ -42,7 +27,7 @@ class DataManager {
         }
 
         try {
-            const docRef = await addDoc(collection(db, 'tenants'), {
+            const docRef = await firebaseDb.collection('tenants').add({
                 ...tenantData,
                 createdAt: new Date().toISOString(),
                 isActive: true
@@ -128,37 +113,6 @@ class DataManager {
         }
     }
 
-    // Cache frequently accessed data
-    static async getCachedData(collectionName, queryFn) {
-        const cacheKey = `cache_${collectionName}`;
-        const cacheTimestamp = localStorage.getItem(`${cacheKey}_timestamp`);
-        const now = new Date().getTime();
-        
-        // Use cache if less than 5 minutes old and online
-        if (cacheTimestamp && (now - parseInt(cacheTimestamp)) < 300000 && this.isOnline) {
-            const cachedData = localStorage.getItem(cacheKey);
-            if (cachedData) {
-                return JSON.parse(cachedData);
-            }
-        }
-        
-        // Fetch fresh data
-        const data = await queryFn();
-        
-        // Update cache
-        localStorage.setItem(cacheKey, JSON.stringify(data));
-        localStorage.setItem(`${cacheKey}_timestamp`, now.toString());
-        
-        return data;
-    }
-
-
-    
-
-    
-
-    
-
     // ===== DASHBOARD STATS =====
     static async getDashboardStats(landlordId) {
         const [tenants, bills, maintenance, properties] = await Promise.all([
@@ -188,17 +142,17 @@ class DataManager {
     }
 
     static listenToDashboardStats(landlordId, callback) {
-        const tenantsQuery = query(collection(db, 'tenants'), where('landlordId', '==', landlordId));
-        const billsQuery = query(collection(db, 'bills'), where('landlordId', '==', landlordId));
-        const maintenanceQuery = query(collection(db, 'maintenance'), where('landlordId', '==', landlordId));
-        const propertiesQuery = query(collection(db, 'properties'), where('landlordId', '==', landlordId));
+        const tenantsQuery = firebaseDb.collection('tenants').where('landlordId', '==', landlordId);
+        const billsQuery = firebaseDb.collection('bills').where('landlordId', '==', landlordId);
+        const maintenanceQuery = firebaseDb.collection('maintenance').where('landlordId', '==', landlordId);
+        const propertiesQuery = firebaseDb.collection('properties').where('landlordId', '==', landlordId);
 
         // Combine multiple real-time listeners
         const unsubscribeFunctions = [
-            onSnapshot(tenantsQuery, () => this.updateCombinedStats()),
-            onSnapshot(billsQuery, () => this.updateCombinedStats()),
-            onSnapshot(maintenanceQuery, () => this.updateCombinedStats()),
-            onSnapshot(propertiesQuery, () => this.updateCombinedStats())
+            tenantsQuery.onSnapshot(() => this.updateCombinedStats()),
+            billsQuery.onSnapshot(() => this.updateCombinedStats()),
+            maintenanceQuery.onSnapshot(() => this.updateCombinedStats()),
+            propertiesQuery.onSnapshot(() => this.updateCombinedStats())
         ];
 
         let combinedCallback = callback;
@@ -214,89 +168,50 @@ class DataManager {
         return () => unsubscribeFunctions.forEach(unsub => unsub());
     }
 
-    
-
     // ===== TENANTS =====
     static async getTenants(landlordId) {
-        const q = query(
-            collection(db, 'tenants'),
-            where('landlordId', '==', landlordId)
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    }
-
-    static async addTenant(tenantData) {
-        const docRef = await addDoc(collection(db, 'tenants'), {
-            ...tenantData,
-            createdAt: new Date().toISOString(),
-            isActive: true
-        });
-        return docRef.id;
+        try {
+            console.log('🔍 DataManager.getTenants called with:', landlordId);
+            const querySnapshot = await firebaseDb.collection('tenants')
+                .where('landlordId', '==', landlordId)
+                .get();
+            
+            const tenants = querySnapshot.docs.map(doc => ({ 
+                id: doc.id, 
+                ...doc.data() 
+            }));
+            
+            console.log('✅ DataManager.getTenants returning:', tenants);
+            return tenants;
+            
+        } catch (error) {
+            console.error('❌ DataManager.getTenants error:', error);
+            return []; // Return empty array instead of throwing
+        }
     }
 
     static async updateTenant(tenantId, updates) {
-        await updateDoc(doc(db, 'tenants', tenantId), updates);
+        await firebaseDb.doc(`tenants/${tenantId}`).update(updates);
     }
 
     static async deleteTenant(tenantId) {
-        await deleteDoc(doc(db, 'tenants', tenantId));
-    }
-
-    // ===== BILLS =====
-    static async updateBill(billId, updates) {
-        await updateDoc(doc(db, 'bills', billId), updates);
-    }
-
-    static async deleteBill(billId) {
-        await deleteDoc(doc(db, 'bills', billId));
-    }
-
-    // ===== MAINTENANCE =====
-    static async updateMaintenance(requestId, updates) {
-        await updateDoc(doc(db, 'maintenance', requestId), updates);
-    }
-
-    // ===== PROPERTIES =====
-    static async getProperties(landlordId) {
-        const q = query(
-            collection(db, 'properties'),
-            where('landlordId', '==', landlordId)
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    }
-
-    static async addProperty(propertyData) {
-        const docRef = await addDoc(collection(db, 'properties'), {
-            ...propertyData,
-            createdAt: new Date().toISOString(),
-            isActive: true
-        });
-        return docRef.id;
-    }
-
-    static async updateProperty(propertyId, updates) {
-        await updateDoc(doc(db, 'properties', propertyId), updates);
-    }
-
-    static async deleteProperty(propertyId) {
-        await deleteDoc(doc(db, 'properties', propertyId));
+        await firebaseDb.doc(`tenants/${tenantId}`).delete();
     }
 
     // ===== BILLS =====
     static async getBills(landlordId) {
-        const q = query(
-            collection(db, 'bills'),
-            where('landlordId', '==', landlordId),
-            orderBy('dueDate', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const querySnapshot = await firebaseDb.collection('bills')
+            .where('landlordId', '==', landlordId)
+            .orderBy('dueDate', 'desc')
+            .get();
+        return querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
     }
 
     static async createBill(billData) {
-        const docRef = await addDoc(collection(db, 'bills'), {
+        const docRef = await firebaseDb.collection('bills').add({
             ...billData,
             createdAt: new Date().toISOString(),
             status: 'pending'
@@ -304,72 +219,32 @@ class DataManager {
         return docRef.id;
     }
 
+    static async updateBill(billId, updates) {
+        await firebaseDb.doc(`bills/${billId}`).update(updates);
+    }
+
+    static async deleteBill(billId) {
+        await firebaseDb.doc(`bills/${billId}`).delete();
+    }
+
     // ===== MAINTENANCE REQUESTS =====
     static async getMaintenanceRequests(landlordId) {
-        const q = query(
-            collection(db, 'maintenance'),
-            where('landlordId', '==', landlordId),
-            orderBy('createdAt', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const querySnapshot = await firebaseDb.collection('maintenance')
+            .where('landlordId', '==', landlordId)
+            .orderBy('createdAt', 'desc')
+            .get();
+        return querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
     }
 
-    static async createMaintenanceRequest(requestData) {
-        const docRef = await addDoc(collection(db, 'maintenance'), {
-            ...requestData,
-            createdAt: new Date().toISOString(),
-            status: 'open'
-        });
-        return docRef.id;
-    }
-
-    // ===== REAL-TIME LISTENERS =====
-    static listenToTenants(landlordId, callback) {
-        const q = query(
-            collection(db, 'tenants'),
-            where('landlordId', '==', landlordId)
-        );
-        return onSnapshot(q, (snapshot) => {
-            const tenants = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            callback(tenants);
-        });
-    }
-
-    static listenToBills(landlordId, callback) {
-        const q = query(
-            collection(db, 'bills'),
-            where('landlordId', '==', landlordId),
-            orderBy('dueDate', 'desc')
-        );
-        return onSnapshot(q, (snapshot) => {
-            const bills = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            callback(bills);
-        });
-    }
-
-    static async getTenantBills(tenantId) {
-        const q = query(
-            collection(db, 'bills'),
-            where('tenantId', '==', tenantId),
-            orderBy('dueDate', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    }
-
-    static async getTenantMaintenanceRequests(tenantId) {
-        const q = query(
-            collection(db, 'maintenance'),
-            where('tenantId', '==', tenantId),
-            orderBy('createdAt', 'desc')
-        );
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    static async updateMaintenance(requestId, updates) {
+        await firebaseDb.doc(`maintenance/${requestId}`).update(updates);
     }
 
     static async submitMaintenanceRequest(requestData) {
-        const docRef = await addDoc(collection(db, 'maintenance'), {
+        const docRef = await firebaseDb.collection('maintenance').add({
             ...requestData,
             status: 'open',
             priority: 'medium',
@@ -378,25 +253,70 @@ class DataManager {
         return docRef.id;
     }
 
-    // In dataManager.js - Fix the getTenantProfile method
+    // ===== PROPERTIES =====
+    static async getProperties(landlordId) {
+        const querySnapshot = await firebaseDb.collection('properties')
+            .where('landlordId', '==', landlordId)
+            .get();
+        return querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
+    }
+
+    static async addProperty(propertyData) {
+        const docRef = await firebaseDb.collection('properties').add({
+            ...propertyData,
+            createdAt: new Date().toISOString(),
+            isActive: true
+        });
+        return docRef.id;
+    }
+
+    static async updateProperty(propertyId, updates) {
+        await firebaseDb.doc(`properties/${propertyId}`).update(updates);
+    }
+
+    // ===== TENANT-SPECIFIC METHODS =====
+    static async getTenantBills(tenantId) {
+        const querySnapshot = await firebaseDb.collection('bills')
+            .where('tenantId', '==', tenantId)
+            .orderBy('dueDate', 'desc')
+            .get();
+        return querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
+    }
+
+    static async getTenantMaintenanceRequests(tenantId) {
+        const querySnapshot = await firebaseDb.collection('maintenance')
+            .where('tenantId', '==', tenantId)
+            .orderBy('createdAt', 'desc')
+            .get();
+        return querySnapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+        }));
+    }
+
     static async getTenantProfile(tenantId) {
         try {
-            // FIXED: Changed variable name from 'doc' to 'docRef'
-            const docRef = doc(db, 'tenants', tenantId);
-            const document = await getDoc(docRef);
-            return document.exists() ? { id: document.id, ...document.data() } : null;
+            const userDoc = await firebaseDb.collection('tenants').doc(tenantId).get();
+            return userDoc.exists ? { 
+                id: userDoc.id, 
+                ...userDoc.data() 
+            } : null;
         } catch (error) {
             console.error('Error getting tenant profile:', error);
             return null;
         }
     }
 
-    // Fix any other instances where 'doc' is used as a variable
     static async updateTenantProfile(tenantId, updates) {
         try {
-            // FIXED: Changed variable name from 'doc' to 'docRef'
-            const docRef = doc(db, 'tenants', tenantId);
-            await updateDoc(docRef, updates);
+            const docRef = firebaseDb.doc(`tenants/${tenantId}`);
+            await docRef.update(updates);
         } catch (error) {
             console.error('Error updating tenant profile:', error);
             throw error;
@@ -405,7 +325,7 @@ class DataManager {
 
     // ===== PAYMENT PROCESSING =====
     static async recordPayment(paymentData) {
-        const docRef = await addDoc(collection(db, 'payments'), {
+        const docRef = await firebaseDb.collection('payments').add({
             ...paymentData,
             processedAt: new Date().toISOString(),
             status: 'completed'
@@ -413,7 +333,7 @@ class DataManager {
 
         // Update bill status to paid
         if (paymentData.billId) {
-            await updateDoc(doc(db, 'bills', paymentData.billId), {
+            await firebaseDb.doc(`bills/${paymentData.billId}`).update({
                 status: 'paid',
                 paidDate: new Date().toISOString()
             });
@@ -422,33 +342,46 @@ class DataManager {
         return docRef.id;
     }
 
-        // ===== REAL-TIME LISTENERS FOR TENANTS =====
+    // ===== REAL-TIME LISTENERS =====
+    static listenToBills(landlordId, callback) {
+        return firebaseDb.collection('bills')
+            .where('landlordId', '==', landlordId)
+            .orderBy('dueDate', 'desc')
+            .onSnapshot((snapshot) => {
+                const bills = snapshot.docs.map(doc => ({ 
+                    id: doc.id, 
+                    ...doc.data() 
+                }));
+                callback(bills);
+            });
+    }
+
     static listenToTenantBills(tenantId, callback) {
-        const q = query(
-            collection(db, 'bills'),
-            where('tenantId', '==', tenantId),
-            orderBy('dueDate', 'desc')
-        );
-        return onSnapshot(q, (snapshot) => {
-            const bills = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            callback(bills);
-        });
+        return firebaseDb.collection('bills')
+            .where('tenantId', '==', tenantId)
+            .orderBy('dueDate', 'desc')
+            .onSnapshot((snapshot) => {
+                const bills = snapshot.docs.map(doc => ({ 
+                    id: doc.id, 
+                    ...doc.data() 
+                }));
+                callback(bills);
+            });
     }
 
     static listenToTenantMaintenance(tenantId, callback) {
-        const q = query(
-            collection(db, 'maintenance'),
-            where('tenantId', '==', tenantId),
-            orderBy('createdAt', 'desc')
-        );
-        return onSnapshot(q, (snapshot) => {
-            const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            callback(requests);
-        });
+        return firebaseDb.collection('maintenance')
+            .where('tenantId', '==', tenantId)
+            .orderBy('createdAt', 'desc')
+            .onSnapshot((snapshot) => {
+                const requests = snapshot.docs.map(doc => ({ 
+                    id: doc.id, 
+                    ...doc.data() 
+                }));
+                callback(requests);
+            });
     }
 }
 
 DataManager.init();
-export default DataManager;
 window.DataManager = DataManager;
-console.log('DataManager initialized and made global');

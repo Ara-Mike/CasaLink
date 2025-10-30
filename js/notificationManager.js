@@ -1,4 +1,4 @@
-// js/notificationManager.js
+// js/notificationManager.js - REMOVE export statement
 class NotificationManager {
     static permission = null;
     static registration = null;
@@ -77,10 +77,10 @@ class NotificationManager {
         // Handle notification actions
         switch (data.action) {
             case 'view_bill':
-                window.casaLink.showPage('tenantBilling');
+                window.casaLink?.showPage('tenantBilling');
                 break;
             case 'view_maintenance':
-                window.casaLink.showPage('tenantMaintenance');
+                window.casaLink?.showPage('tenantMaintenance');
                 break;
             default:
                 // Default behavior
@@ -146,5 +146,4 @@ class NotificationManager {
         });
     }
 }
-
-export { NotificationManager };
+window.NotificationManager = NotificationManager;

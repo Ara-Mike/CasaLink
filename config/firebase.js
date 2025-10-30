@@ -1,7 +1,5 @@
-// config/firebase.js
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
-import { getAuth } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
-import { getFirestore } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+// config/firebase.js - Add connection test
+console.log('Loading Firebase config...');
 
 const firebaseConfig = {
   apiKey: "AIzaSyC-FvYHTes2lAU3AkMJ6kGIEk4HjioP_HQ",
@@ -14,10 +12,30 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-console.log('Firebase initialized successfully');
-
-export { auth, db };
+try {
+  // Check if Firebase is already initialized
+  if (!firebase.apps.length) {
+    const app = firebase.initializeApp(firebaseConfig);
+    console.log('Firebase app initialized');
+  } else {
+    console.log('Firebase app already initialized');
+  }
+  
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  
+  // Test Firestore connection
+  db.collection('test').doc('connection').get()
+    .then(() => console.log('Firestore connection successful'))
+    .catch(err => console.warn('Firestore connection test failed:', err));
+  
+  console.log('Firebase services initialized successfully');
+  
+  // Make available globally
+  window.firebaseApp = firebase.app();
+  window.firebaseAuth = auth;
+  window.firebaseDb = db;
+  
+} catch (error) {
+  console.error('Firebase initialization error:', error);
+}

@@ -1,4 +1,4 @@
-// sw.js
+// sw.js (NEW LOCATION - in root folder)
 const CACHE_NAME = 'casalink-v1.0.0';
 const urlsToCache = [
   '/',
@@ -8,6 +8,8 @@ const urlsToCache = [
   '/js/auth.js',
   '/js/dataManager.js',
   '/js/modalManager.js',
+  '/js/pwaManager.js',
+  '/js/notificationManager.js',
   '/config/firebase.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'

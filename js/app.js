@@ -1,8 +1,3 @@
-import AuthManager from './auth.js';
-import { ModalManager } from './modalManager.js';
-import {NotificationManager} from './notificationManager.js';
-import DataManager from './dataManager.js';
-
 
 class CasaLink {
     constructor() {
@@ -57,6 +52,9 @@ class CasaLink {
             spinner.classList.remove('hidden');
         }
         
+        // Wait for Firebase to be available
+        await this.waitForFirebase();
+        
         // Setup features that don't require auth
         this.setupPWAFeatures();
         this.setupOfflineHandling();
@@ -65,20 +63,37 @@ class CasaLink {
         // Setup auth listener
         this.setupAuthListener();
         
-        // If no auth state is detected within 2 seconds, show login
+        // If no auth state is detected within 3 seconds, show login
         setTimeout(() => {
             if (!this.currentUser) {
                 console.log('No auth detected, showing login page');
                 this.showLogin();
                 document.getElementById('loadingSpinner')?.classList.add('hidden');
             }
-        }, 2000);
+        }, 3000);
+    }
+
+    async waitForFirebase() {
+        return new Promise((resolve) => {
+            const checkFirebase = () => {
+                if (window.firebaseAuth && window.firebaseDb) {
+                    console.log('Firebase is ready');
+                    resolve();
+                } else {
+                    console.log('Waiting for Firebase...');
+                    setTimeout(checkFirebase, 100);
+                }
+            };
+            checkFirebase();
+        });
     }
 
     async showPage(page) {
         const contentArea = document.getElementById('contentArea');
         if (!contentArea) return;
 
+        console.log('🔄 Loading page:', page);
+        
         // Show loading state
         contentArea.innerHTML = `
             <div class="data-loading">
@@ -87,13 +102,19 @@ class CasaLink {
         `;
 
         try {
-            let pageContent = '';
+            let pageContent;
+            
+            console.log('📝 Getting page content for:', page);
             
             switch (page) {
                 case 'dashboard':
-                    pageContent = this.currentRole === 'landlord' 
-                        ? await this.getLandlordDashboard()
-                        : await this.getTenantDashboard();
+                    if (this.currentRole === 'landlord') {
+                        console.log('🏠 Getting landlord dashboard...');
+                        pageContent = await this.getLandlordDashboard();
+                    } else {
+                        console.log('👤 Getting tenant dashboard...');
+                        pageContent = await this.getTenantDashboard();
+                    }
                     break;
                 case 'billing':
                     pageContent = this.currentRole === 'landlord'
@@ -105,39 +126,28 @@ class CasaLink {
                         ? await this.getMaintenancePage()
                         : await this.getTenantMaintenancePage();
                     break;
-                case 'tenantBilling':
-                    pageContent = await this.getTenantBillingPage();
-                    break;
-                case 'tenantMaintenance':
-                    pageContent = await this.getTenantMaintenancePage();
-                    break;
-                case 'tenantProfile':
-                    pageContent = '<div class="page-content"><h1>My Profile</h1><p>Profile page coming soon...</p></div>';
-                    break;
                 case 'tenants':
-                    if (this.currentRole === 'landlord') {
-                        pageContent = await this.getTenantsPage();
-                    }
-                    break;
-                case 'reports':
-                    if (this.currentRole === 'landlord') {
-                        pageContent = '<div class="page-content"><h1>Reports</h1><p>Reports page coming soon...</p></div>';
-                    }
-                    break;
-                case 'settings':
-                    pageContent = '<div class="page-content"><h1>Settings</h1><p>Settings page coming soon...</p></div>';
+                    pageContent = await this.getTenantsPage();
                     break;
                 default:
-                    pageContent = '<div class="page-content"><h1>Page Not Found</h1></div>';
+                    pageContent = `<div class="page-content"><h1>${page} Page</h1><p>This page is under construction.</p></div>`;
             }
 
-            contentArea.innerHTML = pageContent;
+            console.log('✅ Page content received:', typeof pageContent);
+            
+            // Ensure we have a string
+            if (typeof pageContent === 'string') {
+                contentArea.innerHTML = pageContent;
+            } else {
+                console.error('❌ Page content is not a string:', typeof pageContent);
+                throw new Error('Invalid page content');
+            }
             
             // Setup page-specific events
             this.setupPageEvents(page);
             
         } catch (error) {
-            console.error('Error loading page:', error);
+            console.error('❌ Error loading page:', error);
             contentArea.innerHTML = `
                 <div class="page-content">
                     <h1>Error Loading Page</h1>
@@ -504,19 +514,189 @@ class CasaLink {
     }
 
     showDashboard() {
-        console.log('Showing dashboard for:', this.currentUser?.email);
+        console.log('🔄 showDashboard() called for:', this.currentUser?.email);
         const appElement = document.getElementById('app');
         if (appElement) {
             try {
-                appElement.innerHTML = this.getDashboardHTML();
+                console.log('🏠 Rendering COMPLETE landlord dashboard with content');
+                
+                // Render the COMPLETE dashboard with actual content immediately
+                appElement.innerHTML = `
+                <div class="app-container">
+                    <header>
+                        <div class="container">
+                            <div class="header-content">
+                                <div class="logo">
+                                    <i class="fas fa-home"></i>
+                                    <span>CasaLink</span>
+                                </div>
+                                
+                                <nav class="nav-links landlord-nav">
+                                    <a href="#" class="active" data-page="dashboard">Dashboard</a>
+                                    <a href="#" data-page="billing">Billing & Payments</a>
+                                    <a href="#" data-page="maintenance">Maintenance</a>
+                                    <a href="#" data-page="tenants">Tenant Management</a>
+                                    <a href="#" data-page="reports">Reports</a>
+                                </nav>
+                                
+                                <div class="header-actions">
+                                    <div class="user-profile" id="userProfile">
+                                        <div class="avatar">${this.currentUser.avatar}</div>
+                                        <div>
+                                            <div style="font-weight: 500;">${this.currentUser.name}</div>
+                                            <div style="font-size: 0.8rem; color: var(--dark-gray);">Landlord</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div class="main-content">
+                        <aside class="sidebar">
+                            <ul class="sidebar-menu landlord-nav">
+                                <li><a href="#" class="active" data-page="dashboard"><i class="fas fa-th-large"></i> <span>Dashboard</span></a></li>
+                                <li><a href="#" data-page="billing"><i class="fas fa-file-invoice-dollar"></i> <span>Billing & Payments</span></a></li>
+                                <li><a href="#" data-page="maintenance"><i class="fas fa-tools"></i> <span>Maintenance</span></a></li>
+                                <li><a href="#" data-page="tenants"><i class="fas fa-users"></i> <span>Tenant Management</span></a></li>
+                                <li><a href="#" data-page="reports"><i class="fas fa-chart-pie"></i> <span>Reports</span></a></li>
+                                <li><a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
+                            </ul>
+                        </aside>
+
+                        <main class="content-area" id="contentArea">
+                            <!-- DASHBOARD CONTENT - LOADS IMMEDIATELY -->
+                            <div class="page-content">
+                                <div class="page-header">
+                                    <h1 class="page-title">Welcome to Your Dashboard</h1>
+                                    <div>
+                                        <button class="btn btn-secondary"><i class="fas fa-download"></i> Export Report</button>
+                                        <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
+                                    </div>
+                                </div>
+
+                                <div class="dashboard-cards">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-title">Total Tenants</div>
+                                            <div class="card-icon tenants">
+                                                <i class="fas fa-users"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-value">12</div>
+                                        <div class="card-change positive">
+                                            <i class="fas fa-arrow-up"></i>
+                                            <span>+2 this month</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-title">Unpaid Bills</div>
+                                            <div class="card-icon unpaid">
+                                                <i class="fas fa-money-bill-wave"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-value">3</div>
+                                        <div class="card-change negative">
+                                            <i class="fas fa-exclamation-circle"></i>
+                                            <span>Requires attention</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-title">Open Maintenance</div>
+                                            <div class="card-icon complaints">
+                                                <i class="fas fa-tools"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-value">5</div>
+                                        <div class="card-change negative">
+                                            <i class="fas fa-arrow-up"></i>
+                                            <span>Needs action</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-title">Monthly Revenue</div>
+                                            <div class="card-icon tenants">
+                                                <i class="fas fa-chart-line"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-value">₱150,000</div>
+                                        <div class="card-change positive">
+                                            <i class="fas fa-money-bill"></i>
+                                            <span>This month</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Quick Actions -->
+                                <div class="dashboard-cards">
+                                    <div class="card" onclick="casaLink.showPage('tenants')" style="cursor: pointer;">
+                                        <div class="card-header">
+                                            <div class="card-title">Manage Tenants</div>
+                                            <div class="card-icon tenants">
+                                                <i class="fas fa-users"></i>
+                                            </div>
+                                        </div>
+                                        <p>View and manage all your tenants</p>
+                                        <div style="color: var(--primary-blue); font-weight: 500; margin-top: 10px;">
+                                            Go to Tenants <i class="fas fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="card" onclick="casaLink.showPage('billing')" style="cursor: pointer;">
+                                        <div class="card-header">
+                                            <div class="card-title">Billing & Payments</div>
+                                            <div class="card-icon unpaid">
+                                                <i class="fas fa-file-invoice-dollar"></i>
+                                            </div>
+                                        </div>
+                                        <p>Generate bills and track payments</p>
+                                        <div style="color: var(--primary-blue); font-weight: 500; margin-top: 10px;">
+                                            Go to Billing <i class="fas fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="card" onclick="casaLink.showPage('maintenance')" style="cursor: pointer;">
+                                        <div class="card-header">
+                                            <div class="card-title">Maintenance</div>
+                                            <div class="card-icon complaints">
+                                                <i class="fas fa-tools"></i>
+                                            </div>
+                                        </div>
+                                        <p>Handle maintenance requests</p>
+                                        <div style="color: var(--primary-blue); font-weight: 500; margin-top: 10px;">
+                                            Go to Maintenance <i class="fas fa-arrow-right"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div style="text-align: center; margin-top: 40px; padding: 20px; background: white; border-radius: 12px;">
+                                    <h3>🎉 Welcome to CasaLink!</h3>
+                                    <p>Your property management dashboard is ready. Start managing your properties efficiently.</p>
+                                </div>
+                            </div>
+                        </main>
+                    </div>
+                </div>
+                `;
+
+                // Setup dashboard events
                 this.setupDashboardEvents();
+                console.log('✅ Dashboard rendered successfully with content');
+                
             } catch (error) {
-                console.error('Error showing dashboard:', error);
-                // Fallback to login if dashboard fails
+                console.error('❌ Error in showDashboard:', error);
                 this.showLogin();
             }
         }
     }
+
+
 
         // In app.js - Add getLoginHTML method
     // Update login screen HTML to include registration
@@ -677,101 +857,104 @@ class CasaLink {
     }
 
     handleRegister() {
-    const nameInput = document.getElementById('regName');
-    const emailInput = document.getElementById('regEmail');
-    const passwordInput = document.getElementById('regPassword');
-    const confirmPasswordInput = document.getElementById('regConfirmPassword');
-    
-    const name = nameInput?.value;
-    const email = emailInput?.value;
-    const password = passwordInput?.value;
-    const confirmPassword = confirmPasswordInput?.value;
-    
-    // Get selected role from active role option
-    const activeRoleOption = document.querySelector('.role-option.active');
-    const role = activeRoleOption ? activeRoleOption.getAttribute('data-role') : 'tenant';
+        const nameInput = document.getElementById('regName');
+        const emailInput = document.getElementById('regEmail');
+        const passwordInput = document.getElementById('regPassword');
+        const confirmPasswordInput = document.getElementById('regConfirmPassword');
+        
+        const name = nameInput?.value;
+        const email = emailInput?.value;
+        const password = passwordInput?.value;
+        const confirmPassword = confirmPasswordInput?.value;
+        
+        // Get selected role from active role option
+        const activeRoleOption = document.querySelector('.role-option.active');
+        const role = activeRoleOption ? activeRoleOption.getAttribute('data-role') : 'tenant';
 
-    if (!name || !email || !password || !confirmPassword) {
-        this.showNotification('Please fill in all fields', 'error');
-        return;
+        if (!name || !email || !password || !confirmPassword) {
+            this.showNotification('Please fill in all fields', 'error');
+            return;
+        }
+
+        if (password !== confirmPassword) {
+            this.showNotification('Passwords do not match', 'error');
+            return;
+        }
+
+        if (password.length < 6) {
+            this.showNotification('Password should be at least 6 characters', 'error');
+            return;
+        }
+
+        const registerBtn = document.getElementById('registerBtn');
+        if (registerBtn) {
+            const originalText = registerBtn.innerHTML;
+            registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
+            registerBtn.disabled = true;
+
+            const userData = {
+                name: name,
+                role: role,
+                avatar: name.charAt(0).toUpperCase()
+            };
+
+            AuthManager.register(email, password, userData)
+                .then(user => {
+                    this.currentUser = user;
+                    this.currentRole = user.role;
+                    this.showDashboard();
+                })
+                .catch(error => {
+                    this.showNotification(error.message, 'error');
+                    registerBtn.innerHTML = originalText;
+                    registerBtn.disabled = false;
+                });
+        }
     }
-
-    if (password !== confirmPassword) {
-        this.showNotification('Passwords do not match', 'error');
-        return;
-    }
-
-    if (password.length < 6) {
-        this.showNotification('Password should be at least 6 characters', 'error');
-        return;
-    }
-
-    const registerBtn = document.getElementById('registerBtn');
-    if (registerBtn) {
-        const originalText = registerBtn.innerHTML;
-        registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
-        registerBtn.disabled = true;
-
-        const userData = {
-            name: name,
-            role: role,
-            avatar: name.charAt(0).toUpperCase()
-        };
-
-        AuthManager.register(email, password, userData)
-            .then(user => {
-                this.currentUser = user;
-                this.currentRole = user.role;
-                this.showDashboard();
-            })
-            .catch(error => {
-                this.showNotification(error.message, 'error');
-                registerBtn.innerHTML = originalText;
-                registerBtn.disabled = false;
-            });
-    }
-}
 
 
 
     handleLogin() {
-    const emailInput = document.getElementById('email');
-    const passwordInput = document.getElementById('password');
-    
-    const email = emailInput?.value;
-    const password = passwordInput?.value;
-    
-    // Get selected role from active role option
-    const activeRoleOption = document.querySelector('.role-option.active');
-    const role = activeRoleOption ? activeRoleOption.getAttribute('data-role') : 'tenant';
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        
+        const email = emailInput?.value;
+        const password = passwordInput?.value;
+        
+        // Get selected role from active role option
+        const activeRoleOption = document.querySelector('.role-option.active');
+        const role = activeRoleOption ? activeRoleOption.getAttribute('data-role') : 'tenant';
 
-    console.log('Login attempt:', { email, role });
+        console.log('🔐 Login attempt:', { email, role });
 
-    if (!email || !password) {
-        this.showNotification('Please enter both email and password', 'error');
-        return;
+        if (!email || !password) {
+            this.showNotification('Please enter both email and password', 'error');
+            return;
+        }
+
+        // Show loading state
+        const loginBtn = document.getElementById('loginBtn');
+        if (loginBtn) {
+            const originalText = loginBtn.innerHTML;
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+            loginBtn.disabled = true;
+
+            AuthManager.login(email, password, role)
+                .then(user => {
+                    console.log('✅ Login successful, user:', user);
+                    this.currentUser = user;
+                    this.currentRole = user.role;
+                    console.log('🚀 Calling showDashboard() now...');
+                    this.showDashboard(); // This should show the dashboard immediately
+                })
+                .catch(error => {
+                    console.error('❌ Login failed:', error);
+                    this.showNotification(error.message, 'error');
+                    loginBtn.innerHTML = originalText;
+                    loginBtn.disabled = false;
+                });
+        }
     }
-
-    // Show loading state
-    const loginBtn = document.getElementById('loginBtn');
-    if (loginBtn) {
-        const originalText = loginBtn.innerHTML;
-        loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
-        loginBtn.disabled = true;
-
-        AuthManager.login(email, password, role)
-            .then(user => {
-                this.currentUser = user;
-                this.currentRole = user.role;
-                this.showDashboard();
-            })
-            .catch(error => {
-                this.showNotification(error.message, 'error');
-                loginBtn.innerHTML = originalText;
-                loginBtn.disabled = false;
-            });
-    }
-}
 
     // In app.js - Add getDashboardHTML method
     getDashboardHTML() {
@@ -817,7 +1000,10 @@ class CasaLink {
                 </aside>
 
                 <main class="content-area" id="contentArea">
-                    ${isLandlord ? this.getLandlordDashboard() : this.getTenantDashboard()}
+                    <!-- Dashboard content will load here automatically -->
+                    <div class="data-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading your dashboard...
+                    </div>
                 </main>
             </div>
         </div>
@@ -908,81 +1094,132 @@ class CasaLink {
 
 
     // In app.js - Update getLandlordDashboard method
-    async getLandlordDashboard() {
-        // Fetch real data from Firestore
-        const tenants = await DataManager.getTenants(this.currentUser.uid);
-        const bills = await DataManager.getBills(this.currentUser.uid);
-        const maintenance = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+    getLandlordDashboardHTML() {
+        console.log('📊 Building complete landlord dashboard HTML');
         
-        const unpaidBills = bills.filter(bill => bill.status === 'pending');
-        const openMaintenance = maintenance.filter(req => req.status === 'open');
-        
+        // For now, show the dashboard without data to test
+        // We'll add the data fetching later
         return `
-        <div class="page-content" id="dashboardPage">
-            <div class="page-header">
-                <h1 class="page-title">Dashboard</h1>
-                <div>
-                    <button class="btn btn-secondary"><i class="fas fa-download"></i> Export Report</button>
-                    <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
+        <div class="app-container">
+            <header>
+                <div class="container">
+                    <div class="header-content">
+                        <div class="logo">
+                            <i class="fas fa-home"></i>
+                            <span>CasaLink</span>
+                        </div>
+                        
+                        <nav class="nav-links landlord-nav">
+                            <a href="#" class="active" data-page="dashboard">Dashboard</a>
+                            <a href="#" data-page="billing">Billing & Payments</a>
+                            <a href="#" data-page="maintenance">Maintenance</a>
+                            <a href="#" data-page="tenants">Tenant Management</a>
+                            <a href="#" data-page="reports">Reports</a>
+                        </nav>
+                        
+                        <div class="header-actions">
+                            <div class="user-profile" id="userProfile">
+                                <div class="avatar">${this.currentUser.avatar}</div>
+                                <div>
+                                    <div style="font-weight: 500;">${this.currentUser.name}</div>
+                                    <div style="font-size: 0.8rem; color: var(--dark-gray);">Landlord</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </header>
 
-            <div id="dashboardStats">
-            <div class="data-loading">
-                <i class="fas fa-spinner fa-spin"></i> Loading dashboard data...
-            </div>
-            </div>
-            
-            <div class="dashboard-cards">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Total Tenants</div>
-                        <div class="card-icon tenants">
-                            <i class="fas fa-users"></i>
+            <div class="main-content">
+                <aside class="sidebar">
+                    <ul class="sidebar-menu landlord-nav">
+                        <li><a href="#" class="active" data-page="dashboard"><i class="fas fa-th-large"></i> <span>Dashboard</span></a></li>
+                        <li><a href="#" data-page="billing"><i class="fas fa-file-invoice-dollar"></i> <span>Billing & Payments</span></a></li>
+                        <li><a href="#" data-page="maintenance"><i class="fas fa-tools"></i> <span>Maintenance</span></a></li>
+                        <li><a href="#" data-page="tenants"><i class="fas fa-users"></i> <span>Tenant Management</span></a></li>
+                        <li><a href="#" data-page="reports"><i class="fas fa-chart-pie"></i> <span>Reports</span></a></li>
+                        <li><a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
+                    </ul>
+                </aside>
+
+                <main class="content-area" id="contentArea">
+                    <!-- DASHBOARD CONTENT - LOADS IMMEDIATELY -->
+                    <div class="page-content">
+                        <div class="page-header">
+                            <h1 class="page-title">Dashboard</h1>
+                            <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
+                        </div>
+
+                        <div class="dashboard-cards">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">Total Tenants</div>
+                                    <div class="card-icon tenants">
+                                        <i class="fas fa-users"></i>
+                                    </div>
+                                </div>
+                                <div class="card-value">0</div>
+                                <div class="card-change positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>Loading...</span>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">Unpaid Bills</div>
+                                    <div class="card-icon unpaid">
+                                        <i class="fas fa-money-bill-wave"></i>
+                                    </div>
+                                </div>
+                                <div class="card-value">0</div>
+                                <div class="card-change negative">
+                                    <i class="fas fa-exclamation-circle"></i>
+                                    <span>Loading...</span>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">Open Maintenance</div>
+                                    <div class="card-icon complaints">
+                                        <i class="fas fa-tools"></i>
+                                    </div>
+                                </div>
+                                <div class="card-value">0</div>
+                                <div class="card-change negative">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>Loading...</span>
+                                </div>
+                            </div>
+                            
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="card-title">Monthly Revenue</div>
+                                    <div class="card-icon tenants">
+                                        <i class="fas fa-chart-line"></i>
+                                    </div>
+                                </div>
+                                <div class="card-value">₱0</div>
+                                <div class="card-change positive">
+                                    <i class="fas fa-money-bill"></i>
+                                    <span>Loading...</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style="text-align: center; padding: 40px;">
+                            <h3>Welcome to CasaLink!</h3>
+                            <p>Your dashboard is ready. Data will load shortly.</p>
                         </div>
                     </div>
-                    <div class="card-value">${tenants.length}</div>
-                    <div class="card-change positive">
-                        <i class="fas fa-arrow-up"></i>
-                        <span>Active tenants</span>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Unpaid Bills</div>
-                        <div class="card-icon unpaid">
-                            <i class="fas fa-money-bill-wave"></i>
-                        </div>
-                    </div>
-                    <div class="card-value">${unpaidBills.length}</div>
-                    <div class="card-change negative">
-                        <i class="fas fa-exclamation-circle"></i>
-                        <span>Requires attention</span>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Open Maintenance</div>
-                        <div class="card-icon complaints">
-                            <i class="fas fa-tools"></i>
-                        </div>
-                    </div>
-                    <div class="card-value">${openMaintenance.length}</div>
-                    <div class="card-change negative">
-                        <i class="fas fa-arrow-up"></i>
-                        <span>Needs action</span>
-                    </div>
-                </div>
+                </main>
             </div>
-            
-            <!-- Rest of dashboard content -->
         </div>
         `;
     }
 
-        setupDashboardEvents() {
+    setupDashboardEvents() {
         // Add Property Button
         document.getElementById('addPropertyBtn')?.addEventListener('click', () => {
             this.showAddPropertyForm();
@@ -1912,141 +2149,159 @@ showAddPropertyForm() {
         }
     }
 
+    getErrorDashboard(page, error) {
+        console.error(`Error loading ${page}:`, error);
+        return `
+        <div class="page-content">
+            <div style="text-align: center; padding: 40px;">
+                <i class="fas fa-exclamation-triangle" style="font-size: 3rem; color: var(--warning); margin-bottom: 20px;"></i>
+                <h2>Unable to Load ${page.charAt(0).toUpperCase() + page.slice(1)}</h2>
+                <p style="margin-bottom: 20px; color: var(--dark-gray);">
+                    There was an error loading the page data. Please check your connection and try again.
+                </p>
+                <button class="btn btn-primary" onclick="casaLink.showPage('${page}')">
+                    <i class="fas fa-redo"></i> Try Again
+                </button>
+            </div>
+        </div>
+        `;
+    }
+
     // In app.js - Add tenant dashboard methods
     async getTenantDashboard() {
-    try {
-        // Get tenant-specific data
-        const tenantProfile = await DataManager.getTenantProfile(this.currentUser.uid);
-        const bills = await DataManager.getTenantBills(this.currentUser.uid);
-        const maintenance = await DataManager.getTenantMaintenanceRequests(this.currentUser.uid);
+        try {
+            // Get tenant-specific data
+            const tenantProfile = await DataManager.getTenantProfile(this.currentUser.uid);
+            const bills = await DataManager.getTenantBills(this.currentUser.uid);
+            const maintenance = await DataManager.getTenantMaintenanceRequests(this.currentUser.uid);
 
-        // Handle case where tenant profile doesn't exist yet
-        if (!tenantProfile) {
+            // Handle case where tenant profile doesn't exist yet
+            if (!tenantProfile) {
+                return `
+                <div class="page-content" id="tenantDashboardPage">
+                    <div class="welcome-card">
+                        <div class="welcome-header">
+                            <h1 class="welcome-title">Welcome to CasaLink!</h1>
+                        </div>
+                        <p class="welcome-subtitle">Your account has been created successfully.</p>
+                        <div class="balance-info">
+                            <div class="balance-amount" style="font-size: 1.5rem;">Setup Required</div>
+                            <div class="balance-due">Please contact your landlord to complete your tenant profile setup.</div>
+                        </div>
+                    </div>
+                    <div class="dashboard-cards">
+                        <div class="card">
+                            <div class="card-header">
+                                <div class="card-title">Account Status</div>
+                                <div class="card-icon tenants">
+                                    <i class="fas fa-user"></i>
+                                </div>
+                            </div>
+                            <div class="card-value">Pending</div>
+                            <div class="card-change neutral">
+                                <span>Profile setup needed</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }
+
+            const currentBill = bills.find(bill => bill.status === 'pending');
+            const openMaintenance = maintenance.filter(req => req.status !== 'resolved');
+
+            // ... rest of your existing tenant dashboard code
             return `
             <div class="page-content" id="tenantDashboardPage">
                 <div class="welcome-card">
                     <div class="welcome-header">
-                        <h1 class="welcome-title">Welcome to CasaLink!</h1>
+                        <h1 class="welcome-title">Welcome back, ${tenantProfile?.name || 'Tenant'}!</h1>
+                        <div class="notification-bell">
+                            <i class="far fa-bell" style="color: white; font-size: 1.5rem;"></i>
+                            <span class="notification-badge">${bills.filter(b => b.status === 'pending').length}</span>
+                        </div>
                     </div>
-                    <p class="welcome-subtitle">Your account has been created successfully.</p>
+                    <p class="welcome-subtitle">Here's your current apartment status and quick actions</p>
+                    
+                    ${currentBill ? `
                     <div class="balance-info">
-                        <div class="balance-amount" style="font-size: 1.5rem;">Setup Required</div>
-                        <div class="balance-due">Please contact your landlord to complete your tenant profile setup.</div>
+                        <div class="balance-amount">₱${currentBill.totalAmount?.toLocaleString() || '0'}</div>
+                        <div class="balance-due">Due by ${new Date(currentBill.dueDate).toLocaleDateString()}</div>
+                    </div>
+                    ` : `
+                    <div class="balance-info">
+                        <div class="balance-amount" style="font-size: 1.5rem;">All caught up! 🎉</div>
+                        <div class="balance-due">No pending bills at the moment</div>
+                    </div>
+                    `}
+                    
+                    <div class="quick-actions">
+                        <div class="quick-action" onclick="casaLink.showPage('tenantBilling')">
+                            <i class="fas fa-file-invoice-dollar"></i>
+                            <div>View Bills</div>
+                        </div>
+                        <div class="quick-action" onclick="casaLink.showPaymentModal('${currentBill?.id}')">
+                            <i class="fas fa-credit-card"></i>
+                            <div>Pay Now</div>
+                        </div>
+                        <div class="quick-action" onclick="casaLink.showPage('tenantMaintenance')">
+                            <i class="fas fa-tools"></i>
+                            <div>Request Maintenance</div>
+                        </div>
+                        <div class="quick-action" onclick="casaLink.showMaintenanceRequestForm()">
+                            <i class="fas fa-comment-alt"></i>
+                            <div>File Complaint</div>
+                        </div>
                     </div>
                 </div>
+                
                 <div class="dashboard-cards">
                     <div class="card">
                         <div class="card-header">
-                            <div class="card-title">Account Status</div>
+                            <div class="card-title">Next Payment</div>
                             <div class="card-icon tenants">
-                                <i class="fas fa-user"></i>
+                                <i class="fas fa-calendar-alt"></i>
                             </div>
                         </div>
-                        <div class="card-value">Pending</div>
-                        <div class="card-change neutral">
-                            <span>Profile setup needed</span>
+                        <div class="card-value">${currentBill ? new Date(currentBill.dueDate).getDate() : '--'}</div>
+                        <div class="card-change ${currentBill ? 'positive' : 'neutral'}">
+                            <span>${currentBill ? this.getDaysUntilDue(currentBill.dueDate) : 'No pending bills'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Maintenance Requests</div>
+                            <div class="card-icon occupied">
+                                <i class="fas fa-tools"></i>
+                            </div>
+                        </div>
+                        <div class="card-value">${openMaintenance.length}</div>
+                        <div class="card-change ${openMaintenance.length > 0 ? 'negative' : 'positive'}">
+                            <span>${openMaintenance.length > 0 ? `${openMaintenance.filter(r => r.status === 'in-progress').length} in progress` : 'All resolved'}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Your Unit</div>
+                            <div class="card-icon complaints">
+                                <i class="fas fa-home"></i>
+                            </div>
+                        </div>
+                        <div class="card-value">${tenantProfile?.unit || 'N/A'}</div>
+                        <div class="card-change positive">
+                            <span>${tenantProfile?.propertyName || 'Your apartment'}</span>
                         </div>
                     </div>
                 </div>
             </div>
             `;
+        } catch (error) {
+            console.error('Error loading tenant dashboard:', error);
+            return this.getErrorDashboard('dashboard', error);
         }
-
-        const currentBill = bills.find(bill => bill.status === 'pending');
-        const openMaintenance = maintenance.filter(req => req.status !== 'resolved');
-
-        // ... rest of your existing tenant dashboard code
-        return `
-        <div class="page-content" id="tenantDashboardPage">
-            <div class="welcome-card">
-                <div class="welcome-header">
-                    <h1 class="welcome-title">Welcome back, ${tenantProfile?.name || 'Tenant'}!</h1>
-                    <div class="notification-bell">
-                        <i class="far fa-bell" style="color: white; font-size: 1.5rem;"></i>
-                        <span class="notification-badge">${bills.filter(b => b.status === 'pending').length}</span>
-                    </div>
-                </div>
-                <p class="welcome-subtitle">Here's your current apartment status and quick actions</p>
-                
-                ${currentBill ? `
-                <div class="balance-info">
-                    <div class="balance-amount">₱${currentBill.totalAmount?.toLocaleString() || '0'}</div>
-                    <div class="balance-due">Due by ${new Date(currentBill.dueDate).toLocaleDateString()}</div>
-                </div>
-                ` : `
-                <div class="balance-info">
-                    <div class="balance-amount" style="font-size: 1.5rem;">All caught up! 🎉</div>
-                    <div class="balance-due">No pending bills at the moment</div>
-                </div>
-                `}
-                
-                <div class="quick-actions">
-                    <div class="quick-action" onclick="casaLink.showPage('tenantBilling')">
-                        <i class="fas fa-file-invoice-dollar"></i>
-                        <div>View Bills</div>
-                    </div>
-                    <div class="quick-action" onclick="casaLink.showPaymentModal('${currentBill?.id}')">
-                        <i class="fas fa-credit-card"></i>
-                        <div>Pay Now</div>
-                    </div>
-                    <div class="quick-action" onclick="casaLink.showPage('tenantMaintenance')">
-                        <i class="fas fa-tools"></i>
-                        <div>Request Maintenance</div>
-                    </div>
-                    <div class="quick-action" onclick="casaLink.showMaintenanceRequestForm()">
-                        <i class="fas fa-comment-alt"></i>
-                        <div>File Complaint</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="dashboard-cards">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Next Payment</div>
-                        <div class="card-icon tenants">
-                            <i class="fas fa-calendar-alt"></i>
-                        </div>
-                    </div>
-                    <div class="card-value">${currentBill ? new Date(currentBill.dueDate).getDate() : '--'}</div>
-                    <div class="card-change ${currentBill ? 'positive' : 'neutral'}">
-                        <span>${currentBill ? this.getDaysUntilDue(currentBill.dueDate) : 'No pending bills'}</span>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Maintenance Requests</div>
-                        <div class="card-icon occupied">
-                            <i class="fas fa-tools"></i>
-                        </div>
-                    </div>
-                    <div class="card-value">${openMaintenance.length}</div>
-                    <div class="card-change ${openMaintenance.length > 0 ? 'negative' : 'positive'}">
-                        <span>${openMaintenance.length > 0 ? `${openMaintenance.filter(r => r.status === 'in-progress').length} in progress` : 'All resolved'}</span>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">Your Unit</div>
-                        <div class="card-icon complaints">
-                            <i class="fas fa-home"></i>
-                        </div>
-                    </div>
-                    <div class="card-value">${tenantProfile?.unit || 'N/A'}</div>
-                    <div class="card-change positive">
-                        <span>${tenantProfile?.propertyName || 'Your apartment'}</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        `;
-    } catch (error) {
-        console.error('Error loading tenant dashboard:', error);
-        return this.getErrorDashboard('dashboard', error);
     }
-}
 
     getDaysUntilDue(dueDate) {
         const today = new Date();
