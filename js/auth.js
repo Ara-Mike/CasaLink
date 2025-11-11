@@ -303,22 +303,40 @@ class AuthManager {
 
             // Step 2: Create tenant document in Firestore WITH temporaryPassword AND LOGIN TRACKING
             const userProfile = {
+                // Basic Info
                 email: tenantData.email,
                 name: tenantData.name,
                 role: 'tenant',
-                createdAt: new Date().toISOString(),
-                isActive: true,
-                hasTemporaryPassword: true,
-                temporaryPassword: temporaryPassword, // Store the temporary password
-                landlordId: landlordId,
-                unitId: tenantData.unitId || '',
+                
+                // Contact Info
                 phone: tenantData.phone || '',
+                emergencyContact: tenantData.emergencyContact || '',
+                emergencyPhone: tenantData.emergencyPhone || '',
+                
+                // Landlord Relationship
+                landlordId: landlordId,
                 createdBy: landlordEmail,
+                
+                // Property Assignment (will be linked via lease)
+                propertyId: tenantData.propertyId,
+                unitId: tenantData.unitId,
+                
+                // Authentication & Security
+                hasTemporaryPassword: true,
+                temporaryPassword: temporaryPassword,
                 passwordCreatedAt: new Date().toISOString(),
-                // ADD LOGIN TRACKING FIELDS
+                
+                // Login Tracking (UNCHANGED - this preserves your login count logic)
                 loginCount: 0, // Start at 0 (landlord creation doesn't count as tenant login)
                 passwordChanged: false, // Track if password was changed
-                lastLogin: null
+                lastLogin: null,
+                
+                // Timestamps
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                
+                // Status
+                isActive: true
             };
 
             await firebaseDb.collection('users').doc(tenantUser.uid).set(userProfile);

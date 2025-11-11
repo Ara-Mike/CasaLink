@@ -1593,8 +1593,8 @@ class CasaLink {
         
         const resultElement = document.getElementById('tenantCreationResult');
 
-        if (!name || !email || !unit) {
-            this.showNotification('Please fill in required fields (Name, Email, and Unit)', 'error');
+        if (!name || !email || !unit || !rent || !leaseStart || !leaseEnd) {
+            this.showNotification('Please fill in all required fields (Name, Email, Unit, Rent, and Lease Dates)', 'error');
             return;
         }
 
@@ -1628,15 +1628,21 @@ class CasaLink {
             // This will show the password confirmation modal and create the tenant
             const result = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
 
+            // CREATE LEASE DOCUMENT AFTER TENANT IS CREATED
+            if (result.success) {
+                await this.createLeaseDocument(result.tenantId, tenantData);
+            }
+
             // Show success in the main modal
             if (resultElement) {
                 resultElement.innerHTML = `
                     <div style="background: var(--success); color: white; padding: 15px; border-radius: 8px;">
-                        <h4 style="margin: 0 0 10px 0;">✅ Tenant Account Created!</h4>
+                        <h4 style="margin: 0 0 10px 0;">✅ Tenant Account & Lease Created!</h4>
                         <p style="margin: 5px 0;"><strong>Name:</strong> ${result.name}</p>
                         <p style="margin: 5px 0;"><strong>Email:</strong> ${result.email}</p>
                         <p style="margin: 5px 0;"><strong>Unit:</strong> ${result.unitId}</p>
-                        ${result.monthlyRent ? `<p style="margin: 5px 0;"><strong>Monthly Rent:</strong> ₱${result.monthlyRent.toLocaleString()}</p>` : ''}
+                        <p style="margin: 5px 0;"><strong>Monthly Rent:</strong> ₱${parseFloat(rent).toLocaleString()}</p>
+                        <p style="margin: 5px 0;"><strong>Lease Period:</strong> ${new Date(leaseStart).toLocaleDateString()} to ${new Date(leaseEnd).toLocaleDateString()}</p>
                         <p style="margin: 5px 0;"><strong>Temporary Password:</strong> 
                             <code style="background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">
                                 ${result.temporaryPassword}
@@ -1644,7 +1650,7 @@ class CasaLink {
                         </p>
                         <div style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 4px;">
                             <i class="fas fa-database"></i> 
-                            <small>Temporary password stored in database. After tenant changes password, currentPassword field will be updated.</small>
+                            <small>Tenant account and lease document created successfully.</small>
                         </div>
                         <p style="margin: 15px 0 0 0; font-size: 0.9em;">
                             <i class="fas fa-envelope"></i> 
@@ -1655,7 +1661,7 @@ class CasaLink {
                 resultElement.style.display = 'block';
             }
 
-            this.showNotification('Tenant account created successfully!', 'success');
+            this.showNotification('Tenant account and lease created successfully!', 'success');
 
             // Clear form but STAY on tenant management page
             setTimeout(() => {
@@ -1702,6 +1708,83 @@ class CasaLink {
                 console.log('🔓 Tenant creation completed, auth listener re-enabled');
             }, 2000); // Small delay to ensure everything is settled
         }
+    }
+
+    async createLeaseDocument(tenantId, tenantData) {
+        try {
+            console.log('📝 Creating lease document for tenant:', tenantId);
+            
+            const leaseData = {
+                // Tenant Information
+                tenantId: tenantId,
+                tenantName: tenantData.name,
+                tenantEmail: tenantData.email,
+                tenantPhone: tenantData.phone,
+                emergencyContact: tenantData.emergencyContact,
+                emergencyPhone: tenantData.emergencyPhone,
+                
+                // Property Information
+                landlordId: this.currentUser.uid,
+                propertyId: tenantData.propertyId,
+                unitId: tenantData.unitId,
+                
+                // Lease Terms
+                monthlyRent: tenantData.monthlyRent,
+                leaseStart: tenantData.leaseStart,
+                leaseEnd: tenantData.leaseEnd,
+                leaseDuration: this.calculateLeaseDuration(tenantData.leaseStart, tenantData.leaseEnd),
+                
+                // Lease Status
+                status: 'active',
+                isActive: true,
+                securityDeposit: tenantData.monthlyRent, // Default to one month's rent
+                securityDepositPaid: false,
+                
+                // Dates
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                
+                // Additional Lease Terms (can be expanded later)
+                paymentDueDay: 1, // Rent due on 1st of each month
+                lateFee: tenantData.monthlyRent * 0.05, // 5% late fee
+                gracePeriod: 5, // 5-day grace period
+                
+                // Utilities (can be customized per lease)
+                includesWater: false,
+                includesElectricity: false,
+                includesInternet: false,
+                
+                // Lease Document Tracking
+                leaseSigned: false,
+                leaseSignedDate: null,
+                digitalCopyUrl: null
+            };
+
+            // Create the lease document in Firestore
+            const leaseRef = await firebaseDb.collection('leases').add(leaseData);
+            console.log('✅ Lease document created with ID:', leaseRef.id);
+            
+            // Update the tenant's user document with lease reference
+            await firebaseDb.collection('users').doc(tenantId).update({
+                leaseId: leaseRef.id,
+                currentLease: leaseRef.id,
+                updatedAt: new Date().toISOString()
+            });
+            
+            return leaseRef.id;
+            
+        } catch (error) {
+            console.error('❌ Error creating lease document:', error);
+            throw new Error('Failed to create lease document: ' + error.message);
+        }
+    }
+
+    // Helper method to calculate lease duration
+    calculateLeaseDuration(startDate, endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+        return months;
     }
 
     generateTemporaryPassword(length = 8) {

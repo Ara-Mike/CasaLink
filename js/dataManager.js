@@ -113,6 +113,46 @@ class DataManager {
         }
     }
 
+    // Add to js/dataManager.js
+    static async getTenantLease(tenantId) {
+        try {
+            const querySnapshot = await firebaseDb.collection('leases')
+                .where('tenantId', '==', tenantId)
+                .where('isActive', '==', true)
+                .limit(1)
+                .get();
+            
+            if (querySnapshot.empty) {
+                return null;
+            }
+            
+            return {
+                id: querySnapshot.docs[0].id,
+                ...querySnapshot.docs[0].data()
+            };
+        } catch (error) {
+            console.error('Error getting tenant lease:', error);
+            return null;
+        }
+    }
+
+    static async getLandlordLeases(landlordId) {
+        try {
+            const querySnapshot = await firebaseDb.collection('leases')
+                .where('landlordId', '==', landlordId)
+                .orderBy('createdAt', 'desc')
+                .get();
+            
+            return querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting landlord leases:', error);
+            return [];
+        }
+    }
+
     // ===== DASHBOARD STATS =====
     static async getDashboardStats(userId, userRole) {
         console.log(`📊 Getting dashboard stats for ${userRole}: ${userId}`);
