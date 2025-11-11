@@ -205,7 +205,7 @@ class AuthManager {
                         
                         <div class="security-info">
                             <i class="fas fa-info-circle"></i>
-                            <small>Your password is required to securely create the tenant account. It will not be stored.</small>
+                            <small>Your password is required to securely create the tenant account. The temporary password will be stored in the database for reference.</small>
                         </div>
                     </div>
                 `;
@@ -264,7 +264,7 @@ class AuthManager {
             
             console.log('✅ Tenant Firebase Auth account created:', tenantUser.uid);
 
-            // Step 2: Create tenant document in Firestore
+            // Step 2: Create tenant document in Firestore WITH temporaryPassword
             const userProfile = {
                 email: tenantData.email,
                 name: tenantData.name,
@@ -272,14 +272,16 @@ class AuthManager {
                 createdAt: new Date().toISOString(),
                 isActive: true,
                 hasTemporaryPassword: true,
+                temporaryPassword: temporaryPassword, // Store the temporary password
                 landlordId: landlordId,
                 unitId: tenantData.unitId || '',
                 phone: tenantData.phone || '',
-                createdBy: landlordEmail
+                createdBy: landlordEmail,
+                passwordCreatedAt: new Date().toISOString() // Track when password was set
             };
 
             await firebaseDb.collection('users').doc(tenantUser.uid).set(userProfile);
-            console.log('✅ Tenant profile created in Firestore');
+            console.log('✅ Tenant profile created in Firestore with temporary password');
 
             // Step 3: Immediately restore landlord session
             console.log('🔄 Restoring landlord session...');

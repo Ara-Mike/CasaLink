@@ -1572,6 +1572,10 @@ class CasaLink {
                                 ${result.temporaryPassword}
                             </code>
                         </p>
+                        <div style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 4px;">
+                            <i class="fas fa-database"></i> 
+                            <small>Temporary password stored in database for reference</small>
+                        </div>
                         <p style="margin: 15px 0 0 0; font-size: 0.9em;">
                             <i class="fas fa-envelope"></i> 
                             You can now email these credentials to the tenant.
