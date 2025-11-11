@@ -4,6 +4,15 @@ class CasaLink {
         this.currentRole = null;
         this.isOnline = navigator.onLine;
         this.pendingActions = [];
+        this.loginInProgress = false;
+        this.authListenerEnabled = true;
+        this.showingLogin = false;
+        this.showingDashboard = false;
+        
+        // Bind methods ONCE in constructor
+        this.boundLoginClickHandler = this.loginClickHandler.bind(this);
+        this.boundLoginKeypressHandler = this.loginKeypressHandler.bind(this);
+        this.boundHandleLogin = this.handleLogin.bind(this);
         
         // Clear any stored authentication immediately
         this.clearStoredAuth();
@@ -24,17 +33,29 @@ class CasaLink {
         console.log('Cleared stored authentication data');
     }
 
-    clearAuthentication() {
-        // Clear any stored user data
+    async clearAuthentication() {
+        console.log('🔒 Clearing authentication data...');
+        
+        // Clear app state
+        this.currentUser = null;
+        this.currentRole = null;
+        
+        // Clear local storage
         localStorage.removeItem('casalink_user');
+        localStorage.removeItem('casalink_pending_actions');
         sessionStorage.removeItem('casalink_user');
         
-        // Also try to sign out from Firebase
-        if (typeof AuthManager !== 'undefined') {
-            AuthManager.logout().catch(error => {
-                console.log('No user to log out');
-            });
+        // Clear any pending operations
+        localStorage.removeItem('pendingOperations');
+        
+        // Sign out from Firebase
+        try {
+            await AuthManager.logout();
+        } catch (error) {
+            console.log('No user to log out or logout failed:', error);
         }
+        
+        console.log('Authentication data cleared');
     }
 
     clearStoredUser() {
@@ -45,6 +66,9 @@ class CasaLink {
 
     async init() {
         console.log('Initializing CasaLink...');
+        
+        // Safety first: prevent any auto-redirects
+        this.preventAutoRedirect();
         
         // Show loading spinner
         const spinner = document.getElementById('loadingSpinner');
@@ -60,18 +84,18 @@ class CasaLink {
         this.setupOfflineHandling();
         this.setupNavigationEvents();
         
-        // Setup auth listener
+        // Setup auth listener for PAGE REFRESHES only
         this.setupAuthListener();
         
-        // Emergency fallback: if no auth state is detected within 5 seconds, show login
+        // If no auth state is detected within 3 seconds, show login
         setTimeout(() => {
             const spinner = document.getElementById('loadingSpinner');
             if (spinner && !spinner.classList.contains('hidden') && !this.currentUser) {
-                console.log('Auth timeout, forcing login page');
+                console.log('🕒 Auth timeout, ensuring login page');
                 spinner.classList.add('hidden');
                 this.showLogin();
             }
-        }, 5000);
+        }, 3000);
     }
 
     async waitForFirebase() {
@@ -391,7 +415,7 @@ class CasaLink {
         }
     }
 
-    setupTenantsPage() {
+    async setupTenantsPage() {
         // Add tenant button
         document.getElementById('addTenantBtn')?.addEventListener('click', () => {
             this.showAddTenantForm();
@@ -401,6 +425,114 @@ class CasaLink {
         document.getElementById('tenantSearch')?.addEventListener('input', (e) => {
             this.filterTenants(e.target.value);
         });
+
+        // Load tenants data
+        await this.loadTenantsData();
+    }
+
+    async loadTenantsData() {
+        try {
+            console.log('Loading tenants data...');
+            const tenantsList = document.getElementById('tenantsList');
+            
+            if (!tenantsList) {
+                console.error('Tenants list element not found');
+                return;
+            }
+
+            // Show loading state
+            tenantsList.innerHTML = `
+                <div class="data-loading">
+                    <i class="fas fa-spinner fa-spin"></i> Loading tenants...
+                </div>
+            `;
+
+            // Fetch tenants from Firestore where role is 'tenant' and landlordId matches current user
+            const tenants = await DataManager.getTenants(this.currentUser.uid);
+            
+            console.log('Tenants fetched:', tenants);
+            
+            if (tenants.length === 0) {
+                tenantsList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <h3>No Tenants Found</h3>
+                        <p>You haven't added any tenants yet. Click "Add Tenant" to get started.</p>
+                    </div>
+                `;
+            } else {
+                tenantsList.innerHTML = this.renderTenantsTable(tenants);
+            }
+
+        } catch (error) {
+            console.error('Error loading tenants:', error);
+            const tenantsList = document.getElementById('tenantsList');
+            if (tenantsList) {
+                tenantsList.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Error Loading Tenants</h3>
+                        <p>There was an error loading your tenants. Please try again.</p>
+                        <button class="btn btn-primary" onclick="casaLink.loadTenantsData()">Retry</button>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    renderTenantsTable(tenants) {
+        return `
+            <div class="table-container">
+                <table class="tenants-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Unit</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tenants.map(tenant => `
+                            <tr>
+                                <td>
+                                    <div class="tenant-info">
+                                        <div class="tenant-avatar">${tenant.name.charAt(0).toUpperCase()}</div>
+                                        <div class="tenant-details">
+                                            <div class="tenant-name">${tenant.name}</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>${tenant.email}</td>
+                                <td>${tenant.phone || 'N/A'}</td>
+                                <td>${tenant.unitId || 'N/A'}</td>
+                                <td>
+                                    <span class="status-badge ${tenant.isActive ? 'active' : 'inactive'}">
+                                        ${tenant.isActive ? 'Active' : 'Inactive'}
+                                    </span>
+                                    ${tenant.hasTemporaryPassword ? '<span class="status-badge warning" title="Needs password change">New</span>' : ''}
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        <button class="btn btn-sm btn-secondary" onclick="casaLink.editTenant('${tenant.id}')">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-secondary" onclick="casaLink.sendMessage('${tenant.id}')">
+                                            <i class="fas fa-envelope"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="casaLink.deleteTenant('${tenant.id}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
     }
 
     setupMaintenancePage() {
@@ -411,7 +543,7 @@ class CasaLink {
     }
 
     filterTenants(searchTerm) {
-        const rows = document.querySelectorAll('#tenantsTable tbody tr');
+        const rows = document.querySelectorAll('.tenants-table tbody tr');
         rows.forEach(row => {
             const text = row.textContent.toLowerCase();
             row.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
@@ -487,6 +619,14 @@ class CasaLink {
 
     async handleLogout() {
         try {
+            console.log('🚪 Starting manual logout...');
+            
+            // Set flag to ignore auth changes during logout
+            this.manualLogoutInProgress = true;
+            
+            // Remove event listeners
+            this.removeLoginEvents();
+            
             // Clear local storage
             localStorage.removeItem('casalink_user');
             localStorage.removeItem('casalink_pending_actions');
@@ -498,13 +638,36 @@ class CasaLink {
             this.currentUser = null;
             this.currentRole = null;
             
-            console.log('User logged out successfully');
+            console.log('✅ User logged out successfully');
+            
+            // MANUALLY show login page
             this.showLogin();
+            
+            // Re-enable auth listener after a short delay
+            setTimeout(() => {
+                this.manualLogoutInProgress = false;
+                console.log('🔓 Auth listener re-enabled after logout');
+            }, 2000);
+            
         } catch (error) {
-            console.error('Logout error:', error);
-            // Still show login page even if logout fails
+            console.error('❌ Logout error:', error);
+            this.manualLogoutInProgress = false;
             this.currentUser = null;
             this.currentRole = null;
+            this.showLogin();
+        }
+    }
+
+    preventAutoRedirect() {
+        // Clear any existing authentication immediately
+        this.clearAuthentication();
+        
+        // Ensure we're showing the login page
+        const appElement = document.getElementById('app');
+        const loginHTML = this.getLoginHTML();
+        
+        if (appElement && !appElement.innerHTML.includes('login-container')) {
+            console.log('🛑 Safety check: Ensuring login page is displayed');
             this.showLogin();
         }
     }
@@ -639,28 +802,56 @@ class CasaLink {
     setupAuthListener() {
         console.log('Setting up auth state listener...');
         
-        AuthManager.onAuthChange((user) => {
-            console.log('Auth state changed:', user ? `User found: ${user.email}` : 'No user');
+        this.authUnsubscribe = AuthManager.onAuthChange((user) => {
+            // Skip if auth listener is disabled (e.g., during login)
+            if (!this.authListenerEnabled) {
+                console.log('🔒 Auth listener disabled, ignoring change');
+                return;
+            }
             
-            // Hide loading spinner immediately
+            if (!user) {
+                console.log('👤 No user detected');
+                return;
+            }
+            
+            // Skip if this is the same user that just logged in manually
+            if (this.currentUser && this.currentUser.uid === user.uid) {
+                console.log('✅ User already logged in manually, ignoring auth listener');
+                return;
+            }
+            
+            console.log('🔄 Authenticated user detected via auth listener (page refresh):', user.email);
+            
+            // Hide loading spinner
             const spinner = document.getElementById('loadingSpinner');
             if (spinner) {
                 spinner.style.display = 'none';
             }
             
-            if (user) {
-                this.currentUser = user;
-                this.currentRole = user.role;
-                console.log('User authenticated, showing dashboard immediately');
-                
-                // Show dashboard DIRECTLY without any async operations
+            // Validate user data
+            if (!user.role || !user.email || !user.id) {
+                console.error('❌ Invalid user data');
+                this.showNotification('Session invalid. Please log in again.', 'error');
+                AuthManager.logout();
+                return;
+            }
+            
+            this.currentUser = user;
+            this.currentRole = user.role;
+            
+            console.log('🔄 Restoring session via auth listener for:', user.email);
+            
+            // Handle tenant password change or show dashboard
+            if (user.role === 'tenant' && user.hasTemporaryPassword) {
+                console.log('Tenant requires password change on first login');
+                setTimeout(() => {
+                    this.showPasswordChangeModal();
+                }, 1000);
+            } else {
+                console.log('🔄 Restoring dashboard from auth listener (page refresh)');
                 setTimeout(() => {
                     this.showDashboard();
                 }, 100);
-                
-            } else {
-                console.log('No user authenticated, showing login');
-                this.showLogin();
             }
         });
     }
@@ -668,8 +859,7 @@ class CasaLink {
     async loadDashboardData() {
         try {
             console.log('Loading dashboard data in background...');
-            // This can be async since dashboard is already shown
-            const stats = await DataManager.getDashboardStats(this.currentUser.uid);
+            const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole);
             this.updateDashboardWithRealData(stats);
         } catch (error) {
             console.log('Dashboard data loading failed, using placeholder data:', error);
@@ -716,25 +906,52 @@ class CasaLink {
     }
 
     showLogin() {
-        console.log('Showing login page...');
+        // Prevent multiple simultaneous calls
+        if (this.showingLogin) {
+            console.log('🛑 Login page already being shown, skipping...');
+            return;
+        }
+        
+        this.showingLogin = true;
+        console.log('🔄 Showing login page...');
+        
         const appElement = document.getElementById('app');
         if (appElement) {
+            // Prevent duplicate login page rendering
+            if (appElement.innerHTML.includes('login-container')) {
+                console.log('✅ Login page already displayed, skipping render');
+                this.showingLogin = false;
+                return;
+            }
+            
             appElement.innerHTML = this.getLoginHTML();
             
             // Small delay to ensure DOM is ready
             setTimeout(() => {
                 try {
                     this.setupLoginEvents();
-                    console.log('Login events setup complete');
+                    console.log('✅ Login events setup complete');
                 } catch (error) {
-                    console.error('Error setting up login events:', error);
+                    console.error('❌ Error setting up login events:', error);
+                } finally {
+                    this.showingLogin = false;
                 }
             }, 50);
+        } else {
+            this.showingLogin = false;
         }
     }
 
     showDashboard() {
+        // Prevent multiple simultaneous dashboard renders
+        if (this.showingDashboard) {
+            console.log('🛑 Dashboard already being shown, skipping...');
+            return;
+        }
+        
+        this.showingDashboard = true;
         console.log('🔄 showDashboard() called for:', this.currentUser?.email);
+        
         const appElement = document.getElementById('app');
         if (appElement) {
             try {
@@ -756,7 +973,11 @@ class CasaLink {
                 console.error('❌ Error in showDashboard:', error);
                 // Ultimate fallback - show basic interface
                 this.showBasicInterface();
+            } finally {
+                this.showingDashboard = false;
             }
+        } else {
+            this.showingDashboard = false;
         }
     }
 
@@ -827,201 +1048,7 @@ class CasaLink {
                 </aside>
 
                 <main class="content-area" id="contentArea">
-                    <!-- DASHBOARD CONTENT - LOADS IMMEDIATELY -->
-                    <div class="page-content">
-                        <div class="page-header">
-                            <h1 class="page-title">Welcome to Your Dashboard</h1>
-                            <div>
-                                ${isLandlord ? `
-                                    <button class="btn btn-secondary"><i class="fas fa-download"></i> Export Report</button>
-                                    <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
-                                ` : `
-                                    <button class="btn btn-primary" id="payRentBtn"><i class="fas fa-credit-card"></i> Pay Rent</button>
-                                `}
-                            </div>
-                        </div>
-
-                        <div class="dashboard-cards">
-                            ${isLandlord ? `
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Total Tenants</div>
-                                        <div class="card-icon tenants">
-                                            <i class="fas fa-users"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">0</div>
-                                    <div class="card-change positive">
-                                        <i class="fas fa-sync fa-spin"></i>
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Unpaid Bills</div>
-                                        <div class="card-icon unpaid">
-                                            <i class="fas fa-money-bill-wave"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">0</div>
-                                    <div class="card-change negative">
-                                        <i class="fas fa-sync fa-spin"></i>
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Open Maintenance</div>
-                                        <div class="card-icon complaints">
-                                            <i class="fas fa-tools"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">0</div>
-                                    <div class="card-change negative">
-                                        <i class="fas fa-sync fa-spin"></i>
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Monthly Revenue</div>
-                                        <div class="card-icon tenants">
-                                            <i class="fas fa-chart-line"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">₱0</div>
-                                    <div class="card-change positive">
-                                        <i class="fas fa-sync fa-spin"></i>
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                            ` : `
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Next Payment</div>
-                                        <div class="card-icon tenants">
-                                            <i class="fas fa-calendar-alt"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">--</div>
-                                    <div class="card-change neutral">
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Maintenance Requests</div>
-                                        <div class="card-icon occupied">
-                                            <i class="fas fa-tools"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">0</div>
-                                    <div class="card-change positive">
-                                        <i class="fas fa-sync fa-spin"></i>
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                                
-                                <div class="card">
-                                    <div class="card-header">
-                                        <div class="card-title">Your Unit</div>
-                                        <div class="card-icon complaints">
-                                            <i class="fas fa-home"></i>
-                                        </div>
-                                    </div>
-                                    <div class="card-value">N/A</div>
-                                    <div class="card-change positive">
-                                        <span>Loading...</span>
-                                    </div>
-                                </div>
-                            `}
-                        </div>
-                        
-                        ${isLandlord ? `
-                        <!-- Quick Actions for Landlord -->
-                        <div class="dashboard-cards">
-                            <div class="card" onclick="casaLink.showPage('tenants')" style="cursor: pointer;">
-                                <div class="card-header">
-                                    <div class="card-title">Manage Tenants</div>
-                                    <div class="card-icon tenants">
-                                        <i class="fas fa-users"></i>
-                                    </div>
-                                </div>
-                                <p>View and manage all your tenants</p>
-                                <div style="color: var(--primary-blue); font-weight: 500; margin-top: 10px;">
-                                    Go to Tenants <i class="fas fa-arrow-right"></i>
-                                </div>
-                            </div>
-                            
-                            <div class="card" onclick="casaLink.showPage('billing')" style="cursor: pointer;">
-                                <div class="card-header">
-                                    <div class="card-title">Billing & Payments</div>
-                                    <div class="card-icon unpaid">
-                                        <i class="fas fa-file-invoice-dollar"></i>
-                                    </div>
-                                </div>
-                                <p>Generate bills and track payments</p>
-                                <div style="color: var(--primary-blue); font-weight: 500; margin-top: 10px;">
-                                    Go to Billing <i class="fas fa-arrow-right"></i>
-                                </div>
-                            </div>
-                            
-                            <div class="card" onclick="casaLink.showPage('maintenance')" style="cursor: pointer;">
-                                <div class="card-header">
-                                    <div class="card-title">Maintenance</div>
-                                    <div class="card-icon complaints">
-                                        <i class="fas fa-tools"></i>
-                                    </div>
-                                </div>
-                                <p>Handle maintenance requests</p>
-                                <div style="color: var(--primary-blue); font-weight: 500; margin-top: 10px;">
-                                    Go to Maintenance <i class="fas fa-arrow-right"></i>
-                                </div>
-                            </div>
-                        </div>
-                        ` : `
-                        <!-- Quick Actions for Tenant -->
-                        <div class="welcome-card">
-                            <div class="welcome-header">
-                                <h1 class="welcome-title">Welcome back, ${userName}!</h1>
-                            </div>
-                            <p class="welcome-subtitle">Here's your current apartment status and quick actions</p>
-                            
-                            <div class="balance-info">
-                                <div class="balance-amount" style="font-size: 1.5rem;">Loading...</div>
-                                <div class="balance-due">Your account information is being loaded</div>
-                            </div>
-                            
-                            <div class="quick-actions">
-                                <div class="quick-action" onclick="casaLink.showPage('tenantBilling')">
-                                    <i class="fas fa-file-invoice-dollar"></i>
-                                    <div>View Bills</div>
-                                </div>
-                                <div class="quick-action" onclick="casaLink.showPaymentModal()">
-                                    <i class="fas fa-credit-card"></i>
-                                    <div>Pay Now</div>
-                                </div>
-                                <div class="quick-action" onclick="casaLink.showPage('tenantMaintenance')">
-                                    <i class="fas fa-tools"></i>
-                                    <div>Request Maintenance</div>
-                                </div>
-                                <div class="quick-action" onclick="casaLink.showMaintenanceRequestForm()">
-                                    <i class="fas fa-comment-alt"></i>
-                                    <div>File Complaint</div>
-                                </div>
-                            </div>
-                        </div>
-                        `}
-                        
-                        <div style="text-align: center; margin-top: 40px; padding: 20px; background: white; border-radius: 12px;">
-                            <h3>🎉 Welcome to CasaLink!</h3>
-                            <p>Your ${isLandlord ? 'property management' : 'tenant'} dashboard is loading real-time data...</p>
-                        </div>
-                    </div>
+                    ${this.getDashboardContentHTML()}
                 </main>
             </div>
         </div>
@@ -1072,12 +1099,12 @@ class CasaLink {
                         <span>CasaLink</span>
                     </div>
                     <h1 class="login-title">Smart Living, Simplified</h1>
-                    <p class="login-subtitle">Manage your properties and tenant relationships with our modern, cloud-based platform</p>
+                    <p class="login-subtitle">Manage your properties and tenant relationships with our modern platform</p>
                     <ul class="login-features">
                         <li><i class="fas fa-check-circle"></i> Automated billing & payments</li>
                         <li><i class="fas fa-check-circle"></i> Maintenance request tracking</li>
                         <li><i class="fas fa-check-circle"></i> Real-time communication</li>
-                        <li><i class="fas fa-check-circle"></i> Mobile-friendly design</li>
+                        <li><i class="fas fa-check-circle"></i> Secure tenant portal</li>
                     </ul>
                 </div>
             </div>
@@ -1112,49 +1139,13 @@ class CasaLink {
                     </div>
                     
                     <div class="form-group">
-                        <button class="btn btn-primary" id="loginBtn" style="width: 100%;">Sign In</button>
+                        <button class="btn btn-primary" id="loginBtn" style="width: 100%;">
+                            <i class="fas fa-sign-in-alt"></i> Sign In
+                        </button>
                     </div>
                     
-                    <div style="text-align: center; margin-top: 20px;">
-                        <a href="#" id="showRegister" style="color: var(--primary-blue); text-decoration: none;">
-                            Don't have an account? Sign up
-                        </a>
-                    </div>
-                </div>
-
-                <div class="login-form hidden" id="registerForm">
-                    <h2 class="form-title">Create Account</h2>
-                    <p class="form-subtitle">Join CasaLink today</p>
-                    
-                    <!-- Registration form fields -->
-                    <div class="form-group">
-                        <label class="form-label" for="regName">Full Name</label>
-                        <input type="text" id="regName" class="form-input" placeholder="John Doe">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="regEmail">Email</label>
-                        <input type="email" id="regEmail" class="form-input" placeholder="your.email@example.com">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="regPassword">Password</label>
-                        <input type="password" id="regPassword" class="form-input" placeholder="At least 6 characters">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label" for="regConfirmPassword">Confirm Password</label>
-                        <input type="password" id="regConfirmPassword" class="form-input" placeholder="Confirm your password">
-                    </div>
-                    
-                    <div class="form-group">
-                        <button class="btn btn-primary" id="registerBtn" style="width: 100%;">Create Account</button>
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 20px;">
-                        <a href="#" id="showLogin" style="color: var(--primary-blue); text-decoration: none;">
-                            Already have an account? Sign in
-                        </a>
+                    <div style="text-align: center; margin-top: 20px; color: var(--dark-gray);">
+                        <small>Don't have an account? Contact your landlord for credentials.</small>
                     </div>
                 </div>
             </div>
@@ -1162,140 +1153,77 @@ class CasaLink {
         `;
     }
 
-    showRegisterForm() {
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
-        
-        if (loginForm && registerForm) {
-            loginForm.classList.add('hidden');
-            registerForm.classList.remove('hidden');
-        }
-    }   
-
-    showLoginForm() {
-        const loginForm = document.getElementById('loginForm');
-        const registerForm = document.getElementById('registerForm');
-        
-        if (loginForm && registerForm) {
-            registerForm.classList.add('hidden');
-            loginForm.classList.remove('hidden');
-        }
-    }
-
     setupLoginEvents() {
-        // Use event delegation instead of direct element references
-        document.addEventListener('click', (e) => {
-            // Handle role selection
-            if (e.target.closest('.role-option')) {
-                const roleOption = e.target.closest('.role-option');
-                const allOptions = document.querySelectorAll('.role-option');
-                
-                // Remove active class from all options
-                allOptions.forEach(option => option.classList.remove('active'));
-                
-                // Add active class to clicked option
-                roleOption.classList.add('active');
-            }
-
-            // Handle login/register form switching
-            if (e.target.id === 'showRegister' || e.target.closest('#showRegister')) {
-                e.preventDefault();
-                this.showRegisterForm();
-            }
-
-            if (e.target.id === 'showLogin' || e.target.closest('#showLogin')) {
-                e.preventDefault();
-                this.showLoginForm();
-            }
-
-            // Handle login button
-            if (e.target.id === 'loginBtn' || e.target.closest('#loginBtn')) {
-                e.preventDefault();
-                this.handleLogin();
-            }
-
-            // Handle register button
-            if (e.target.id === 'registerBtn' || e.target.closest('#registerBtn')) {
-                e.preventDefault();
-                this.handleRegister();
-            }
-        });
-
-        // Handle enter key in form fields
-        document.addEventListener('keypress', (e) => {
-            if ((e.target.id === 'password' || e.target.id === 'email') && e.key === 'Enter') {
-                this.handleLogin();
-            }
-            if ((e.target.id === 'regPassword' || e.target.id === 'regConfirmPassword') && e.key === 'Enter') {
-                this.handleRegister();
-            }
-        });
+        console.log('Setting up login events...');
+        
+        // Remove any existing event listeners first
+        this.removeLoginEvents();
+        
+        // Use event delegation with proper once handling
+        document.addEventListener('click', this.boundLoginClickHandler);
+        document.addEventListener('keypress', this.boundLoginKeypressHandler);
+        
+        console.log('Login events setup complete');
     }
 
-    handleRegister() {
-        const nameInput = document.getElementById('regName');
-        const emailInput = document.getElementById('regEmail');
-        const passwordInput = document.getElementById('regPassword');
-        const confirmPasswordInput = document.getElementById('regConfirmPassword');
+    removeLoginEvents() {
+        // Remove event listeners by replacing the handlers
+        document.removeEventListener('click', this.boundLoginClickHandler);
+        document.removeEventListener('keypress', this.boundLoginKeypressHandler);
         
-        const name = nameInput?.value;
-        const email = emailInput?.value;
-        const password = passwordInput?.value;
-        const confirmPassword = confirmPasswordInput?.value;
-        
-        // Get selected role from active role option
-        const activeRoleOption = document.querySelector('.role-option.active');
-        const role = activeRoleOption ? activeRoleOption.getAttribute('data-role') : 'tenant';
+        console.log('Previous login events removed');
+    }
 
-        if (!name || !email || !password || !confirmPassword) {
-            this.showNotification('Please fill in all fields', 'error');
+    loginClickHandler(e) {
+        // Handle role selection
+        if (e.target.closest('.role-option')) {
+            const roleOption = e.target.closest('.role-option');
+            const allOptions = document.querySelectorAll('.role-option');
+            
+            // Remove active class from all options
+            allOptions.forEach(option => option.classList.remove('active'));
+            
+            // Add active class to clicked option
+            roleOption.classList.add('active');
             return;
         }
 
-        if (password !== confirmPassword) {
-            this.showNotification('Passwords do not match', 'error');
-            return;
-        }
-
-        if (password.length < 6) {
-            this.showNotification('Password should be at least 6 characters', 'error');
-            return;
-        }
-
-        const registerBtn = document.getElementById('registerBtn');
-        if (registerBtn) {
-            const originalText = registerBtn.innerHTML;
-            registerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Account...';
-            registerBtn.disabled = true;
-
-            const userData = {
-                name: name,
-                role: role,
-                avatar: name.charAt(0).toUpperCase()
-            };
-
-            AuthManager.register(email, password, userData)
-                .then(user => {
-                    this.currentUser = user;
-                    this.currentRole = user.role;
-                    this.showDashboard();
-                })
-                .catch(error => {
-                    this.showNotification(error.message, 'error');
-                    registerBtn.innerHTML = originalText;
-                    registerBtn.disabled = false;
-                });
+        // Handle login button - prevent multiple simultaneous clicks
+        if (e.target.id === 'loginBtn' || e.target.closest('#loginBtn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation(); // Prevent other listeners
+            
+            console.log('🖱️ Login button clicked');
+            this.boundHandleLogin();
         }
     }
 
-    handleLogin() {
+    loginKeypressHandler(e) {
+        if ((e.target.id === 'password' || e.target.id === 'email') && e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('⌨️ Enter key pressed for login');
+            this.boundHandleLogin();
+        }
+    }
+
+    async handleLogin() {
+        // Prevent multiple simultaneous login attempts with proper debouncing
+        if (this.loginInProgress) {
+            console.log('🛑 Login already in progress, ignoring duplicate request');
+            return;
+        }
+        
+        this.loginInProgress = true;
+        console.log('🔐 Starting login process...');
+        
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
         
         const email = emailInput?.value;
         const password = passwordInput?.value;
         
-        // Get selected role from active role option
         const activeRoleOption = document.querySelector('.role-option.active');
         const role = activeRoleOption ? activeRoleOption.getAttribute('data-role') : 'tenant';
 
@@ -1303,30 +1231,88 @@ class CasaLink {
 
         if (!email || !password) {
             this.showNotification('Please enter both email and password', 'error');
+            this.loginInProgress = false;
             return;
         }
 
-        // Show loading state
         const loginBtn = document.getElementById('loginBtn');
         if (loginBtn) {
             const originalText = loginBtn.innerHTML;
             loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
             loginBtn.disabled = true;
 
-            AuthManager.login(email, password, role)
-                .then(user => {
-                    console.log('✅ Login successful, user:', user);
-                    this.currentUser = user;
-                    this.currentRole = user.role;
-                    console.log('🚀 Calling showDashboard() now...');
-                    this.showDashboard(); // This should show the dashboard immediately
-                })
-                .catch(error => {
-                    console.error('❌ Login failed:', error);
-                    this.showNotification(error.message, 'error');
-                    loginBtn.innerHTML = originalText;
-                    loginBtn.disabled = false;
-                });
+            try {
+                // Clear any previous authentication state
+                await this.clearAuthentication();
+
+                console.log('🛡️ Starting authentication...');
+                
+                // TEMPORARILY DISABLE auth listener to prevent duplicate dashboard
+                this.authListenerEnabled = false;
+                
+                const user = await AuthManager.login(email, password, role);
+                console.log('✅ Login successful, user:', user.email);
+                
+                // MANUAL STATE MANAGEMENT - don't rely on auth listener
+                this.currentUser = user;
+                this.currentRole = user.role;
+                
+                // Re-enable auth listener after successful login
+                setTimeout(() => {
+                    this.authListenerEnabled = true;
+                    console.log('🔓 Auth listener re-enabled after login');
+                }, 2000);
+                
+                // Handle post-login flow manually
+                if (user.role === 'tenant' && user.hasTemporaryPassword) {
+                    console.log('🔄 Tenant requires password change on first login');
+                    setTimeout(() => {
+                        this.showPasswordChangeModal();
+                    }, 500);
+                } else {
+                    console.log('🔄 Proceeding to dashboard after successful login');
+                    setTimeout(() => {
+                        this.showDashboard();
+                    }, 500);
+                }
+                
+            } catch (error) {
+                console.error('❌ Login failed:', error);
+                
+                // Re-enable auth listener on error
+                this.authListenerEnabled = true;
+                
+                // Clear state and show error
+                await this.clearAuthentication();
+                this.currentUser = null;
+                this.currentRole = null;
+                
+                // Show error message
+                let errorMessage = error.message;
+                if (error.code && error.code.startsWith('auth/')) {
+                    errorMessage = AuthManager.getAuthErrorMessage(error.code);
+                }
+                
+                this.showNotification(errorMessage, 'error');
+                
+                // Reset form and button
+                loginBtn.innerHTML = originalText;
+                loginBtn.disabled = false;
+                if (passwordInput) passwordInput.value = '';
+                
+            } finally {
+                this.loginInProgress = false;
+            }
+        } else {
+            this.loginInProgress = false;
+        }
+    }
+
+    ensureLoginPage() {
+        const appElement = document.getElementById('app');
+        if (appElement && !appElement.innerHTML.includes('login-container')) {
+            console.log('🛑 Ensuring login page is displayed after failed login');
+            this.showLogin();
         }
     }
 
@@ -1371,10 +1357,6 @@ class CasaLink {
         this.showNotification('Bill generation feature coming soon!', 'info');
     }
 
-    showAddTenantForm() {
-        this.showNotification('Add tenant feature coming soon!', 'info');
-    }
-
     showPaymentModal(billId = null) {
         this.showNotification('Payment processing feature coming soon!', 'info');
     }
@@ -1394,13 +1376,45 @@ class CasaLink {
     }
 
     updateDashboardWithRealData(stats) {
-        // Update dashboard cards with real data
+        if (!stats) return;
+        
+        const isLandlord = this.currentRole === 'landlord';
         const cards = document.querySelectorAll('.dashboard-cards .card');
-        if (cards.length >= 4 && stats) {
-            cards[0].querySelector('.card-value').textContent = stats.totalTenants || 0;
-            cards[1].querySelector('.card-value').textContent = stats.unpaidBills || 0;
-            cards[2].querySelector('.card-value').textContent = stats.openMaintenance || 0;
-            cards[3].querySelector('.card-value').textContent = `₱${(stats.totalRevenue || 0).toLocaleString()}`;
+        
+        if (isLandlord) {
+            // Update landlord dashboard cards
+            if (cards.length >= 4) {
+                cards[0].querySelector('.card-value').textContent = stats.totalTenants || 0;
+                cards[1].querySelector('.card-value').textContent = stats.unpaidBills || 0;
+                cards[2].querySelector('.card-value').textContent = stats.openMaintenance || 0;
+                cards[3].querySelector('.card-value').textContent = `₱${(stats.totalRevenue || 0).toLocaleString()}`;
+                
+                // Update loading states
+                cards.forEach(card => {
+                    const changeElement = card.querySelector('.card-change');
+                    if (changeElement) {
+                        changeElement.innerHTML = '<i class="fas fa-check"></i> <span>Updated</span>';
+                        changeElement.className = 'card-change positive';
+                    }
+                });
+            }
+        } else {
+            // Update tenant dashboard cards
+            if (cards.length >= 3) {
+                cards[0].querySelector('.card-value').textContent = 
+                    stats.nextPaymentDue ? new Date(stats.nextPaymentDue).toLocaleDateString() : 'No bills';
+                cards[1].querySelector('.card-value').textContent = stats.openMaintenance || 0;
+                cards[2].querySelector('.card-value').textContent = stats.unpaidBills || 0;
+                
+                // Update loading states
+                cards.forEach(card => {
+                    const changeElement = card.querySelector('.card-change');
+                    if (changeElement) {
+                        changeElement.innerHTML = '<i class="fas fa-check"></i> <span>Updated</span>';
+                        changeElement.className = 'card-change positive';
+                    }
+                });
+            }
         }
     }
 
@@ -1454,15 +1468,167 @@ class CasaLink {
                     <i class="fas fa-plus"></i> Add Tenant
                 </button>
             </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Tenant Management</h3>
-                <p>Manage your tenants, units, and lease information.</p>
-                <button class="btn btn-primary" onclick="casaLink.showAddTenantForm()">
-                    Add Your First Tenant
-                </button>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h3>Your Tenants</h3>
+                    <div class="search-box">
+                        <input type="text" id="tenantSearch" class="form-input" placeholder="Search tenants...">
+                    </div>
+                </div>
+                <div id="tenantsList">
+                    <div class="data-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading tenants...
+                    </div>
+                </div>
             </div>
         </div>
         `;
+    }
+
+    // Landlord creates tenant accounts
+    async showAddTenantForm() {
+        const modalContent = `
+            <div class="add-tenant-form">
+                <div class="form-group">
+                    <label class="form-label">Tenant Full Name *</label>
+                    <input type="text" id="tenantName" class="form-input" placeholder="John Doe" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Email Address *</label>
+                    <input type="email" id="tenantEmail" class="form-input" placeholder="john.doe@example.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Phone Number</label>
+                    <input type="tel" id="tenantPhone" class="form-input" placeholder="+1 (555) 123-4567">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Assigned Unit</label>
+                    <input type="text" id="tenantUnit" class="form-input" placeholder="Unit 101">
+                </div>
+                
+                <div class="security-info">
+                    <i class="fas fa-info-circle"></i>
+                    <small>The tenant will receive a temporary password and will be required to change it on first login.</small>
+                </div>
+                
+                <div id="tenantCreationResult" style="display: none; margin-top: 15px; padding: 10px; border-radius: 8px;"></div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+            title: 'Add New Tenant',
+            submitText: 'Create Tenant Account',
+            onSubmit: () => this.createTenantAccount()
+        });
+
+        this.addTenantModal = modal;
+    }
+
+    async createTenantAccount() {
+        const name = document.getElementById('tenantName')?.value;
+        const email = document.getElementById('tenantEmail')?.value;
+        const phone = document.getElementById('tenantPhone')?.value;
+        const unit = document.getElementById('tenantUnit')?.value;
+        const resultElement = document.getElementById('tenantCreationResult');
+
+        if (!name || !email) {
+            this.showNotification('Please fill in required fields (Name and Email)', 'error');
+            return;
+        }
+
+        try {
+            const temporaryPassword = this.generateTemporaryPassword(8);
+            
+            const tenantData = {
+                name: name,
+                email: email,
+                phone: phone || '',
+                unitId: unit || '',
+                landlordId: this.currentUser.uid
+            };
+
+            // Show loading
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.disabled = true;
+            }
+
+            const newTenant = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
+
+            // Show success with credentials
+            if (resultElement) {
+                resultElement.innerHTML = `
+                    <div style="background: var(--success); color: white; padding: 15px; border-radius: 8px;">
+                        <h4 style="margin: 0 0 10px 0;">✅ Tenant Account Created!</h4>
+                        <p style="margin: 5px 0;"><strong>Email:</strong> ${newTenant.email}</p>
+                        <p style="margin: 5px 0;"><strong>Temporary Password:</strong> 
+                            <code style="background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">${temporaryPassword}</code>
+                        </p>
+                        ${newTenant.note ? `
+                        <div style="margin: 15px 0 0 0; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 4px;">
+                            <i class="fas fa-info-circle"></i> 
+                            <strong>Note:</strong> ${newTenant.note}
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+                resultElement.style.display = 'block';
+            }
+
+            // If there's a note about re-login, show a notification
+            if (newTenant.note) {
+                this.showNotification('Tenant created! Please log in again.', 'info');
+                
+                // Auto-redirect to login after a delay
+                setTimeout(() => {
+                    this.handleLogout();
+                }, 3000);
+            }
+
+            // Clear form fields
+            setTimeout(() => {
+                const nameField = document.getElementById('tenantName');
+                const emailField = document.getElementById('tenantEmail');
+                const phoneField = document.getElementById('tenantPhone');
+                const unitField = document.getElementById('tenantUnit');
+                
+                if (nameField) nameField.value = '';
+                if (emailField) emailField.value = '';
+                if (phoneField) phoneField.value = '';
+                if (unitField) unitField.value = '';
+
+                // Reset button
+                if (submitBtn) {
+                    submitBtn.innerHTML = 'Create Another Tenant';
+                    submitBtn.disabled = false;
+                }
+            }, 100);
+
+        } catch (error) {
+            console.error('Tenant creation error:', error);
+            this.showNotification(`Failed to create tenant: ${error.message}`, 'error');
+            
+            // Reset button
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Create Tenant Account';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    generateTemporaryPassword(length = 8) {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let password = '';
+        for (let i = 0; i < length; i++) {
+            password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
     }
 
     async getTenantDashboard() {
@@ -1540,6 +1706,154 @@ class CasaLink {
             </div>
         </div>
         `;
+    }
+
+    // Password Change for Tenants
+    showPasswordChangeModal() {
+        const modalContent = `
+            <div class="password-change-modal">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <i class="fas fa-shield-alt" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                    <h3 style="margin-bottom: 10px;">Security First!</h3>
+                    <p>Welcome to CasaLink! For your security, please change your temporary password to a permanent one.</p>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Current Temporary Password</label>
+                    <input type="password" id="currentTempPassword" class="form-input" 
+                        placeholder="Enter the temporary password provided by your landlord">
+                    <small style="color: var(--dark-gray); display: block; margin-top: 5px;">
+                        This is the temporary password you just used to login
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">New Permanent Password</label>
+                    <input type="password" id="newPassword" class="form-input" 
+                        placeholder="Choose a secure password (min. 6 characters)">
+                    <small style="color: var(--dark-gray); display: block; margin-top: 5px;">
+                        Must be at least 6 characters long
+                    </small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Confirm New Password</label>
+                    <input type="password" id="confirmNewPassword" class="form-input" 
+                        placeholder="Re-enter your new password">
+                </div>
+                
+                <div id="passwordChangeError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+            title: 'Change Your Password',
+            submitText: 'Update Password & Continue',
+            showFooter: true,
+            onSubmit: () => this.handleTenantPasswordChange()
+        });
+
+        // Wait for modal to be fully rendered before accessing elements
+        setTimeout(() => {
+            const overlay = modal?.querySelector('.modal-overlay');
+            const closeBtn = modal?.querySelector('.modal-close');
+            const cancelBtn = modal?.querySelector('#modalCancel');
+            
+            // Make modal non-closable (user must change password)
+            if (closeBtn) closeBtn.style.display = 'none';
+            if (cancelBtn) cancelBtn.style.display = 'none';
+            
+            if (overlay) {
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+            }
+        }, 100);
+
+        this.passwordChangeModal = modal;
+    }
+
+    async handleTenantPasswordChange() {
+        const currentPassword = document.getElementById('currentTempPassword')?.value;
+        const newPassword = document.getElementById('newPassword')?.value;
+        const confirmPassword = document.getElementById('confirmNewPassword')?.value;
+        const errorElement = document.getElementById('passwordChangeError');
+
+        // Reset error
+        if (errorElement) {
+            errorElement.style.display = 'none';
+            errorElement.textContent = '';
+        }
+
+        // Validation
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            this.showPasswordChangeError('Please fill in all fields');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            this.showPasswordChangeError('New password must be at least 6 characters long');
+            return;
+        }
+
+        if (newPassword !== confirmPassword) {
+            this.showPasswordChangeError('New passwords do not match');
+            return;
+        }
+
+        // Check if new password is same as temporary password
+        if (newPassword === currentPassword) {
+            this.showPasswordChangeError('New password cannot be the same as temporary password');
+            return;
+        }
+
+        try {
+            // Show loading state
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+                submitBtn.disabled = true;
+            }
+
+            await AuthManager.changePassword(currentPassword, newPassword);
+            
+            // Close modal
+            ModalManager.closeModal(this.passwordChangeModal);
+            
+            // Show success message
+            this.showNotification('Password changed successfully! Welcome to CasaLink!', 'success');
+            
+            // Update current user data
+            this.currentUser.requiresPasswordChange = false;
+            this.currentUser.hasTemporaryPassword = false;
+            
+            // Now show the dashboard
+            setTimeout(() => {
+                this.showDashboard();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Password change error:', error);
+            this.showPasswordChangeError(error.message);
+            
+            // Reset button
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Update Password & Continue';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    showPasswordChangeError(message) {
+        const errorElement = document.getElementById('passwordChangeError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
     }
 
     // ===== UTILITY METHODS =====

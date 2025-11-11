@@ -1,4 +1,4 @@
-/* css/style.css */
+/* css/style.css - REORGANIZED VERSION */
 :root {
     --primary-blue: #1A73E8;
     --light-gray: #F4F6F8;
@@ -13,6 +13,7 @@
     --transition: all 0.3s ease;
 }
 
+/* ===== BASE STYLES ===== */
 * {
     margin: 0;
     padding: 0;
@@ -34,6 +35,92 @@ body {
 
 .hidden {
     display: none !important;
+}
+
+/* ===== TYPOGRAPHY & UTILITIES ===== */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.positive { color: var(--success); }
+.negative { color: var(--danger); }
+.neutral { color: var(--dark-gray); }
+
+/* ===== FORM STYLES ===== */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-dark);
+}
+
+.form-input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: var(--border-radius);
+    font-size: 1rem;
+    transition: var(--transition);
+    background: white;
+}
+
+.form-input:focus {
+    border-color: var(--primary-blue);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* ===== BUTTON STYLES ===== */
+.btn {
+    padding: 12px 24px;
+    border-radius: var(--border-radius);
+    border: none;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+}
+
+.btn-primary {
+    background-color: var(--primary-blue);
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0d62d4;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: white;
+    color: var(--primary-blue);
+    border: 1px solid var(--primary-blue);
+}
+
+.btn-secondary:hover {
+    background-color: rgba(26, 115, 232, 0.1);
+}
+
+.btn-danger {
+    background-color: var(--danger);
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #d33426;
+    transform: translateY(-1px);
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 0.8rem;
 }
 
 /* ===== LOGIN STYLES ===== */
@@ -155,89 +242,7 @@ body {
     color: var(--primary-blue);
 }
 
-/* Form Elements */
-.form-group {
-    margin-bottom: 20px;
-}
-
-.form-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-    color: var(--text-dark);
-}
-
-.form-input {
-    width: 100%;
-    padding: 12px 15px;
-    border: 1px solid #ddd;
-    border-radius: var(--border-radius);
-    font-size: 1rem;
-    transition: var(--transition);
-    background: white;
-}
-
-.form-input:focus {
-    border-color: var(--primary-blue);
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
-}
-
-/* Buttons */
-.btn {
-    padding: 12px 24px;
-    border-radius: var(--border-radius);
-    border: none;
-    font-weight: 500;
-    cursor: pointer;
-    transition: var(--transition);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
-}
-
-.btn-primary {
-    background-color: var(--primary-blue);
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: #0d62d4;
-    transform: translateY(-1px);
-}
-
-.btn-secondary {
-    background-color: white;
-    color: var(--primary-blue);
-    border: 1px solid var(--primary-blue);
-}
-
-.btn-secondary:hover {
-    background-color: rgba(26, 115, 232, 0.1);
-}
-
-.btn-sm {
-    padding: 8px 16px;
-    font-size: 0.8rem;
-}
-
-/* ===== LOADING SPINNER ===== */
-.loading-spinner {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    gap: 20px;
-    color: var(--primary-blue);
-}
-
-.loading-spinner i {
-    font-size: 2rem;
-}
-
-/* ===== DASHBOARD STYLES ===== */
+/* ===== APP LAYOUT STYLES ===== */
 .app-container {
     display: flex;
     flex-direction: column;
@@ -373,7 +378,7 @@ header {
     background-color: var(--light-gray);
 }
 
-/* Page Header */
+/* ===== DASHBOARD STYLES ===== */
 .page-header {
     display: flex;
     justify-content: space-between;
@@ -459,51 +464,191 @@ header {
     gap: 5px;
 }
 
-.positive {
-    color: var(--success);
-}
-
-.negative {
-    color: var(--danger);
-}
-
-/* Chart Container */
-.chart-container {
-    background-color: white;
-    border-radius: var(--border-radius);
-    padding: 20px;
-    box-shadow: var(--box-shadow);
-    margin-bottom: 30px;
-}
-
-.chart-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+/* ===== TENANT MANAGEMENT STYLES ===== */
+.search-box {
     margin-bottom: 20px;
 }
 
-.chart-title {
-    font-size: 1.2rem;
-    font-weight: 600;
+.search-box .form-input {
+    max-width: 300px;
 }
 
-.chart-actions {
+.table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+}
+
+.tenants-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.tenants-table th,
+.tenants-table td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+.tenants-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: var(--dark-gray);
+    font-size: 0.9rem;
+}
+
+.tenants-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.tenant-info {
     display: flex;
+    align-items: center;
     gap: 10px;
 }
 
-.chart {
-    height: 300px;
-    background-color: var(--light-gray);
-    border-radius: var(--border-radius);
+.tenant-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--primary-blue);
+    color: white;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.tenant-name {
+    font-weight: 500;
+}
+
+.status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.status-badge.active {
+    background-color: var(--success);
+    color: white;
+}
+
+.status-badge.inactive {
+    background-color: var(--dark-gray);
+    color: white;
+}
+
+.status-badge.warning {
+    background-color: var(--warning);
+    color: white;
+    margin-left: 5px;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.action-buttons .btn {
+    padding: 6px 8px;
+    font-size: 0.8rem;
+}
+
+/* ===== MODAL STYLES ===== */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-content {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-bottom: 1px solid #eee;
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
     color: var(--dark-gray);
 }
 
-/* Notifications */
+.modal-body {
+    padding: 25px;
+}
+
+.modal-footer {
+    padding: 20px 25px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* Password Change Modal */
+.password-change-modal {
+    text-align: center;
+}
+
+.password-change-modal .fas.fa-shield-alt {
+    font-size: 3rem;
+    color: var(--primary-blue);
+    margin-bottom: 15px;
+}
+
+/* Security Info Box */
+.security-info {
+    background: rgba(26, 115, 232, 0.1);
+    border-left: 4px solid var(--primary-blue);
+    padding: 12px;
+    margin: 15px 0;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.security-info i {
+    color: var(--primary-blue);
+    margin-right: 8px;
+}
+
+/* ===== NOTIFICATION & STATUS STYLES ===== */
 .notification {
     position: fixed;
     top: 20px;
@@ -537,7 +682,52 @@ header {
     to { transform: translateX(0); opacity: 1; }
 }
 
-/* PWA Install Prompt */
+/* Loading States */
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    gap: 20px;
+    color: var(--primary-blue);
+}
+
+.loading-spinner i {
+    font-size: 2rem;
+}
+
+.data-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: var(--dark-gray);
+    text-align: center;
+}
+
+.data-loading i {
+    font-size: 2rem;
+    margin-bottom: 15px;
+    color: var(--primary-blue);
+}
+
+/* Empty States */
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--dark-gray);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 20px;
+    color: var(--dark-gray);
+    opacity: 0.5;
+}
+
+/* ===== PWA & OFFLINE STYLES ===== */
 .pwa-install-prompt {
     position: fixed;
     bottom: 30px;
@@ -549,6 +739,7 @@ header {
     max-width: 350px;
     z-index: 100;
     display: none;
+    border-left: 4px solid var(--primary-blue);
 }
 
 .pwa-header {
@@ -612,65 +803,7 @@ header {
     gap: 5px;
 }
 
-/* Modal Styles */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-    padding: 20px;
-}
-
-.modal-content {
-    background: white;
-    border-radius: var(--border-radius);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    max-width: 600px;
-    width: 100%;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 25px;
-    border-bottom: 1px solid #eee;
-}
-
-.modal-header h3 {
-    margin: 0;
-    font-weight: 600;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: var(--dark-gray);
-}
-
-.modal-body {
-    padding: 25px;
-}
-
-.modal-footer {
-    padding: 20px 25px;
-    border-top: 1px solid #eee;
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-
-/* Responsive Design */
+/* ===== RESPONSIVE DESIGN ===== */
 @media (max-width: 768px) {
     .login-container {
         flex-direction: column;
@@ -698,6 +831,7 @@ header {
     .sidebar-menu {
         display: flex;
         overflow-x: auto;
+        padding: 0 15px;
     }
     
     .sidebar-menu li {
@@ -709,6 +843,7 @@ header {
         padding: 10px 15px;
         border-right: none;
         border-bottom: 3px solid transparent;
+        white-space: nowrap;
     }
     
     .sidebar-menu a.active {
@@ -718,6 +853,7 @@ header {
     
     .header-content {
         flex-wrap: wrap;
+        gap: 15px;
     }
     
     .nav-links {
@@ -725,6 +861,13 @@ header {
         width: 100%;
         justify-content: space-between;
         margin-top: 15px;
+        overflow-x: auto;
+        padding-bottom: 10px;
+    }
+    
+    .nav-links a {
+        white-space: nowrap;
+        font-size: 0.9rem;
     }
     
     .dashboard-cards {
@@ -737,128 +880,55 @@ header {
         gap: 15px;
     }
 
-    /* Enhanced PWA Install Prompt Styles */
+    .content-area {
+        padding: 20px 15px;
+    }
+
+    /* Mobile table styles */
+    .table-container {
+        margin: 0 -15px;
+        border-radius: 0;
+    }
+
+    .tenants-table {
+        font-size: 0.9rem;
+    }
+
+    .tenants-table th,
+    .tenants-table td {
+        padding: 10px 8px;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    /* Mobile PWA prompt */
     .pwa-install-prompt {
-        position: fixed;
-        bottom: 30px;
-        left: 30px;
-        background-color: white;
-        border-radius: var(--border-radius);
-        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
-        padding: 20px;
-        max-width: 350px;
-        z-index: 1000;
-        display: none;
-        border-left: 4px solid var(--primary-blue);
-        animation: slideInUp 0.3s ease;
+        left: 20px;
+        right: 20px;
+        max-width: none;
+        bottom: 20px;
     }
-
-    @keyframes slideInUp {
-        from {
-            transform: translateY(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateY(0);
-            opacity: 1;
-        }
-    }
-
-    .pwa-header {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        margin-bottom: 15px;
-    }
-
-    .pwa-logo {
-        width: 40px;
-        height: 40px;
-        background-color: var(--primary-blue);
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 1.2rem;
-    }
-
-    .pwa-title {
-        font-weight: 600;
-        color: var(--text-dark);
-    }
-
+    
     .pwa-actions {
-        display: flex;
-        justify-content: flex-end;
-        gap: 10px;
-        margin-top: 15px;
+        flex-direction: column;
+    }
+    
+    .pwa-actions .btn {
+        width: 100%;
+        justify-content: center;
     }
 
-    /* Mobile responsiveness for PWA prompt */
-    @media (max-width: 768px) {
-        .pwa-install-prompt {
-            left: 20px;
-            right: 20px;
-            max-width: none;
-            bottom: 20px;
-        }
-        
-        .pwa-actions {
-            flex-direction: column;
-        }
-        
-        .pwa-actions .btn {
-            width: 100%;
-            justify-content: center;
-        }
+    /* Mobile modal */
+    .modal-overlay {
+        padding: 10px;
     }
 
-    /* Update notification specific styles */
-    #pwaUpdateNotification {
-        background: linear-gradient(135deg, var(--primary-blue), #0d62d4);
-        color: white;
-        border-left: 4px solid var(--warning);
+    .modal-content {
+        max-height: 95vh;
     }
-
-    #pwaUpdateNotification .pwa-title {
-        color: white;
-    }
-
-    #pwaUpdateNotification p {
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    /* Loading States */
-.data-loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 60px 20px;
-    color: var(--dark-gray);
-    text-align: center;
-}
-
-.data-loading i {
-    font-size: 2rem;
-    margin-bottom: 15px;
-    color: var(--primary-blue);
-}
-
-/* Empty States */
-.empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--dark-gray);
-}
-
-.empty-state i {
-    font-size: 3rem;
-    margin-bottom: 20px;
-    color: var(--dark-gray);
-    opacity: 0.5;
-}
 }
 
 @media (max-width: 576px) {
@@ -866,9 +936,49 @@ header {
         flex-direction: column;
     }
     
-    .pwa-install-prompt {
-        left: 20px;
-        right: 20px;
-        max-width: none;
+    .login-right {
+        padding: 30px 20px;
+    }
+    
+    .form-title {
+        font-size: 1.5rem;
+    }
+    
+    .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .page-header {
+        align-items: stretch;
+    }
+    
+    .page-header .btn {
+        width: auto;
+    }
+
+    /* Hide some table columns on very small screens */
+    .tenants-table th:nth-child(3),
+    .tenants-table td:nth-child(3) {
+        display: none;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .sidebar,
+    .header-actions,
+    .btn,
+    .pwa-install-prompt,
+    .notification {
+        display: none !important;
+    }
+    
+    .main-content {
+        margin-left: 0;
+    }
+    
+    .content-area {
+        padding: 0;
     }
 }

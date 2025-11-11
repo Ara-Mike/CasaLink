@@ -114,31 +114,56 @@ class DataManager {
     }
 
     // ===== DASHBOARD STATS =====
-    static async getDashboardStats(landlordId) {
-        const [tenants, bills, maintenance, properties] = await Promise.all([
-            this.getTenants(landlordId),
-            this.getBills(landlordId),
-            this.getMaintenanceRequests(landlordId),
-            this.getProperties(landlordId)
-        ]);
-
-        const unpaidBills = bills.filter(bill => bill.status === 'pending');
-        const totalRevenue = bills
-            .filter(bill => bill.status === 'paid')
-            .reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+    static async getDashboardStats(userId, userRole) {
+        console.log(`📊 Getting dashboard stats for ${userRole}: ${userId}`);
         
-        const openMaintenance = maintenance.filter(req => req.status === 'open');
-        const occupiedUnits = tenants.filter(tenant => tenant.status === 'active').length;
+        if (userRole === 'landlord') {
+            // Landlord-specific stats
+            const [tenants, bills, maintenance, properties] = await Promise.all([
+                this.getTenants(userId),
+                this.getBills(userId),
+                this.getMaintenanceRequests(userId),
+                this.getProperties(userId)
+            ]);
 
-        return {
-            totalTenants: tenants.length,
-            totalProperties: properties.length,
-            occupiedUnits,
-            vacancyRate: properties.length > 0 ? ((properties.length - occupiedUnits) / properties.length * 100).toFixed(1) : 0,
-            unpaidBills: unpaidBills.length,
-            totalRevenue,
-            openMaintenance: openMaintenance.length
-        };
+            const unpaidBills = bills.filter(bill => bill.status === 'pending');
+            const totalRevenue = bills
+                .filter(bill => bill.status === 'paid')
+                .reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+            
+            const openMaintenance = maintenance.filter(req => req.status === 'open');
+            const occupiedUnits = tenants.filter(tenant => tenant.status === 'active').length;
+
+            return {
+                totalTenants: tenants.length,
+                totalProperties: properties.length,
+                occupiedUnits,
+                vacancyRate: properties.length > 0 ? ((properties.length - occupiedUnits) / properties.length * 100).toFixed(1) : 0,
+                unpaidBills: unpaidBills.length,
+                totalRevenue,
+                openMaintenance: openMaintenance.length
+            };
+            
+        } else if (userRole === 'tenant') {
+            // Tenant-specific stats
+            const [bills, maintenance] = await Promise.all([
+                this.getTenantBills(userId),
+                this.getTenantMaintenanceRequests(userId)
+            ]);
+
+            const unpaidBills = bills.filter(bill => bill.status === 'pending');
+            const openMaintenance = maintenance.filter(req => req.status === 'open');
+            const nextPayment = bills.find(bill => bill.status === 'pending');
+
+            return {
+                unpaidBills: unpaidBills.length,
+                openMaintenance: openMaintenance.length,
+                nextPaymentDue: nextPayment ? nextPayment.dueDate : null,
+                nextPaymentAmount: nextPayment ? nextPayment.totalAmount : 0
+            };
+        }
+        
+        return {};
     }
 
     static listenToDashboardStats(landlordId, callback) {
@@ -171,9 +196,11 @@ class DataManager {
     // ===== TENANTS =====
     static async getTenants(landlordId) {
         try {
-            console.log('🔍 DataManager.getTenants called with:', landlordId);
-            const querySnapshot = await firebaseDb.collection('tenants')
+            console.log('🔍 DataManager.getTenants called with landlordId:', landlordId);
+            
+            const querySnapshot = await firebaseDb.collection('users')
                 .where('landlordId', '==', landlordId)
+                .where('role', '==', 'tenant')
                 .get();
             
             const tenants = querySnapshot.docs.map(doc => ({ 
@@ -181,7 +208,7 @@ class DataManager {
                 ...doc.data() 
             }));
             
-            console.log('✅ DataManager.getTenants returning:', tenants);
+            console.log('✅ DataManager.getTenants returning:', tenants.length, 'tenants');
             return tenants;
             
         } catch (error) {
