@@ -1505,33 +1505,69 @@ class CasaLink {
     async showAddTenantForm() {
         const modalContent = `
             <div class="add-tenant-form">
-                <div class="form-group">
-                    <label class="form-label">Tenant Full Name *</label>
-                    <input type="text" id="tenantName" class="form-input" placeholder="John Doe" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Email Address *</label>
-                    <input type="email" id="tenantEmail" class="form-input" placeholder="john.doe@example.com" required>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Phone Number</label>
-                    <input type="tel" id="tenantPhone" class="form-input" placeholder="+1 (555) 123-4567">
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">Assigned Unit</label>
-                    <input type="text" id="tenantUnit" class="form-input" placeholder="Unit 101">
-                </div>
-                
-                <div class="security-info">
-                    <i class="fas fa-info-circle"></i>
-                    <small>The tenant will receive a temporary password and will be required to change it on first login.</small>
-                </div>
-                
-                <div id="tenantCreationResult" style="display: none; margin-top: 15px; padding: 10px; border-radius: 8px;"></div>
+            <div class="form-group">
+                <label class="form-label">Tenant Full Name *</label>
+                <input type="text" id="tenantName" class="form-input" placeholder="John Doe" required>
             </div>
+            
+            <div class="form-group">
+                <label class="form-label">Email Address *</label>
+                <input type="email" id="tenantEmail" class="form-input" placeholder="john.doe@example.com" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Phone Number</label>
+                <input type="tel" id="tenantPhone" class="form-input" placeholder="+1 (555) 123-4567">
+            </div>
+            
+            <!-- NEW FIELDS -->
+            <div class="form-group">
+                <label class="form-label">Assigned Property</label>
+                <select id="tenantProperty" class="form-input">
+                    <option value="">Select Property</option>
+                    <option value="property_1">123 Main Street</option>
+                    <option value="property_2">456 Oak Avenue</option>
+                    <option value="property_3">789 Pine Road</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Assigned Unit *</label>
+                <input type="text" id="tenantUnit" class="form-input" placeholder="Unit 101" required>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Monthly Rent (₱)</label>
+                <input type="number" id="tenantRent" class="form-input" placeholder="15000" min="0" step="0.01">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Lease Start Date</label>
+                <input type="date" id="leaseStart" class="form-input">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Lease End Date</label>
+                <input type="date" id="leaseEnd" class="form-input">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Emergency Contact</label>
+                <input type="text" id="emergencyContact" class="form-input" placeholder="Emergency contact name">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Emergency Phone</label>
+                <input type="tel" id="emergencyPhone" class="form-input" placeholder="+1 (555) 987-6543">
+            </div>
+            
+            <div class="security-info">
+                <i class="fas fa-info-circle"></i>
+                <small>The tenant will receive a temporary password and will be required to change it on first login.</small>
+            </div>
+            
+            <div id="tenantCreationResult" style="display: none; margin-top: 15px; padding: 10px; border-radius: 8px;"></div>
+        </div>
         `;
 
         const modal = ModalManager.openModal(modalContent, {
@@ -1547,11 +1583,18 @@ class CasaLink {
         const name = document.getElementById('tenantName')?.value;
         const email = document.getElementById('tenantEmail')?.value;
         const phone = document.getElementById('tenantPhone')?.value;
+        const property = document.getElementById('tenantProperty')?.value;
         const unit = document.getElementById('tenantUnit')?.value;
+        const rent = document.getElementById('tenantRent')?.value;
+        const leaseStart = document.getElementById('leaseStart')?.value;
+        const leaseEnd = document.getElementById('leaseEnd')?.value;
+        const emergencyContact = document.getElementById('emergencyContact')?.value;
+        const emergencyPhone = document.getElementById('emergencyPhone')?.value;
+        
         const resultElement = document.getElementById('tenantCreationResult');
 
-        if (!name || !email) {
-            this.showNotification('Please fill in required fields (Name and Email)', 'error');
+        if (!name || !email || !unit) {
+            this.showNotification('Please fill in required fields (Name, Email, and Unit)', 'error');
             return;
         }
 
@@ -1565,7 +1608,13 @@ class CasaLink {
                 name: name,
                 email: email,
                 phone: phone || '',
-                unitId: unit || '',
+                propertyId: property || '',
+                unitId: unit,
+                monthlyRent: rent ? parseFloat(rent) : 0,
+                leaseStart: leaseStart || '',
+                leaseEnd: leaseEnd || '',
+                emergencyContact: emergencyContact || '',
+                emergencyPhone: emergencyPhone || '',
                 landlordId: this.currentUser.uid
             };
 
@@ -1584,7 +1633,10 @@ class CasaLink {
                 resultElement.innerHTML = `
                     <div style="background: var(--success); color: white; padding: 15px; border-radius: 8px;">
                         <h4 style="margin: 0 0 10px 0;">✅ Tenant Account Created!</h4>
+                        <p style="margin: 5px 0;"><strong>Name:</strong> ${result.name}</p>
                         <p style="margin: 5px 0;"><strong>Email:</strong> ${result.email}</p>
+                        <p style="margin: 5px 0;"><strong>Unit:</strong> ${result.unitId}</p>
+                        ${result.monthlyRent ? `<p style="margin: 5px 0;"><strong>Monthly Rent:</strong> ₱${result.monthlyRent.toLocaleString()}</p>` : ''}
                         <p style="margin: 5px 0;"><strong>Temporary Password:</strong> 
                             <code style="background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">
                                 ${result.temporaryPassword}
@@ -1607,15 +1659,17 @@ class CasaLink {
 
             // Clear form but STAY on tenant management page
             setTimeout(() => {
-                const nameField = document.getElementById('tenantName');
-                const emailField = document.getElementById('tenantEmail');
-                const phoneField = document.getElementById('tenantPhone');
-                const unitField = document.getElementById('tenantUnit');
+                // Clear all form fields
+                const fields = [
+                    'tenantName', 'tenantEmail', 'tenantPhone', 'tenantProperty', 
+                    'tenantUnit', 'tenantRent', 'leaseStart', 'leaseEnd', 
+                    'emergencyContact', 'emergencyPhone'
+                ];
                 
-                if (nameField) nameField.value = '';
-                if (emailField) emailField.value = '';
-                if (phoneField) phoneField.value = '';
-                if (unitField) unitField.value = '';
+                fields.forEach(fieldId => {
+                    const field = document.getElementById(fieldId);
+                    if (field) field.value = '';
+                });
 
                 // Reset button
                 if (submitBtn) {
