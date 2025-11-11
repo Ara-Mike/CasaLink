@@ -1551,46 +1551,39 @@ class CasaLink {
                 landlordId: this.currentUser.uid
             };
 
-            // Show loading
+            // Show loading in the main modal
             const submitBtn = document.querySelector('#modalSubmit');
             if (submitBtn) {
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Preparing...';
                 submitBtn.disabled = true;
             }
 
-            const newTenant = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
+            // This will show the password confirmation modal
+            const result = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
 
-            // Show success with credentials
+            // Show success in the main modal
             if (resultElement) {
                 resultElement.innerHTML = `
                     <div style="background: var(--success); color: white; padding: 15px; border-radius: 8px;">
                         <h4 style="margin: 0 0 10px 0;">✅ Tenant Account Created!</h4>
-                        <p style="margin: 5px 0;"><strong>Email:</strong> ${newTenant.email}</p>
+                        <p style="margin: 5px 0;"><strong>Email:</strong> ${result.email}</p>
                         <p style="margin: 5px 0;"><strong>Temporary Password:</strong> 
-                            <code style="background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">${temporaryPassword}</code>
+                            <code style="background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">
+                                ${result.temporaryPassword}
+                            </code>
                         </p>
-                        ${newTenant.note ? `
-                        <div style="margin: 15px 0 0 0; padding: 10px; background: rgba(255,255,255,0.2); border-radius: 4px;">
-                            <i class="fas fa-info-circle"></i> 
-                            <strong>Note:</strong> ${newTenant.note}
-                        </div>
-                        ` : ''}
+                        <p style="margin: 15px 0 0 0; font-size: 0.9em;">
+                            <i class="fas fa-envelope"></i> 
+                            You can now email these credentials to the tenant.
+                        </p>
                     </div>
                 `;
                 resultElement.style.display = 'block';
             }
 
-            // If there's a note about re-login, show a notification
-            if (newTenant.note) {
-                this.showNotification('Tenant created! Please log in again.', 'info');
-                
-                // Auto-redirect to login after a delay
-                setTimeout(() => {
-                    this.handleLogout();
-                }, 3000);
-            }
+            this.showNotification('Tenant account created successfully!', 'success');
 
-            // Clear form fields
+            // Clear form
             setTimeout(() => {
                 const nameField = document.getElementById('tenantName');
                 const emailField = document.getElementById('tenantEmail');
@@ -1607,11 +1600,14 @@ class CasaLink {
                     submitBtn.innerHTML = 'Create Another Tenant';
                     submitBtn.disabled = false;
                 }
-            }, 100);
+            }, 500);
 
         } catch (error) {
             console.error('Tenant creation error:', error);
-            this.showNotification(`Failed to create tenant: ${error.message}`, 'error');
+            
+            if (error.message !== 'Tenant creation cancelled') {
+                this.showNotification(`Failed to create tenant: ${error.message}`, 'error');
+            }
             
             // Reset button
             const submitBtn = document.querySelector('#modalSubmit');

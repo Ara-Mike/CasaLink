@@ -772,6 +772,44 @@ header {
     margin-top: 15px;
 }
 
+/* Password Confirmation Modal Styles */
+.password-confirm-modal {
+    text-align: center;
+}
+
+.password-confirm-modal .fas.fa-shield-alt {
+    font-size: 3rem;
+    color: var(--primary-blue);
+    margin-bottom: 15px;
+}
+
+.security-info {
+    background: rgba(26, 115, 232, 0.1);
+    border-left: 4px solid var(--primary-blue);
+    padding: 12px;
+    margin: 15px 0;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.security-info i {
+    color: var(--primary-blue);
+    margin-right: 8px;
+}
+
+/* Disabled input styling */
+.form-input:disabled {
+    background-color: #f8f9fa;
+    color: var(--dark-gray);
+    cursor: not-allowed;
+}
+
+/* Error state for password input */
+.form-input.error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
 /* Offline Indicator */
 .offline-indicator {
     position: fixed;

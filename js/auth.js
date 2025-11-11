@@ -19,40 +19,54 @@ class AuthManager {
             
             console.log('Firebase auth success, user:', user.uid);
             
-            // Get user profile from Firestore
+            // Check if user exists in Firestore
             const userDoc = await firebaseDb.collection('users').doc(user.uid).get();
             
             if (userDoc.exists) {
+                // Existing user - normal login
                 const userData = { 
                     id: userDoc.id,
                     ...userDoc.data(), 
                     uid: user.uid 
                 };
-                console.log('User profile found:', userData);
                 
-                // STRICT ROLE VERIFICATION
+                // Role verification
                 if (userData.role !== role) {
-                    console.log(`❌ Role mismatch: User is ${userData.role}, but ${role} was selected`);
                     await firebaseAuth.signOut();
                     throw new Error(`This account is registered as a ${userData.role}. Please select "${userData.role}" when logging in.`);
                 }
                 
-                // Check if this is tenant's first login
-                if (userData.role === 'tenant' && userData.hasTemporaryPassword) {
-                    console.log('Tenant has temporary password, requiring password change');
-                    userData.requiresPasswordChange = true;
-                    userData.temporaryPassword = password;
-                }
-                
                 return userData;
+                
             } else {
-                console.log('User profile not found in Firestore');
-                await firebaseAuth.signOut();
-                throw new Error('User account not found. Please contact your landlord.');
+                // NEW USER - Auto-create tenant account
+                console.log('New user detected, auto-creating tenant account...');
+                
+                // For now, create a basic tenant profile
+                // In a real app, you'd have a way to link them to a landlord
+                const newUserData = {
+                    email: email,
+                    name: email.split('@')[0], // Default name from email
+                    role: 'tenant',
+                    createdAt: new Date().toISOString(),
+                    isActive: true,
+                    hasTemporaryPassword: true
+                };
+                
+                await firebaseDb.collection('users').doc(user.uid).set(newUserData);
+                
+                console.log('Auto-created tenant account:', user.uid);
+                
+                return {
+                    id: user.uid,
+                    ...newUserData,
+                    uid: user.uid,
+                    requiresPasswordChange: true
+                };
             }
+            
         } catch (error) {
             console.error('Login error details:', error);
-            // Always sign out on error
             await firebaseAuth.signOut();
             throw error;
         }
@@ -154,31 +168,103 @@ class AuthManager {
     }
 
     static async createTenantAccount(tenantData, temporaryPassword) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                console.log('🔐 Creating tenant Firebase Auth account...', tenantData.email);
+
+                const currentUser = firebaseAuth.currentUser;
+                if (!currentUser) {
+                    reject(new Error('Landlord must be logged in to create tenants'));
+                    return;
+                }
+
+                // Store landlord info
+                const landlordEmail = currentUser.email;
+                const landlordId = currentUser.uid;
+
+                // Show password confirmation modal
+                const modalContent = `
+                    <div class="password-confirm-modal">
+                        <div style="text-align: center; margin-bottom: 20px;">
+                            <i class="fas fa-shield-alt" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                            <h3 style="margin-bottom: 10px;">Security Verification</h3>
+                            <p>Please confirm your password to create the tenant account.</p>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Your Email</label>
+                            <input type="email" id="landlordEmailConfirm" class="form-input" value="${landlordEmail}" readonly disabled>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">Your Password *</label>
+                            <input type="password" id="landlordPassword" class="form-input" placeholder="Enter your password" autocomplete="current-password">
+                        </div>
+                        
+                        <div id="passwordConfirmError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
+                        
+                        <div class="security-info">
+                            <i class="fas fa-info-circle"></i>
+                            <small>Your password is required to securely create the tenant account. It will not be stored.</small>
+                        </div>
+                    </div>
+                `;
+
+                // Create modal
+                const modal = ModalManager.openModal(modalContent, {
+                    title: 'Confirm Your Identity',
+                    submitText: 'Create Tenant Account',
+                    showFooter: true,
+                    onSubmit: async () => {
+                        await this.processTenantCreation(tenantData, temporaryPassword, landlordEmail, landlordId, modal, resolve, reject);
+                    },
+                    onCancel: () => {
+                        reject(new Error('Tenant creation cancelled'));
+                        ModalManager.closeModal(modal);
+                    }
+                });
+
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    static async processTenantCreation(tenantData, temporaryPassword, landlordEmail, landlordId, modal, resolve, reject) {
         try {
-            if (!window.firebaseAuth) {
-                throw new Error('Firebase Auth not initialized');
+            const passwordInput = document.getElementById('landlordPassword');
+            const errorElement = document.getElementById('passwordConfirmError');
+            const submitBtn = document.querySelector('#modalSubmit');
+
+            const landlordPassword = passwordInput?.value;
+
+            if (!landlordPassword) {
+                this.showPasswordError('Please enter your password');
+                return;
             }
 
-            console.log('Creating tenant account (temporary solution):', tenantData.email);
+            // Show loading state
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.disabled = true;
+            }
 
-            // Store the current user before creating new account
-            const currentUser = firebaseAuth.currentUser;
-            const currentUserIdToken = await currentUser.getIdToken();
+            // Verify landlord password by trying to re-authenticate
+            const credential = firebase.auth.EmailAuthProvider.credential(landlordEmail, landlordPassword);
+            await firebaseAuth.currentUser.reauthenticateWithCredential(credential);
             
-            if (!currentUser) {
-                throw new Error('User must be logged in to create tenants');
-            }
+            console.log('✅ Landlord password verified');
 
-            // Create the new tenant account (this will sign out current user temporarily)
-            const userCredential = await firebaseAuth.createUserWithEmailAndPassword(
+            // Step 1: Create tenant account (this will log out landlord)
+            const tenantCredential = await firebaseAuth.createUserWithEmailAndPassword(
                 tenantData.email, 
                 temporaryPassword
             );
-            const newUser = userCredential.user;
+            const tenantUser = tenantCredential.user;
+            
+            console.log('✅ Tenant Firebase Auth account created:', tenantUser.uid);
 
-            console.log('New tenant auth account created:', newUser.uid);
-
-            // Create user profile in Firestore
+            // Step 2: Create tenant document in Firestore
             const userProfile = {
                 email: tenantData.email,
                 name: tenantData.name,
@@ -186,59 +272,74 @@ class AuthManager {
                 createdAt: new Date().toISOString(),
                 isActive: true,
                 hasTemporaryPassword: true,
-                landlordId: tenantData.landlordId,
-                unitId: tenantData.unitId || null,
+                landlordId: landlordId,
+                unitId: tenantData.unitId || '',
                 phone: tenantData.phone || '',
-                emergencyContact: tenantData.emergencyContact || {}
+                createdBy: landlordEmail
             };
 
-            await firebaseDb.collection('users').doc(newUser.uid).set(userProfile);
-            console.log('Tenant profile created in Firestore');
+            await firebaseDb.collection('users').doc(tenantUser.uid).set(userProfile);
+            console.log('✅ Tenant profile created in Firestore');
 
-            // CRITICAL: Sign out the new tenant immediately
+            // Step 3: Immediately restore landlord session
+            console.log('🔄 Restoring landlord session...');
             await firebaseAuth.signOut();
-            console.log('Signed out new tenant');
+            
+            // Re-login as landlord
+            await firebaseAuth.signInWithEmailAndPassword(landlordEmail, landlordPassword);
+            
+            console.log('✅ Landlord session restored successfully');
 
-            // Re-authenticate as the original landlord using the stored token
-            // This is a workaround - in production, use Cloud Functions
-            try {
-                // Method 1: Try to use the stored token (may not work in all cases)
-                console.log('Attempting to restore landlord session...');
-                
-                // For now, we'll show a message and redirect to login
-                // The landlord will need to log in again, but at least the tenant is created
-                console.log('Tenant created successfully. Landlord needs to log in again.');
-                
-                return { 
-                    ...userProfile, 
-                    uid: newUser.uid,
-                    temporaryPassword: temporaryPassword,
-                    note: 'Tenant created successfully. Please log in again as landlord.'
-                };
-                
-            } catch (reauthError) {
-                console.error('Could not automatically re-authenticate landlord:', reauthError);
-                
-                // Still return success, but inform user they need to log in again
-                return { 
-                    ...userProfile, 
-                    uid: newUser.uid,
-                    temporaryPassword: temporaryPassword,
-                    note: 'Tenant created. Please log in again as landlord.'
-                };
-            }
+            // Close modal and return success
+            ModalManager.closeModal(modal);
+            
+            resolve({
+                success: true,
+                email: tenantData.email,
+                name: tenantData.name,
+                temporaryPassword: temporaryPassword,
+                tenantId: tenantUser.uid,
+                note: 'Tenant account created successfully!'
+            });
 
         } catch (error) {
-            console.error('Create tenant account error:', error);
+            console.error('Error during tenant creation:', error);
             
-            // Try to re-authenticate as original user if possible
-            try {
-                await firebaseAuth.signOut();
-            } catch (signOutError) {
-                console.log('Sign out during error cleanup:', signOutError);
+            // Reset button
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Create Tenant Account';
+                submitBtn.disabled = false;
             }
-            
-            throw new Error(this.getAuthErrorMessage(error.code) || 'Failed to create tenant account');
+
+            if (error.code === 'auth/wrong-password') {
+                this.showPasswordError('Incorrect password. Please try again.');
+            } else if (error.code === 'auth/email-already-in-use') {
+                this.showPasswordError('This email is already registered. Please use a different email.');
+                ModalManager.closeModal(modal);
+                reject(new Error('Email already in use'));
+            } else {
+                this.showPasswordError('Failed to create account: ' + error.message);
+                
+                // Try to restore landlord session on other errors
+                try {
+                    await firebaseAuth.signOut();
+                    await firebaseAuth.signInWithEmailAndPassword(landlordEmail, document.getElementById('landlordPassword')?.value);
+                    console.log('✅ Landlord session restored after error');
+                } catch (restoreError) {
+                    console.error('Failed to restore landlord session:', restoreError);
+                }
+                
+                reject(error);
+            }
+        }
+    }
+
+    static showPasswordError(message) {
+        const errorElement = document.getElementById('passwordConfirmError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
         }
     }
 
