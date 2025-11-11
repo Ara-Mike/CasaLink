@@ -30,38 +30,74 @@ class AuthManager {
                     uid: user.uid 
                 };
                 
+                console.log('📊 User login stats:', { 
+                    loginCount: userData.loginCount, 
+                    hasTemporaryPassword: userData.hasTemporaryPassword,
+                    passwordChanged: userData.passwordChanged 
+                });
+                
                 // Role verification
                 if (userData.role !== role) {
                     await firebaseAuth.signOut();
                     throw new Error(`This account is registered as a ${userData.role}. Please select "${userData.role}" when logging in.`);
                 }
                 
-                return userData;
+                // CHECK FOR PASSWORD CHANGE REQUIREMENT BEFORE INCREMENTING
+                let requiresPasswordChange = false;
+                if (userData.role === 'tenant' && userData.hasTemporaryPassword && !userData.passwordChanged) {
+                    // Check if this is the FIRST real login (loginCount = 0)
+                    if (userData.loginCount === 0) {
+                        requiresPasswordChange = true;
+                        console.log('🔐 FIRST real tenant login - password change REQUIRED');
+                    } else {
+                        console.log('✅ Subsequent login - no password change required');
+                    }
+                }
+                
+                // UPDATE LOGIN COUNT (increment after checking)
+                const newLoginCount = (userData.loginCount || 0) + 1;
+                const updates = {
+                    loginCount: newLoginCount,
+                    lastLogin: new Date().toISOString()
+                };
+                
+                console.log('🔄 Updated login count:', newLoginCount);
+                
+                // Update the user document with new login count
+                await firebaseDb.collection('users').doc(user.uid).update(updates);
+                
+                // Return user data with password change requirement
+                return {
+                    ...userData,
+                    requiresPasswordChange: requiresPasswordChange
+                };
                 
             } else {
                 // NEW USER - Auto-create tenant account
                 console.log('New user detected, auto-creating tenant account...');
                 
                 // For now, create a basic tenant profile
-                // In a real app, you'd have a way to link them to a landlord
                 const newUserData = {
                     email: email,
                     name: email.split('@')[0], // Default name from email
                     role: 'tenant',
                     createdAt: new Date().toISOString(),
                     isActive: true,
-                    hasTemporaryPassword: true
+                    hasTemporaryPassword: true,
+                    loginCount: 1, // First login
+                    passwordChanged: false,
+                    lastLogin: new Date().toISOString()
                 };
                 
                 await firebaseDb.collection('users').doc(user.uid).set(newUserData);
                 
-                console.log('Auto-created tenant account:', user.uid);
+                console.log('Auto-created tenant account with first login');
                 
                 return {
                     id: user.uid,
                     ...newUserData,
                     uid: user.uid,
-                    requiresPasswordChange: true
+                    requiresPasswordChange: true // Require password change on first login
                 };
             }
             
@@ -94,7 +130,26 @@ class AuthManager {
                         };
                         
                         console.log('Existing session user data:', userData);
-                        callback(userData);
+                        console.log('📊 Login stats on auth change:', { 
+                            loginCount: userData.loginCount, 
+                            hasTemporaryPassword: userData.hasTemporaryPassword,
+                            passwordChanged: userData.passwordChanged 
+                        });
+                        
+                        // CHECK FOR PASSWORD CHANGE REQUIREMENT
+                        let requiresPasswordChange = false;
+                        if (userData.role === 'tenant' && userData.hasTemporaryPassword && !userData.passwordChanged) {
+                            // Check if this is the FIRST real login (loginCount = 0)
+                            if (userData.loginCount === 0) {
+                                requiresPasswordChange = true;
+                                console.log('🔐 FIRST real tenant login via auth listener - password change REQUIRED');
+                            }
+                        }
+                        
+                        callback({
+                            ...userData,
+                            requiresPasswordChange: requiresPasswordChange
+                        });
                     } else {
                         console.log('User document not found in existing session');
                         await this.logout();
@@ -110,27 +165,6 @@ class AuthManager {
         });
     }
 
-    static disableAuthListener() {
-        this.authListenerEnabled = false;
-        console.log('Auth listener disabled');
-    }
-
-    static enableAuthListener() {
-        this.authListenerEnabled = true;
-        console.log('Auth listener enabled');
-    }
-
-    static async forceSignOut() {
-        try {
-            if (window.firebaseAuth) {
-                await firebaseAuth.signOut();
-            }
-            this.loginInProgress = false;
-            this.authListenerEnabled = true;
-        } catch (error) {
-            console.error('Force sign out error:', error);
-        }
-    }
 
     static async changePassword(currentPassword, newPassword) {
         try {
@@ -152,13 +186,16 @@ class AuthManager {
             await user.updatePassword(newPassword);
             console.log('Password updated successfully');
             
+            // UPDATE: Store current password in Firestore
             await firebaseDb.collection('users').doc(user.uid).update({
                 hasTemporaryPassword: false,
+                passwordChanged: true,
                 passwordChangedAt: new Date().toISOString(),
+                currentPassword: newPassword, // Store the new current password
                 lastLogin: new Date().toISOString()
             });
             
-            console.log('User record updated in Firestore');
+            console.log('User record updated in Firestore with current password');
             return true;
             
         } catch (error) {
@@ -264,7 +301,7 @@ class AuthManager {
             
             console.log('✅ Tenant Firebase Auth account created:', tenantUser.uid);
 
-            // Step 2: Create tenant document in Firestore WITH temporaryPassword
+            // Step 2: Create tenant document in Firestore WITH temporaryPassword AND LOGIN TRACKING
             const userProfile = {
                 email: tenantData.email,
                 name: tenantData.name,
@@ -277,11 +314,15 @@ class AuthManager {
                 unitId: tenantData.unitId || '',
                 phone: tenantData.phone || '',
                 createdBy: landlordEmail,
-                passwordCreatedAt: new Date().toISOString() // Track when password was set
+                passwordCreatedAt: new Date().toISOString(),
+                // ADD LOGIN TRACKING FIELDS
+                loginCount: 0, // Start at 0 (landlord creation doesn't count as tenant login)
+                passwordChanged: false, // Track if password was changed
+                lastLogin: null
             };
 
             await firebaseDb.collection('users').doc(tenantUser.uid).set(userProfile);
-            console.log('✅ Tenant profile created in Firestore with temporary password');
+            console.log('✅ Tenant profile created in Firestore with loginCount: 0');
 
             // Step 3: Immediately restore landlord session
             console.log('🔄 Restoring landlord session...');

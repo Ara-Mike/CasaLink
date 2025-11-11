@@ -9,6 +9,9 @@ class CasaLink {
         this.showingLogin = false;
         this.showingDashboard = false;
         
+        // ADD: Flag to prevent redirect during tenant creation
+        this.creatingTenant = false;
+        
         // Bind methods ONCE in constructor
         this.boundLoginClickHandler = this.loginClickHandler.bind(this);
         this.boundLoginKeypressHandler = this.loginKeypressHandler.bind(this);
@@ -803,9 +806,9 @@ class CasaLink {
         console.log('Setting up auth state listener...');
         
         this.authUnsubscribe = AuthManager.onAuthChange((user) => {
-            // Skip if auth listener is disabled (e.g., during login)
-            if (!this.authListenerEnabled) {
-                console.log('🔒 Auth listener disabled, ignoring change');
+            // Skip if auth listener is disabled OR during tenant creation
+            if (!this.authListenerEnabled || this.creatingTenant) {
+                console.log('🔒 Auth listener disabled or tenant creation in progress, ignoring change');
                 return;
             }
             
@@ -821,6 +824,12 @@ class CasaLink {
             }
             
             console.log('🔄 Authenticated user detected via auth listener (page refresh):', user.email);
+            console.log('📊 Login stats:', { 
+                loginCount: user.loginCount, 
+                hasTemporaryPassword: user.hasTemporaryPassword,
+                passwordChanged: user.passwordChanged,
+                requiresPasswordChange: user.requiresPasswordChange 
+            });
             
             // Hide loading spinner
             const spinner = document.getElementById('loadingSpinner');
@@ -841,14 +850,14 @@ class CasaLink {
             
             console.log('🔄 Restoring session via auth listener for:', user.email);
             
-            // Handle tenant password change or show dashboard
-            if (user.role === 'tenant' && user.hasTemporaryPassword) {
-                console.log('Tenant requires password change on first login');
+            // SIMPLIFIED: Check if password change is required
+            if (user.requiresPasswordChange) {
+                console.log('🔐 Password change required - showing modal');
                 setTimeout(() => {
                     this.showPasswordChangeModal();
                 }, 1000);
             } else {
-                console.log('🔄 Restoring dashboard from auth listener (page refresh)');
+                console.log('🔄 No password change required - showing dashboard');
                 setTimeout(() => {
                     this.showDashboard();
                 }, 100);
@@ -1252,6 +1261,12 @@ class CasaLink {
                 
                 const user = await AuthManager.login(email, password, role);
                 console.log('✅ Login successful, user:', user.email);
+                console.log('📊 Login stats after login:', { 
+                    loginCount: user.loginCount, 
+                    hasTemporaryPassword: user.hasTemporaryPassword,
+                    passwordChanged: user.passwordChanged,
+                    requiresPasswordChange: user.requiresPasswordChange 
+                });
                 
                 // MANUAL STATE MANAGEMENT - don't rely on auth listener
                 this.currentUser = user;
@@ -1263,14 +1278,14 @@ class CasaLink {
                     console.log('🔓 Auth listener re-enabled after login');
                 }, 2000);
                 
-                // Handle post-login flow manually
-                if (user.role === 'tenant' && user.hasTemporaryPassword) {
-                    console.log('🔄 Tenant requires password change on first login');
+                // SIMPLIFIED: Check if password change is required
+                if (user.requiresPasswordChange) {
+                    console.log('🔐 Password change required - showing modal');
                     setTimeout(() => {
                         this.showPasswordChangeModal();
                     }, 500);
                 } else {
-                    console.log('🔄 Proceeding to dashboard after successful login');
+                    console.log('🔄 No password change required - showing dashboard');
                     setTimeout(() => {
                         this.showDashboard();
                     }, 500);
@@ -1541,6 +1556,9 @@ class CasaLink {
         }
 
         try {
+            // SET THE FLAG: Prevent auth listener from redirecting
+            this.creatingTenant = true;
+            
             const temporaryPassword = this.generateTemporaryPassword(8);
             
             const tenantData = {
@@ -1558,7 +1576,7 @@ class CasaLink {
                 submitBtn.disabled = true;
             }
 
-            // This will show the password confirmation modal
+            // This will show the password confirmation modal and create the tenant
             const result = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
 
             // Show success in the main modal
@@ -1574,7 +1592,7 @@ class CasaLink {
                         </p>
                         <div style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 4px;">
                             <i class="fas fa-database"></i> 
-                            <small>Temporary password stored in database for reference</small>
+                            <small>Temporary password stored in database. After tenant changes password, currentPassword field will be updated.</small>
                         </div>
                         <p style="margin: 15px 0 0 0; font-size: 0.9em;">
                             <i class="fas fa-envelope"></i> 
@@ -1587,7 +1605,7 @@ class CasaLink {
 
             this.showNotification('Tenant account created successfully!', 'success');
 
-            // Clear form
+            // Clear form but STAY on tenant management page
             setTimeout(() => {
                 const nameField = document.getElementById('tenantName');
                 const emailField = document.getElementById('tenantEmail');
@@ -1604,6 +1622,10 @@ class CasaLink {
                     submitBtn.innerHTML = 'Create Another Tenant';
                     submitBtn.disabled = false;
                 }
+
+                // RELOAD THE TENANTS LIST to show the new tenant
+                this.loadTenantsData();
+
             }, 500);
 
         } catch (error) {
@@ -1619,6 +1641,12 @@ class CasaLink {
                 submitBtn.innerHTML = 'Create Tenant Account';
                 submitBtn.disabled = false;
             }
+        } finally {
+            // RESET THE FLAG: Allow auth listener to work normally again
+            setTimeout(() => {
+                this.creatingTenant = false;
+                console.log('🔓 Tenant creation completed, auth listener re-enabled');
+            }, 2000); // Small delay to ensure everything is settled
         }
     }
 
@@ -1820,6 +1848,15 @@ class CasaLink {
 
             await AuthManager.changePassword(currentPassword, newPassword);
             
+            // UPDATE: Mark password as changed and store current password
+            await firebaseDb.collection('users').doc(this.currentUser.uid).update({
+                hasTemporaryPassword: false,
+                passwordChanged: true,
+                passwordChangedAt: new Date().toISOString(),
+                currentPassword: newPassword, // Store the new current password
+                temporaryPassword: null // Remove the stored temporary password for security
+            });
+            
             // Close modal
             ModalManager.closeModal(this.passwordChangeModal);
             
@@ -1827,8 +1864,10 @@ class CasaLink {
             this.showNotification('Password changed successfully! Welcome to CasaLink!', 'success');
             
             // Update current user data
-            this.currentUser.requiresPasswordChange = false;
             this.currentUser.hasTemporaryPassword = false;
+            this.currentUser.passwordChanged = true;
+            this.currentUser.requiresPasswordChange = false;
+            this.currentUser.currentPassword = newPassword;
             
             // Now show the dashboard
             setTimeout(() => {
