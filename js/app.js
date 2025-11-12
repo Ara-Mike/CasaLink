@@ -1628,6 +1628,33 @@ class CasaLink {
             // This will show the password confirmation modal and create the tenant
             const result = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
 
+            if (result.success) {
+                console.log('🔄 Attempting to send welcome email...');
+                
+                try {
+                    const emailResult = await SendPulseService.sendTenantWelcomeEmail(
+                        tenantData, 
+                        temporaryPassword, 
+                        this.currentUser.email
+                    );
+                    
+                    if (emailResult.success) {
+                        console.log('✅ Welcome email sent successfully to:', tenantData.email);
+                        // Email sent successfully - no action needed
+                    } else {
+                        console.warn('⚠️ Tenant created but email failed:', emailResult.error);
+                        // Don't throw error - email failure shouldn't block tenant creation
+                        this.showNotification('Tenant created but email failed to send', 'warning');
+                    }
+                } catch (emailError) {
+                    console.warn('⚠️ Email sending failed, but tenant was created:', emailError);
+                    // Don't throw error - continue with success flow
+                }
+                
+                // CREATE LEASE DOCUMENT (your existing code)
+                await this.createLeaseDocument(result.tenantId, tenantData);
+            }
+
             // CREATE LEASE DOCUMENT AFTER TENANT IS CREATED
             if (result.success) {
                 await this.createLeaseDocument(result.tenantId, tenantData);
@@ -1636,28 +1663,36 @@ class CasaLink {
             // Show success in the main modal
             if (resultElement) {
                 resultElement.innerHTML = `
-                    <div style="background: var(--success); color: white; padding: 15px; border-radius: 8px;">
-                        <h4 style="margin: 0 0 10px 0;">✅ Tenant Account & Lease Created!</h4>
-                        <p style="margin: 5px 0;"><strong>Name:</strong> ${result.name}</p>
-                        <p style="margin: 5px 0;"><strong>Email:</strong> ${result.email}</p>
-                        <p style="margin: 5px 0;"><strong>Unit:</strong> ${result.unitId}</p>
-                        <p style="margin: 5px 0;"><strong>Monthly Rent:</strong> ₱${parseFloat(rent).toLocaleString()}</p>
-                        <p style="margin: 5px 0;"><strong>Lease Period:</strong> ${new Date(leaseStart).toLocaleDateString()} to ${new Date(leaseEnd).toLocaleDateString()}</p>
-                        <p style="margin: 5px 0;"><strong>Temporary Password:</strong> 
-                            <code style="background: rgba(255,255,255,0.3); padding: 4px 8px; border-radius: 4px; font-size: 1.1em;">
-                                ${result.temporaryPassword}
-                            </code>
-                        </p>
-                        <div style="margin: 10px 0; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 4px;">
-                            <i class="fas fa-database"></i> 
-                            <small>Tenant account and lease document created successfully.</small>
+                <div style="background: var(--success); color: white; padding: 20px; border-radius: 12px;">
+                    <h4 style="margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-check-circle"></i> Tenant Account Created!
+                    </h4>
+                    
+                    <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin: 10px 0;">
+                        <p style="margin: 8px 0;"><strong>Name:</strong> ${result.name}</p>
+                        <p style="margin: 8px 0;"><strong>Email:</strong> ${result.email}</p>
+                        <p style="margin: 8px 0;"><strong>Unit:</strong> ${tenantData.unitId}</p>
+                        ${tenantData.monthlyRent ? `<p style="margin: 8px 0;"><strong>Monthly Rent:</strong> ₱${parseFloat(tenantData.monthlyRent).toLocaleString()}</p>` : ''}
+                    </div>
+                    
+                    <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin: 15px 0;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                            <i class="fas fa-paper-plane" style="color: #4CAF50;"></i>
+                            <strong>Welcome Email Sent!</strong>
                         </div>
-                        <p style="margin: 15px 0 0 0; font-size: 0.9em;">
-                            <i class="fas fa-envelope"></i> 
-                            You can now email these credentials to the tenant.
+                        <p style="margin: 0; font-size: 0.95em; opacity: 0.9;">
+                            Login credentials have been automatically emailed to <strong>${result.email}</strong>
                         </p>
                     </div>
-                `;
+                    
+                    <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+                        <p style="margin: 0; font-size: 0.9em; display: flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-info-circle"></i> 
+                            The tenant can now login and will be prompted to change their temporary password.
+                        </p>
+                    </div>
+                </div>
+            `;
                 resultElement.style.display = 'block';
             }
 

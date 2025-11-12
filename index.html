@@ -81,7 +81,8 @@
     </div>
 
     <!-- Scripts -->
-    <!-- Remove type="module" from all script tags -->
+    <script src="js/sendpulseService.js"></script>
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="config/firebase.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/dataManager.js"></script>
@@ -91,6 +92,13 @@
     <script src="js/analytics.js"></script>
     <script src="js/performance.js"></script>
     <script src="js/app.js"></script>
+
+    <script>
+        (function() {
+            emailjs.init("9lGLo4WX9k1JISIEc");
+        })();
+    </script>
+    
 
     <script>
         // Initialize PWA features
