@@ -88,12 +88,14 @@
             </div>
             <div>
                 <div class="pwa-title">Install CasaLink</div>
-                <div style="font-size: 0.9rem; color: var(--dark-gray);">Get the full app experience</div>
+                <div style="font-size: 0.9rem; color: rgba(255, 255, 255, 0.8);">Get the full app experience</div>
             </div>
         </div>
         <p style="margin: 15px 0; line-height: 1.5;">Install CasaLink on your home screen for quick and easy access when you're on the go. Works offline too!</p>
         <div class="pwa-actions">
-            <button class="btn btn-secondary" onclick="PWAManager.hideInstallPromotion()">Not Now</button>
+            <button class="btn btn-secondary" onclick="PWAManager.handleNotNowClick()">
+                Not Now
+            </button>
             <button class="btn btn-primary" onclick="PWAManager.installPWA()">
                 <i class="fas fa-download"></i> Install App
             </button>
@@ -300,6 +302,73 @@
             // Start loading scripts
             loadScripts();
         })();
+    </script>
+
+    <!-- PWA Testing Button (Temporary - Remove for production) -->
+    <div style="position: fixed; bottom: 10px; right: 10px; z-index: 10000; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+        <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #333;">PWA Test</div>
+        <button onclick="PWAManager.simulateInstallPrompt()" 
+                style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
+            Show Prompt
+        </button>
+        <button onclick="PWAManager.handleNotNowClick()" 
+                style="background: #ffaa00; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
+            Not Now
+        </button>
+        <button onclick="PWAManager.resetPrompt()" 
+                style="background: #4444ff; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
+            Reset
+        </button>
+        <button onclick="PWAManager.debugStatus()" 
+                style="background: #44aa44; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
+            Debug
+        </button>
+    </div>
+
+    <script>
+        // Check PWA requirements
+        function checkPWARequirements() {
+            const requirements = {
+                'HTTPS': window.location.protocol === 'https:',
+                'Service Worker': 'serviceWorker' in navigator,
+                'Web App Manifest': document.querySelector('link[rel="manifest"]') !== null,
+                'Icons': document.querySelector('link[rel="icon"][sizes="192x192"]') !== null,
+                'Themes': document.querySelector('meta[name="theme-color"]') !== null,
+                'Viewport': document.querySelector('meta[name="viewport"]') !== null,
+                'Display Mode': true // Always true
+            };
+            
+            console.log('🔍 PWA Requirements Check:');
+            Object.entries(requirements).forEach(([requirement, met]) => {
+                console.log(`  ${met ? '✅' : '❌'} ${requirement}`);
+            });
+            
+            return Object.values(requirements).every(met => met);
+        }
+        
+        // Check if beforeinstallprompt event fires
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('🎯 beforeinstallprompt EVENT FIRED!');
+            console.log('📦 Event details:', e);
+        });
+        
+        // Run check when page loads
+        setTimeout(checkPWARequirements, 1000);
+    </script>
+
+    <script>
+        // Ensure PWA prompt shows on every page load
+        window.addEventListener('load', function() {
+            // Clear any session flags to force prompt showing
+            sessionStorage.removeItem('pwa_prompt_shown');
+            
+            // Initialize PWA manager after a short delay
+            setTimeout(() => {
+                if (window.PWAManager) {
+                    PWAManager.resetForNewSession();
+                }
+            }, 1000);
+        });
     </script>
 
 </body>

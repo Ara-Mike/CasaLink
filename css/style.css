@@ -1,4 +1,4 @@
-/* css/style.css - REORGANIZED VERSION */
+/* css/style.css - CLEANED AND ORGANIZED VERSION */
 :root {
     --primary-blue: #1A73E8;
     --light-gray: #F4F6F8;
@@ -11,77 +11,6 @@
     --border-radius: 12px;
     --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
     --transition: all 0.3s ease;
-}
-
-/* Dashboard loading states */
-.card-change.loading {
-    color: var(--dark-gray);
-}
-
-.card-change.loading i {
-    color: var(--primary-blue);
-}
-
-.card-change.positive {
-    color: var(--success);
-}
-
-.card-change.negative {
-    color: var(--danger);
-}
-
-/* Lease Verification Modal Styles */
-.lease-verification-modal {
-    line-height: 1.6;
-}
-
-.lease-verification-modal h4 {
-    color: var(--primary-blue);
-    margin: 20px 0 10px 0;
-    font-size: 1.1rem;
-}
-
-.lease-verification-modal ol {
-    margin-left: 20px;
-    padding-left: 0;
-}
-
-.lease-verification-modal li {
-    margin-bottom: 8px;
-    padding-left: 10px;
-}
-
-/* File Input Styling */
-.form-input[type="file"] {
-    padding: 10px;
-    border: 2px dashed #ddd;
-    background: #fafafa;
-}
-
-.form-input[type="file"]:focus {
-    border-color: var(--primary-blue);
-    background: white;
-}
-
-/* Checkbox Styling */
-input[type="checkbox"] {
-    margin-right: 8px;
-}
-
-
-
-/* Form Section Headers */
-.add-tenant-form h4 {
-    border-bottom: 2px solid var(--primary-blue);
-    padding-bottom: 8px;
-    margin-bottom: 20px;
-}
-
-/* Read-only input styling */
-.form-input[readonly] {
-    background-color: #f8f9fa;
-    border-color: #e9ecef;
-    color: #6c757d;
 }
 
 /* ===== BASE STYLES ===== */
@@ -143,6 +72,47 @@ body {
     border-color: var(--primary-blue);
     outline: none;
     box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+/* Form Input Variants */
+.form-input[type="file"] {
+    padding: 10px;
+    border: 2px dashed #ddd;
+    background: #fafafa;
+}
+
+.form-input[type="file"]:focus {
+    border-color: var(--primary-blue);
+    background: white;
+}
+
+.form-input[readonly] {
+    background-color: #f8f9fa;
+    border-color: #e9ecef;
+    color: #6c757d;
+}
+
+.form-input:disabled {
+    background-color: #f8f9fa;
+    color: var(--dark-gray);
+    cursor: not-allowed;
+}
+
+.form-input.error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+}
+
+/* Checkbox Styling */
+input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* Form Section Headers */
+.add-tenant-form h4 {
+    border-bottom: 2px solid var(--primary-blue);
+    padding-bottom: 8px;
+    margin-bottom: 20px;
 }
 
 /* ===== BUTTON STYLES ===== */
@@ -535,6 +505,23 @@ header {
     gap: 5px;
 }
 
+/* Dashboard loading states */
+.card-change.loading {
+    color: var(--dark-gray);
+}
+
+.card-change.loading i {
+    color: var(--primary-blue);
+}
+
+.card-change.positive {
+    color: var(--success);
+}
+
+.card-change.negative {
+    color: var(--danger);
+}
+
 /* ===== TENANT MANAGEMENT STYLES ===== */
 .search-box {
     margin-bottom: 20px;
@@ -693,15 +680,37 @@ header {
     gap: 10px;
 }
 
-/* Password Change Modal */
-.password-change-modal {
+/* Modal Variants */
+.password-change-modal,
+.password-confirm-modal {
     text-align: center;
 }
 
-.password-change-modal .fas.fa-shield-alt {
+.password-change-modal .fas.fa-shield-alt,
+.password-confirm-modal .fas.fa-shield-alt {
     font-size: 3rem;
     color: var(--primary-blue);
     margin-bottom: 15px;
+}
+
+.lease-verification-modal {
+    line-height: 1.6;
+}
+
+.lease-verification-modal h4 {
+    color: var(--primary-blue);
+    margin: 20px 0 10px 0;
+    font-size: 1.1rem;
+}
+
+.lease-verification-modal ol {
+    margin-left: 20px;
+    padding-left: 0;
+}
+
+.lease-verification-modal li {
+    margin-bottom: 8px;
+    padding-left: 10px;
 }
 
 /* Security Info Box */
@@ -803,82 +812,81 @@ header {
     position: fixed;
     bottom: 30px;
     left: 30px;
-    background-color: white;
-    border-radius: var(--border-radius);
-    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, #1A73E8, #0d62d4);
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     padding: 20px;
     max-width: 350px;
-    z-index: 100;
-    display: none;
-    border-left: 4px solid var(--primary-blue);
+    z-index: 10000;
+    border-left: 4px solid #34A853;
+    animation: slideInUp 0.5s ease-out;
 }
 
-.pwa-header {
+.pwa-install-prompt .pwa-header {
     display: flex;
     align-items: center;
     gap: 15px;
     margin-bottom: 15px;
 }
 
-.pwa-logo {
-    width: 40px;
-    height: 40px;
-    background-color: var(--primary-blue);
-    border-radius: 10px;
+.pwa-install-prompt .pwa-logo {
+    width: 50px;
+    height: 50px;
+    background: white;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: #1A73E8;
+    font-size: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.pwa-install-prompt .pwa-title {
+    font-weight: 600;
     font-size: 1.2rem;
 }
 
-.pwa-title {
-    font-weight: 600;
-}
-
-.pwa-actions {
+.pwa-install-prompt .pwa-actions {
     display: flex;
     justify-content: flex-end;
     gap: 10px;
     margin-top: 15px;
 }
 
-/* Password Confirmation Modal Styles */
-.password-confirm-modal {
-    text-align: center;
+/* Make the install button more prominent */
+.pwa-install-prompt .btn-primary {
+    background: white;
+    color: #1A73E8;
+    font-weight: 600;
+    padding: 10px 20px;
 }
 
-.password-confirm-modal .fas.fa-shield-alt {
-    font-size: 3rem;
-    color: var(--primary-blue);
-    margin-bottom: 15px;
+.pwa-install-prompt .btn-primary:hover {
+    background: #f8f9fa;
+    transform: translateY(-2px);
 }
 
-.security-info {
-    background: rgba(26, 115, 232, 0.1);
-    border-left: 4px solid var(--primary-blue);
-    padding: 12px;
-    margin: 15px 0;
-    border-radius: 4px;
-    font-size: 0.9em;
+.pwa-install-prompt .btn-secondary {
+    background: transparent;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-.security-info i {
-    color: var(--primary-blue);
-    margin-right: 8px;
+.pwa-install-prompt .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.1);
 }
 
-/* Disabled input styling */
-.form-input:disabled {
-    background-color: #f8f9fa;
-    color: var(--dark-gray);
-    cursor: not-allowed;
-}
-
-/* Error state for password input */
-.form-input.error {
-    border-color: var(--danger);
-    box-shadow: 0 0 0 2px rgba(234, 67, 53, 0.2);
+@keyframes slideInUp {
+    from {
+        transform: translateY(100px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 /* Offline Indicator */

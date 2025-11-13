@@ -1,295 +1,330 @@
 class PWAManager {
-  static deferredPrompt = null;
-  static isInstalled = false;
+    static deferredPrompt = null;
+    static isInstalled = false;
+    static installPromptShown = false;
+    static promptAvailable = false;
+    static aggressiveMode = true;
 
-  static init() {
+    static init() {
+        console.log('🚀 PWA Manager initializing...');
+        
         this.setupInstallPrompt();
         this.setupOfflineDetection();
         this.registerServiceWorker();
         this.checkPWAStatus();
         
-        // Handle cache issues on startup
-        setTimeout(() => {
-            this.handleCacheIssues();
-        }, 2000);
+        // Only show prompt if not installed AND user hasn't clicked "Not Now"
+        if (!this.isInstalled && !this.userDismissedPrompt()) {
+            setTimeout(() => {
+                this.showPersistentInstallPromotion();
+            }, 2000);
+        } else {
+            console.log('ℹ️ PWA prompt conditions not met:', {
+                installed: this.isInstalled,
+                userDismissed: this.userDismissedPrompt()
+            });
+        }
     }
 
-  static setupInstallPrompt() {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      console.log('beforeinstallprompt event fired');
-      
-      // Prevent Chrome 76 and later from showing the mini-infobar
-      e.preventDefault();
-      
-      // Stash the event so it can be triggered later
-      this.deferredPrompt = e;
-      
-      // Update UI to notify the user they can install the PWA
-      this.showInstallPromotion();
-      
-      // Optional: Log analytics event
-      console.log('PWA install prompt available');
-    });
+    static setupInstallPrompt() {
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('🎯 beforeinstallprompt event fired!');
+            
+            e.preventDefault();
+            this.deferredPrompt = e;
+            this.promptAvailable = true;
+            
+            console.log('✅ PWA install prompt is now available');
+            
+            // Only show if not installed AND user hasn't dismissed
+            if (this.aggressiveMode && !this.isInstalled && !this.userDismissedPrompt()) {
+                this.showPersistentInstallPromotion();
+            }
+        });
 
-    window.addEventListener('appinstalled', (evt) => {
-      console.log('PWA was installed successfully');
-      
-      // Clear the deferredPrompt so it can be garbage collected
-      this.deferredPrompt = null;
-      this.isInstalled = true;
-      
-      // Hide the install promotion
-      this.hideInstallPromotion();
-      
-      // Optional: Log analytics event
-      console.log('PWA installed successfully');
-    });
-  }
-
-  static setupOfflineDetection() {
-    window.addEventListener('online', () => {
-      this.updateOnlineStatus(true);
-      this.syncOfflineData();
-    });
-
-    window.addEventListener('offline', () => {
-      this.updateOnlineStatus(false);
-    });
-
-    // Initial status check
-    this.updateOnlineStatus(navigator.onLine);
-  }
-
-  static async registerServiceWorker() {
-        // Don't auto-register on page load
-        // Let the user decide when to install PWA
-        console.log('ℹ️ Service Worker registration deferred');
-        return null;
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('🎉 PWA was installed successfully');
+            this.handleSuccessfulInstallation();
+        });
     }
 
-
-  static showInstallPromotion() {
-    // Only show prompt if not already installed and user is engaged
-    if (this.isInstalled) {
-      console.log('PWA already installed, skipping promotion');
-      return;
-    }
-
-    // Show custom install prompt after a delay to ensure user engagement
-    setTimeout(() => {
-      const prompt = document.getElementById('pwaPrompt');
-      if (prompt && this.deferredPrompt) {
-        console.log('Showing PWA install promotion');
-        prompt.style.display = 'block';
+    static handleSuccessfulInstallation() {
+        this.deferredPrompt = null;
+        this.promptAvailable = false;
+        this.isInstalled = true;
+        this.hideInstallPromotion();
+        this.setInstallationStatus(true);
         
-        // Auto-hide after 15 seconds if not interacted with
-        setTimeout(() => {
-          if (prompt.style.display === 'block') {
+        if (window.casaLink) {
+            window.casaLink.showNotification('CasaLink installed successfully!', 'success');
+        }
+        
+        console.log('✅ PWA installation status updated: Installed');
+    }
+
+    static checkPWAStatus() {
+        const detectionMethods = [
+            () => window.matchMedia('(display-mode: standalone)').matches,
+            () => window.navigator.standalone === true,
+            () => document.referrer.includes('android-app://'),
+            () => this.getInstallationStatus()
+        ];
+
+        const results = detectionMethods.map(method => {
+            try {
+                return method();
+            } catch (error) {
+                return false;
+            }
+        });
+
+        this.isInstalled = results.some(result => result === true);
+        
+        console.log('📱 PWA installation status:', this.isInstalled ? 'Installed' : 'Not installed');
+        
+        if (this.isInstalled) {
             this.hideInstallPromotion();
-          }
-        }, 15000);
-      }
-    }, 3000); // Show after 3 seconds
-
-    // Also show in-app notification
-    if (window.casaLink) {
-      setTimeout(() => {
-        window.casaLink.showNotification(
-          'Install CasaLink for a better experience! Click the install button in the bottom left.',
-          'info'
-        );
-      }, 5000);
+        }
     }
-  }
 
-  static hideInstallPromotion() {
-    const prompt = document.getElementById('pwaPrompt');
-    if (prompt) {
-      prompt.style.display = 'none';
-      console.log('PWA install promotion hidden');
+    static showPersistentInstallPromotion() {
+        // Don't show if already installed
+        if (this.isInstalled) {
+            console.log('✅ App already installed, skipping prompt');
+            return;
+        }
+
+        // Don't show if user clicked "Not Now"
+        if (this.userDismissedPrompt()) {
+            console.log('🙅 User dismissed prompt, not showing again');
+            return;
+        }
+
+        // Don't show if already visible
+        if (this.installPromptShown) {
+            console.log('ℹ️ Install prompt already visible');
+            return;
+        }
+
+        console.log('🎪 Showing persistent install promotion');
+        
+        const prompt = document.getElementById('pwaPrompt');
+        if (prompt) {
+            prompt.style.display = 'block';
+            this.installPromptShown = true;
+            
+            // NO auto-hide timeout - prompt stays until user action
+            
+        } else {
+            console.warn('❌ PWA prompt element not found');
+        }
+
+        // Show in-app notification
+        if (window.casaLink) {
+            setTimeout(() => {
+                window.casaLink.showNotification(
+                    'Install CasaLink for a better experience!',
+                    'info'
+                );
+            }, 500);
+        }
     }
-  }
 
-  static async installPWA() {
+    static userDismissedPrompt() {
+        try {
+            return localStorage.getItem('casalink_prompt_dismissed') === 'true';
+        } catch (error) {
+            return false;
+        }
+    }
+
+    static setPromptDismissed() {
+        try {
+            localStorage.setItem('casalink_prompt_dismissed', 'true');
+            console.log('🙅 User dismissed PWA prompt - will not show again');
+        } catch (error) {
+            console.warn('⚠️ Could not set prompt dismissal:', error);
+        }
+    }
+
+    static setInstallationStatus(installed) {
+        try {
+            if (installed) {
+                localStorage.setItem('casalink_pwa_installed', 'true');
+            } else {
+                localStorage.removeItem('casalink_pwa_installed');
+            }
+        } catch (error) {
+            console.warn('⚠️ Could not set installation status:', error);
+        }
+    }
+
+    static getInstallationStatus() {
+        try {
+            return localStorage.getItem('casalink_pwa_installed') === 'true';
+        } catch (error) {
+            return false;
+        }
+    }
+
+    static setupOfflineDetection() {
+        window.addEventListener('online', () => {
+            this.updateOnlineStatus(true);
+        });
+
+        window.addEventListener('offline', () => {
+            this.updateOnlineStatus(false);
+        });
+
+        this.updateOnlineStatus(navigator.onLine);
+    }
+
+    static async registerServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js', {
+                    scope: '/'
+                });
+                console.log('✅ ServiceWorker registered successfully');
+
+            } catch (error) {
+                console.error('❌ ServiceWorker registration failed:', error);
+            }
+        }
+    }
+
+    static hideInstallPromotion() {
+        const prompt = document.getElementById('pwaPrompt');
+        if (prompt) {
+            prompt.style.display = 'none';
+            console.log('🎪 PWA install promotion hidden');
+        }
+    }
+
+    // Handle "Not Now" button click
+    static handleNotNowClick() {
+        console.log('🙅 User clicked "Not Now" - dismissing prompt');
+        this.setPromptDismissed();
+        this.hideInstallPromotion();
+        
+        if (window.casaLink) {
+            window.casaLink.showNotification(
+                'You can install CasaLink anytime from the browser menu.',
+                'info'
+            );
+        }
+    }
+
+    static async installPWA() {
         if (!this.deferredPrompt) {
-            console.log('No install prompt available');
+            console.log('❌ No install prompt available');
+            this.showManualInstallInstructions();
             return;
         }
 
         try {
-            // Only register Service Worker when user chooses to install
-            if ('serviceWorker' in navigator) {
-                try {
-                    const registration = await navigator.serviceWorker.register('/sw.js', {
-                        scope: '/'
-                    });
-                    console.log('Service Worker registered after user consent');
-                } catch (error) {
-                    console.error('Service Worker registration failed:', error);
-                }
-            }
-
-            // Continue with installation prompt
+            console.log('🎯 Showing install prompt to user');
+            
             this.deferredPrompt.prompt();
+            
             const { outcome } = await this.deferredPrompt.userChoice;
             
-            console.log(`User response to install prompt: ${outcome}`);
+            console.log(`✅ User response to install prompt: ${outcome}`);
+            
+            if (outcome === 'accepted') {
+                console.log('🎉 User accepted the PWA installation');
+                this.handleSuccessfulInstallation();
+                
+                if (window.casaLink) {
+                    window.casaLink.showNotification('CasaLink is being installed...', 'success');
+                }
+            } else {
+                console.log('❌ User dismissed the browser install prompt');
+                // Note: This is different from our "Not Now" button
+                // We'll treat browser dismissal as "Not Now"
+                this.setPromptDismissed();
+            }
+            
             this.deferredPrompt = null;
+            this.promptAvailable = false;
             this.hideInstallPromotion();
             
         } catch (error) {
-            console.error('Error during PWA installation:', error);
-        }
-    }
-
-  static updateOnlineStatus(online) {
-    const indicator = document.getElementById('offlineIndicator');
-    if (indicator) {
-      indicator.style.display = online ? 'none' : 'block';
-    }
-
-    // Update app state
-    if (window.casaLink) {
-      window.casaLink.isOnline = online;
-    }
-
-    // Show notification only when going offline (not on initial load)
-    if (!online && window.casaLink) {
-      window.casaLink.showNotification(
-        'You are currently offline. Some features may be limited.',
-        'warning'
-      );
-    }
-  }
-
-  static async syncOfflineData() {
-    console.log('Syncing offline data...');
-    
-    // This would sync pending maintenance requests, payments, etc.
-    const pendingActions = JSON.parse(localStorage.getItem('pendingActions') || '[]');
-    
-    if (pendingActions.length > 0) {
-      console.log(`Syncing ${pendingActions.length} pending actions`);
-      
-      for (const action of pendingActions) {
-        try {
-          // Process each pending action
-          await this.processPendingAction(action);
-        } catch (error) {
-          console.error('Failed to sync action:', action, error);
-        }
-      }
-      
-      // Clear processed actions
-      localStorage.setItem('pendingActions', '[]');
-      
-      if (window.casaLink) {
-        window.casaLink.showNotification('Offline data synced successfully!', 'success');
-      }
-    }
-  }
-
-  static processPendingAction(action) {
-    // This would process different types of pending actions
-    console.log('Processing pending action:', action);
-    // Implementation would depend on your specific offline actions
-    return Promise.resolve();
-  }
-
-  static storeOfflineAction(action) {
-    const pendingActions = JSON.parse(localStorage.getItem('pendingActions') || '[]');
-    pendingActions.push({
-      ...action,
-      timestamp: new Date().toISOString()
-    });
-    localStorage.setItem('pendingActions', JSON.stringify(pendingActions));
-    
-    console.log('Stored offline action, total pending:', pendingActions.length);
-  }
-
-  static checkPWAStatus() {
-    // Check if app is running in standalone mode
-    this.isInstalled = window.matchMedia('(display-mode: standalone)').matches || 
-                      window.navigator.standalone ||
-                      document.referrer.includes('android-app://');
-    
-    console.log('PWA installation status:', this.isInstalled ? 'Installed' : 'Not installed');
-    
-    if (this.isInstalled) {
-      this.hideInstallPromotion();
-    }
-  }
-
-  static showUpdateNotification() {
-    if (window.casaLink) {
-      const updateNotification = `
-        <div style="text-align: center; padding: 20px;">
-          <h3 style="margin-bottom: 10px;">Update Available</h3>
-          <p style="margin-bottom: 15px;">A new version of CasaLink is available with the latest features and improvements.</p>
-          <button class="btn btn-primary" onclick="location.reload()" style="margin-right: 10px;">Update Now</button>
-          <button class="btn btn-secondary" onclick="PWAManager.hideUpdateNotification()">Later</button>
-        </div>
-      `;
-      
-      // Create update notification element
-      let updateElement = document.getElementById('pwaUpdateNotification');
-      if (!updateElement) {
-        updateElement = document.createElement('div');
-        updateElement.id = 'pwaUpdateNotification';
-        updateElement.className = 'pwa-install-prompt';
-        updateElement.style.display = 'block';
-        updateElement.innerHTML = updateNotification;
-        document.body.appendChild(updateElement);
-      }
-      
-      window.casaLink.showNotification('Update available - new features are ready!', 'info');
-    }
-  }
-
-  static hideUpdateNotification() {
-    const updateElement = document.getElementById('pwaUpdateNotification');
-    if (updateElement) {
-      updateElement.style.display = 'none';
-    }
-  }
-
-  static async clearProblematicCaches() {
-        if ('caches' in window) {
-            try {
-                const cacheNames = await caches.keys();
-                const deletions = cacheNames.map(cacheName => {
-                    if (cacheName.startsWith('casalink-')) {
-                        console.log('🗑️ Clearing cache:', cacheName);
-                        return caches.delete(cacheName);
-                    }
-                });
-                await Promise.all(deletions);
-                console.log('✅ All problematic caches cleared');
-            } catch (error) {
-                console.error('❌ Error clearing caches:', error);
+            console.error('❌ Error during PWA installation:', error);
+            
+            if (window.casaLink) {
+                window.casaLink.showNotification('Installation failed. Please try again.', 'error');
             }
         }
     }
 
-    static async handleCacheIssues() {
-        // Check if we're having cache issues by testing a key file
-        try {
-            const response = await fetch('/config/firebase.js?t=' + Date.now());
-            if (!response.ok) {
-                throw new Error('File fetch failed');
-            }
-            console.log('✅ Cache check passed');
-        } catch (error) {
-            console.warn('⚠️ Cache issue detected, clearing caches...');
-            await this.clearProblematicCaches();
-            // Reload the page after clearing cache
-            setTimeout(() => {
-                window.location.reload();
-            }, 1000);
+    static showManualInstallInstructions() {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        
+        let instructions = '';
+        
+        if (isIOS) {
+            instructions = 'Tap the Share button 📤 and then "Add to Home Screen"';
+        } else if (isAndroid) {
+            instructions = 'Tap the menu (⋮) and then "Install App" or "Add to Home Screen"';
+        } else {
+            instructions = 'Click the install icon in your browser address bar or use the browser menu';
         }
+        
+        if (window.casaLink) {
+            window.casaLink.showNotification(`To install: ${instructions}`, 'info');
+        }
+    }
+
+    static updateOnlineStatus(online) {
+        const indicator = document.getElementById('offlineIndicator');
+        if (indicator) {
+            indicator.style.display = online ? 'none' : 'block';
+        }
+
+        if (window.casaLink) {
+            window.casaLink.isOnline = online;
+        }
+    }
+
+    // Reset for testing purposes
+    static resetPrompt() {
+        try {
+            localStorage.removeItem('casalink_prompt_dismissed');
+            localStorage.removeItem('casalink_pwa_installed');
+            this.isInstalled = false;
+            this.installPromptShown = false;
+            console.log('🔄 PWA prompt reset for testing');
+        } catch (error) {
+            console.warn('⚠️ Could not reset prompt:', error);
+        }
+    }
+
+    // Manual trigger for testing
+    static simulateInstallPrompt() {
+        console.log('🧪 Simulating install prompt for testing');
+        if (!this.isInstalled && !this.userDismissedPrompt()) {
+            this.showPersistentInstallPromotion();
+        } else {
+            console.log('✅ Conditions not met for prompt:', {
+                installed: this.isInstalled,
+                dismissed: this.userDismissedPrompt()
+            });
+        }
+    }
+
+    // Debug method
+    static debugStatus() {
+        console.log('🐛 PWA Debug Info:', {
+            isInstalled: this.isInstalled,
+            userDismissed: this.userDismissedPrompt(),
+            installPromptShown: this.installPromptShown,
+            promptAvailable: this.promptAvailable
+        });
     }
 }
 
 // Make available globally
 window.PWAManager = PWAManager;
-console.log('PWAManager loaded');
+console.log('✅ PWAManager loaded');
