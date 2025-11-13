@@ -278,11 +278,8 @@ class CasaLink {
             
             switch (page) {
                 case 'dashboard':
-                    if (this.currentRole === 'landlord') {
-                        pageContent = this.getDashboardContentHTML();
-                    } else {
-                        pageContent = await this.getTenantDashboard();
-                    }
+                    // Use the new method that handles both landlord and tenant dashboards
+                    pageContent = this.getDashboardContentHTML();
                     break;
                 case 'billing':
                     pageContent = this.currentRole === 'landlord'
@@ -389,17 +386,21 @@ class CasaLink {
     getDashboardContentHTML() {
         const isLandlord = this.currentRole === 'landlord';
         
+        if (isLandlord) {
+            return this.getLandlordDashboardHTML();
+        } else {
+            return this.getTenantDashboardHTML();
+        }
+    }
+
+    getLandlordDashboardHTML() {
         return `
             <div class="page-content">
                 <div class="page-header">
                     <h1 class="page-title">Welcome to Your Dashboard</h1>
                     <div>
-                        ${isLandlord ? `
-                            <button class="btn btn-secondary"><i class="fas fa-download"></i> Export Report</button>
-                            <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
-                        ` : `
-                            <button class="btn btn-primary" id="payRentBtn"><i class="fas fa-credit-card"></i> Pay Rent</button>
-                        `}
+                        <button class="btn btn-secondary"><i class="fas fa-download"></i> Export Report</button>
+                        <button class="btn btn-primary" id="addPropertyBtn"><i class="fas fa-plus"></i> Add Property</button>
                     </div>
                 </div>
 
@@ -558,6 +559,162 @@ class CasaLink {
                         <p>Create a new tenant account</p>
                         <div class="quick-action-link">
                             Add Tenant <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    getTenantDashboardHTML() {
+        return `
+            <div class="page-content">
+                <div class="page-header">
+                    <h1 class="page-title">Welcome to Your Dashboard</h1>
+                    <div>
+                        <button class="btn btn-primary" id="payRentBtn" onclick="casaLink.showPaymentModal()">
+                            <i class="fas fa-credit-card"></i> Pay Rent
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ACCOUNT OVERVIEW SECTION -->
+                <div class="card-group-title">Account Overview</div>
+                <div class="card-group">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Current Balance</div>
+                            <div class="card-icon revenue"><i class="fas fa-wallet"></i></div>
+                        </div>
+                        <div class="card-value" id="currentBalance">₱0</div>
+                        <div class="card-subtitle" id="balanceDueDate">Due in 0 days</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Payment Status</div>
+                            <div class="card-icon collection"><i class="fas fa-check-circle"></i></div>
+                        </div>
+                        <div class="card-value" id="paymentStatus">Current</div>
+                        <div class="card-subtitle" id="paymentStatusDetails">Up to date</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Room Number</div>
+                            <div class="card-icon occupied"><i class="fas fa-home"></i></div>
+                        </div>
+                        <div class="card-value" id="roomNumber">N/A</div>
+                        <div class="card-subtitle">Your unit</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Monthly Rent</div>
+                            <div class="card-icon revenue"><i class="fas fa-money-bill-wave"></i></div>
+                        </div>
+                        <div class="card-value" id="monthlyRent">₱0</div>
+                        <div class="card-subtitle">Monthly payment</div>
+                    </div>
+                </div>
+
+                <!-- BILLING & PAYMENTS SECTION -->
+                <div class="card-group-title">Billing & Payments</div>
+                <div class="card-group">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Pending Bills</div>
+                            <div class="card-icon unpaid"><i class="fas fa-file-invoice"></i></div>
+                        </div>
+                        <div class="card-value" id="pendingBills">0</div>
+                        <div class="card-subtitle">Unpaid invoices</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Next Due Date</div>
+                            <div class="card-icon late"><i class="fas fa-calendar-day"></i></div>
+                        </div>
+                        <div class="card-value" id="nextDueDate">N/A</div>
+                        <div class="card-subtitle">Upcoming payment</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Last Payment</div>
+                            <div class="card-icon success"><i class="fas fa-receipt"></i></div>
+                        </div>
+                        <div class="card-value" id="lastPaymentAmount">₱0</div>
+                        <div class="card-subtitle" id="lastPaymentDate">No payments</div>
+                    </div>
+                </div>
+
+                <!-- MAINTENANCE SECTION -->
+                <div class="card-group-title">Maintenance</div>
+                <div class="card-group">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Open Requests</div>
+                            <div class="card-icon maintenance"><i class="fas fa-tools"></i></div>
+                        </div>
+                        <div class="card-value" id="openRequests">0</div>
+                        <div class="card-subtitle">Active maintenance</div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">Recent Updates</div>
+                            <div class="card-icon renewals"><i class="fas fa-bell"></i></div>
+                        </div>
+                        <div class="card-value" id="recentUpdates">0</div>
+                        <div class="card-subtitle">New notifications</div>
+                    </div>
+                </div>
+
+                <!-- QUICK ACTIONS SECTION -->
+                <div class="card-group-title">Quick Actions</div>
+                <div class="card-group">
+                    <div class="card quick-action-card" onclick="casaLink.showPage('tenantBilling')">
+                        <div class="card-header">
+                            <div class="card-title">View Bills</div>
+                            <div class="card-icon revenue"><i class="fas fa-file-invoice-dollar"></i></div>
+                        </div>
+                        <p>Check your billing history and invoices</p>
+                        <div class="quick-action-link">
+                            View Bills <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="card quick-action-card" onclick="casaLink.showPaymentModal()">
+                        <div class="card-header">
+                            <div class="card-title">Make Payment</div>
+                            <div class="card-icon success"><i class="fas fa-credit-card"></i></div>
+                        </div>
+                        <p>Pay your rent or outstanding balance</p>
+                        <div class="quick-action-link">
+                            Pay Now <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="card quick-action-card" onclick="casaLink.showPage('tenantMaintenance')">
+                        <div class="card-header">
+                            <div class="card-title">Maintenance</div>
+                            <div class="card-icon maintenance"><i class="fas fa-tools"></i></div>
+                        </div>
+                        <p>Submit or track maintenance requests</p>
+                        <div class="quick-action-link">
+                            View Requests <i class="fas fa-arrow-right"></i>
+                        </div>
+                    </div>
+
+                    <div class="card quick-action-card" onclick="casaLink.showMaintenanceRequestForm()">
+                        <div class="card-header">
+                            <div class="card-title">New Request</div>
+                            <div class="card-icon backlog"><i class="fas fa-plus-circle"></i></div>
+                        </div>
+                        <p>Submit a new maintenance request</p>
+                        <div class="quick-action-link">
+                            Submit Request <i class="fas fa-arrow-right"></i>
                         </div>
                     </div>
                 </div>
@@ -1397,6 +1554,16 @@ class CasaLink {
         `;
     }
 
+
+    testDashboardNavigation() {
+        console.log('🧪 Testing dashboard navigation...');
+        console.log('Current role:', this.currentRole);
+        console.log('Current page:', this.currentPage);
+        
+        // Force refresh the dashboard
+        this.showPage('dashboard');
+    }
+
     // Add this emergency fallback method
     showBasicInterface() {
         const appElement = document.getElementById('app');
@@ -1730,8 +1897,92 @@ class CasaLink {
             return;
         }
         
-        console.log('Updating dashboard with stats:', stats);
+        console.log('Updating dashboard with stats for role:', this.currentRole);
         
+        if (this.currentRole === 'landlord') {
+            this.updateLandlordDashboard(stats);
+        } else {
+            this.updateTenantDashboard(stats);
+        }
+    }
+
+    // Helper methods for tenant dashboard
+    getDueDateText(dueDate) {
+        if (!dueDate) return 'No due date';
+        
+        const today = new Date();
+        const due = new Date(dueDate);
+        const diffTime = due - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) return 'Due today';
+        if (diffDays === 1) return 'Due tomorrow';
+        if (diffDays > 1) return `Due in ${diffDays} days`;
+        return `Overdue by ${Math.abs(diffDays)} days`;
+    }
+
+    getPaymentStatus(status) {
+        const statusMap = {
+            'current': 'Current',
+            'pending': 'Pending',
+            'overdue': 'Overdue',
+            'paid': 'Paid'
+        };
+        return statusMap[status] || 'Unknown';
+    }
+
+
+    getPaymentStatusDetails(status) {
+        const detailsMap = {
+            'current': 'Payment up to date',
+            'pending': 'Payment processing',
+            'overdue': 'Payment overdue',
+            'paid': 'Fully paid'
+        };
+        return detailsMap[status] || 'Status unknown';
+    }
+
+    updateCard(elementId, value) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = value;
+        } else {
+            console.warn(`Element not found: ${elementId}`);
+        }
+    }
+
+    updateLoadingStates() {
+        // Remove loading states from all cards
+        const loadingElements = document.querySelectorAll('.card-change.loading');
+        loadingElements.forEach(element => {
+            element.innerHTML = '<i class="fas fa-check"></i> <span>Updated</span>';
+            element.className = 'card-change positive';
+        });
+    }
+
+    updateTenantDashboard(stats) {
+        // ACCOUNT OVERVIEW
+        this.updateCard('currentBalance', `₱${(stats.totalDue || 0).toLocaleString()}`);
+        this.updateCard('balanceDueDate', this.getDueDateText(stats.nextDueDate));
+        this.updateCard('paymentStatus', this.getPaymentStatus(stats.paymentStatus));
+        this.updateCard('paymentStatusDetails', this.getPaymentStatusDetails(stats.paymentStatus));
+        this.updateCard('roomNumber', stats.roomNumber || 'N/A');
+        this.updateCard('monthlyRent', `₱${(stats.monthlyRent || 0).toLocaleString()}`);
+        
+        // BILLING & PAYMENTS
+        this.updateCard('pendingBills', stats.unpaidBills || 0);
+        this.updateCard('nextDueDate', stats.nextDueDate ? new Date(stats.nextDueDate).toLocaleDateString() : 'N/A');
+        this.updateCard('lastPaymentAmount', `₱${(stats.lastPaymentAmount || 0).toLocaleString()}`);
+        this.updateCard('lastPaymentDate', stats.lastPaymentDate ? `Paid on ${new Date(stats.lastPaymentDate).toLocaleDateString()}` : 'No payments');
+        
+        // MAINTENANCE
+        this.updateCard('openRequests', stats.openMaintenance || 0);
+        this.updateCard('recentUpdates', stats.recentUpdates || 0);
+        
+        this.updateLoadingStates();
+    }
+
+    updateLandlordDashboard(stats) {
         // PROPERTY OVERVIEW
         this.updateCard('occupancyRate', `${stats.occupancyRate}%`);
         this.updateCard('vacantUnits', stats.vacantUnits);
@@ -1750,7 +2001,6 @@ class CasaLink {
         this.updateCard('openMaintenance', stats.openMaintenance);
         this.updateCard('maintenanceBacklog', stats.maintenanceBacklog);
         
-        // Update loading states to show data is loaded
         this.updateLoadingStates();
     }
 
@@ -2527,42 +2777,6 @@ class CasaLink {
         return password;
     }
 
-    async getTenantDashboard() {
-        return `
-        <div class="page-content">
-            <div class="page-header">
-                <h1 class="page-title">Tenant Dashboard</h1>
-                <button class="btn btn-primary" onclick="casaLink.showPaymentModal()">
-                    <i class="fas fa-credit-card"></i> Pay Rent
-                </button>
-            </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Welcome, Tenant!</h3>
-                <p>View your bills, submit maintenance requests, and manage your rental account.</p>
-                <div class="dashboard-cards">
-                    <div class="card" onclick="casaLink.showPage('tenantBilling')" style="cursor: pointer;">
-                        <div class="card-header">
-                            <div class="card-title">My Bills</div>
-                            <div class="card-icon tenants">
-                                <i class="fas fa-file-invoice-dollar"></i>
-                            </div>
-                        </div>
-                        <p>View and pay your bills</p>
-                    </div>
-                    <div class="card" onclick="casaLink.showPage('tenantMaintenance')" style="cursor: pointer;">
-                        <div class="card-header">
-                            <div class="card-title">Maintenance</div>
-                            <div class="card-icon complaints">
-                                <i class="fas fa-tools"></i>
-                            </div>
-                        </div>
-                        <p>Submit maintenance requests</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-        `;
-    }
 
     async getTenantBillingPage() {
         return `

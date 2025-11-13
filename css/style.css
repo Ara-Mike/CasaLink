@@ -1083,6 +1083,12 @@ header {
         overflow-x: auto;
         padding-bottom: 10px;
     }
+
+    /*  New tenant dashboard icons */
+    .card-icon.success { background-color: var(--success); }
+    .card-icon.wallet { background-color: #9334E6; }
+    .card-icon.bell { background-color: #FF6B6B; }
+    .card-icon.plus-circle { background-color: #4ECDC4; }
     
     .nav-links a {
         white-space: nowrap;

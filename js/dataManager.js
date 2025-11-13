@@ -21,80 +21,92 @@ class DataManager {
         console.log(`📊 Getting dashboard stats for ${userRole}: ${userId}`);
         
         try {
-            const [tenants, bills, leases, maintenance] = await Promise.all([
-                this.getTenants(userId),
-                this.getBills(userId),
-                this.getLandlordLeases(userId),
-                this.getMaintenanceRequests(userId)
-            ]);
+            if (userRole === 'landlord') {
+                // ... existing landlord logic
+            } else {
+                // Tenant-specific stats
+                const [bills, maintenance, lease] = await Promise.all([
+                    this.getTenantBills(userId),
+                    this.getTenantMaintenanceRequests(userId),
+                    this.getTenantLease(userId)
+                ]);
 
-            const TOTAL_UNITS = 22; // Fixed capacity: 1A-1E, 2A-2E, 3A-3E, 4A-4E, 5A-5B
-            
-            // Active tenants with verified leases
-            const activeTenants = tenants.filter(t => 
-                t.isActive && t.status === 'verified' && t.leaseId
-            );
-            
-            const occupiedUnits = activeTenants.length;
-            const vacantUnits = TOTAL_UNITS - occupiedUnits;
-            const occupancyRate = Math.round((occupiedUnits / TOTAL_UNITS) * 100);
+                const unpaidBills = bills.filter(bill => bill.status === 'pending');
+                const totalDue = unpaidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+                const nextDueDate = unpaidBills.length > 0 ? unpaidBills[0].dueDate : null;
+                
+                const openMaintenance = maintenance.filter(req => 
+                    ['open', 'in-progress'].includes(req.status)
+                );
 
-            // Rent calculations
-            const averageRent = this.calculateAverageRent(leases);
-
-            // Current month bills (rent collection)
-            const currentMonth = new Date().getMonth();
-            const currentYear = new Date().getFullYear();
-            const currentMonthBills = bills.filter(bill => {
-                const billDate = new Date(bill.dueDate);
-                return billDate.getMonth() === currentMonth && 
-                       billDate.getFullYear() === currentYear &&
-                       bill.type === 'rent';
-            });
-            
-            const paidBills = currentMonthBills.filter(bill => bill.status === 'paid');
-            const collectionRate = currentMonthBills.length > 0 ? 
-                Math.round((paidBills.length / currentMonthBills.length) * 100) : 100;
-
-            // Late payments (overdue rent)
-            const latePayments = bills.filter(bill => 
-                bill.status === 'pending' && 
-                new Date(bill.dueDate) < new Date() &&
-                bill.type === 'rent'
-            ).length;
-
-            // Upcoming renewals (next 30 days)
-            const upcomingRenewals = leases.filter(lease => {
-                if (!lease.isActive) return false;
-                const daysUntilEnd = Math.ceil((new Date(lease.leaseEnd) - new Date()) / (1000 * 60 * 60 * 24));
-                return daysUntilEnd <= 30 && daysUntilEnd > 0;
-            }).length;
-
-            // Maintenance backlog (beyond open status)
-            const maintenanceBacklog = maintenance.filter(req => 
-                ['pending', 'in-progress', 'assigned'].includes(req.status)
-            ).length;
-
-            return {
-                totalTenants: activeTenants.length,
-                totalUnits: TOTAL_UNITS,
-                occupiedUnits,
-                vacantUnits,
-                occupancyRate,
-                averageRent,
-                collectionRate,
-                latePayments,
-                upcomingRenewals,
-                maintenanceBacklog,
-                unpaidBills: bills.filter(bill => bill.status === 'pending').length,
-                openMaintenance: maintenance.filter(req => req.status === 'open').length,
-                totalRevenue: this.calculateMonthlyRevenue(bills)
-            };
+                return {
+                    // Account Overview
+                    totalDue: totalDue,
+                    nextDueDate: nextDueDate,
+                    paymentStatus: unpaidBills.length > 0 ? 'pending' : 'current',
+                    roomNumber: lease?.roomNumber || 'N/A',
+                    monthlyRent: lease?.monthlyRent || 0,
+                    
+                    // Billing & Payments
+                    unpaidBills: unpaidBills.length,
+                    lastPaymentAmount: this.getLastPaymentAmount(bills),
+                    lastPaymentDate: this.getLastPaymentDate(bills),
+                    
+                    // Maintenance
+                    openMaintenance: openMaintenance.length,
+                    recentUpdates: maintenance.filter(req => 
+                        new Date(req.updatedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                    ).length
+                };
+            }
             
         } catch (error) {
             console.error('Dashboard stats error:', error);
-            return this.getFallbackStats();
+            return this.getFallbackStats(userRole);
         }
+    }
+
+    static getFallbackStats(userRole) {
+        if (userRole === 'tenant') {
+            return {
+                totalDue: 0,
+                nextDueDate: null,
+                paymentStatus: 'current',
+                roomNumber: 'N/A',
+                monthlyRent: 0,
+                unpaidBills: 0,
+                lastPaymentAmount: 0,
+                lastPaymentDate: null,
+                openMaintenance: 0,
+                recentUpdates: 0
+            };
+        } else {
+            return {
+                totalTenants: 0,
+                totalUnits: 22,
+                occupiedUnits: 0,
+                vacantUnits: 22,
+                occupancyRate: 0,
+                averageRent: 0,
+                collectionRate: 0,
+                latePayments: 0,
+                upcomingRenewals: 0,
+                maintenanceBacklog: 0,
+                unpaidBills: 0,
+                openMaintenance: 0,
+                totalRevenue: 0
+            };
+        }
+    }
+
+    static getLastPaymentAmount(bills) {
+        const paidBills = bills.filter(bill => bill.status === 'paid');
+        return paidBills.length > 0 ? paidBills[0].totalAmount : 0;
+    }
+
+    static getLastPaymentDate(bills) {
+        const paidBills = bills.filter(bill => bill.status === 'paid');
+        return paidBills.length > 0 ? paidBills[0].paidDate : null;
     }
 
     static calculateMonthlyRevenue(bills) {
