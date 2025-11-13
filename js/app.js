@@ -1505,96 +1505,424 @@ class CasaLink {
     async showAddTenantForm() {
         const modalContent = `
             <div class="add-tenant-form">
-            <div class="form-group">
-                <label class="form-label">Tenant Full Name *</label>
-                <input type="text" id="tenantName" class="form-input" placeholder="John Doe" required>
+                <h4 style="margin-bottom: 20px; color: var(--primary-blue);">Tenant Information</h4>
+                
+                <div class="form-group">
+                    <label class="form-label">Full Name *</label>
+                    <input type="text" id="tenantName" class="form-input" placeholder="John Doe" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Occupation *</label>
+                    <input type="text" id="tenantOccupation" class="form-input" placeholder="Software Engineer" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Age *</label>
+                    <input type="number" id="tenantAge" class="form-input" placeholder="25" min="18" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Phone Number *</label>
+                    <input type="tel" id="tenantPhone" class="form-input" placeholder="+63 912 345 6789" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Email Address *</label>
+                    <input type="email" id="tenantEmail" class="form-input" placeholder="john.doe@example.com" required>
+                </div>
+
+                <hr style="margin: 25px 0; border: none; border-top: 1px solid #eee;">
+                
+                <h4 style="margin-bottom: 20px; color: var(--primary-blue);">Rental Agreement</h4>
+                
+                <div class="form-group">
+                    <label class="form-label">Room Number / Unit *</label>
+                    <input type="text" id="roomNumber" class="form-input" placeholder="Unit 101 or Room 5" required>
+                    <small style="color: var(--dark-gray);">Specific room or unit being rented</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">House Rental Address</label>
+                    <input type="text" id="rentalAddress" class="form-input" 
+                        value="Lot 22 Zarate Compound Purok 4, Bakakent Norte, Baguio City" readonly>
+                    <small style="color: var(--dark-gray);">Fixed address as per agreement</small>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Monthly Rental Amount (₱) *</label>
+                    <input type="number" id="rentalAmount" class="form-input" placeholder="5000" min="0" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Security Deposit (₱) *</label>
+                    <input type="number" id="securityDeposit" class="form-input" placeholder="5000" min="0" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Payment Method</label>
+                    <select id="paymentMethod" class="form-input">
+                        <option value="Cash">Cash</option>
+                        <option value="Bank Transfer">Bank Transfer</option>
+                        <option value="GCash">GCash</option>
+                        <option value="Maya">Maya</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Date of Entry *</label>
+                    <input type="date" id="dateOfEntry" class="form-input" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Date of 1st Payment *</label>
+                    <input type="date" id="firstPaymentDate" class="form-input" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Day of Payment *</label>
+                    <select id="paymentDay" class="form-input" required>
+                        <option value="">Select payment day</option>
+                        <option value="5">5th of the month</option>
+                        <option value="10">10th of the month</option>
+                        <option value="15">15th of the month</option>
+                        <option value="20">20th of the month</option>
+                        <option value="25">25th of the month</option>
+                        <option value="30">30th of the month</option>
+                    </select>
+                </div>
+                
+                <div class="security-info">
+                    <i class="fas fa-info-circle"></i>
+                    <small>You'll review the lease agreement and confirm with your password in the next steps.</small>
+                </div>
+                
+                <div id="tenantCreationResult" style="display: none; margin-top: 15px; padding: 10px; border-radius: 8px;"></div>
             </div>
-            
-            <div class="form-group">
-                <label class="form-label">Email Address *</label>
-                <input type="email" id="tenantEmail" class="form-input" placeholder="john.doe@example.com" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Phone Number</label>
-                <input type="tel" id="tenantPhone" class="form-input" placeholder="+1 (555) 123-4567">
-            </div>
-            
-            <!-- NEW FIELDS -->
-            <div class="form-group">
-                <label class="form-label">Assigned Property</label>
-                <select id="tenantProperty" class="form-input">
-                    <option value="">Select Property</option>
-                    <option value="property_1">123 Main Street</option>
-                    <option value="property_2">456 Oak Avenue</option>
-                    <option value="property_3">789 Pine Road</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Assigned Unit *</label>
-                <input type="text" id="tenantUnit" class="form-input" placeholder="Unit 101" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Monthly Rent (₱)</label>
-                <input type="number" id="tenantRent" class="form-input" placeholder="15000" min="0" step="0.01">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Lease Start Date</label>
-                <input type="date" id="leaseStart" class="form-input">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Lease End Date</label>
-                <input type="date" id="leaseEnd" class="form-input">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Emergency Contact</label>
-                <input type="text" id="emergencyContact" class="form-input" placeholder="Emergency contact name">
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Emergency Phone</label>
-                <input type="tel" id="emergencyPhone" class="form-input" placeholder="+1 (555) 987-6543">
-            </div>
-            
-            <div class="security-info">
-                <i class="fas fa-info-circle"></i>
-                <small>The tenant will receive a temporary password and will be required to change it on first login.</small>
-            </div>
-            
-            <div id="tenantCreationResult" style="display: none; margin-top: 15px; padding: 10px; border-radius: 8px;"></div>
-        </div>
         `;
 
         const modal = ModalManager.openModal(modalContent, {
-            title: 'Add New Tenant',
-            submitText: 'Create Tenant Account',
-            onSubmit: () => this.createTenantAccount()
+            title: 'Add New Tenant - Step 1 of 3',
+            submitText: 'Next: Review Agreement',
+            onSubmit: () => this.validateTenantForm()
         });
+
+        // Set default dates
+        setTimeout(() => {
+            const today = new Date().toISOString().split('T')[0];
+            const firstPayment = new Date();
+            firstPayment.setDate(firstPayment.getDate() + 5); // 5 days from now
+            
+            document.getElementById('dateOfEntry').value = today;
+            document.getElementById('firstPaymentDate').value = firstPayment.toISOString().split('T')[0];
+        }, 100);
 
         this.addTenantModal = modal;
     }
+
+
+    validateTenantForm() {
+        const name = document.getElementById('tenantName')?.value;
+        const email = document.getElementById('tenantEmail')?.value;
+        const phone = document.getElementById('tenantPhone')?.value;
+        const occupation = document.getElementById('tenantOccupation')?.value;
+        const age = document.getElementById('tenantAge')?.value;
+        const roomNumber = document.getElementById('roomNumber')?.value;
+        const rentalAmount = document.getElementById('rentalAmount')?.value;
+        const securityDeposit = document.getElementById('securityDeposit')?.value;
+        const dateOfEntry = document.getElementById('dateOfEntry')?.value;
+        const firstPaymentDate = document.getElementById('firstPaymentDate')?.value;
+        const paymentDay = document.getElementById('paymentDay')?.value;
+
+        // Validate required fields
+        if (!name || !email || !occupation || !age || !phone || !roomNumber ||
+            !rentalAmount || !securityDeposit || !dateOfEntry || !firstPaymentDate || !paymentDay) {
+            this.showNotification('Please fill in all required fields', 'error');
+            return;
+        }
+
+        // Store the form data temporarily
+        this.pendingTenantData = {
+            name: name,
+            email: email,
+            phone: phone,
+            occupation: occupation,
+            age: parseInt(age),
+            roomNumber: roomNumber,
+            rentalAddress: document.getElementById('rentalAddress')?.value || 'Lot 22 Zarate Compound Purok 4, Bakakent Norte, Baguio City',
+            rentalAmount: rentalAmount ? parseFloat(rentalAmount) : 0,
+            securityDeposit: securityDeposit ? parseFloat(securityDeposit) : 0,
+            paymentMethod: document.getElementById('paymentMethod')?.value || 'Cash',
+            dateOfEntry: dateOfEntry,
+            firstPaymentDate: firstPaymentDate,
+            paymentDay: paymentDay
+        };
+
+        // Close the first modal and show lease agreement
+        ModalManager.closeModal(this.addTenantModal);
+        this.showLeaseAgreementModal(null, this.pendingTenantData);
+    }
+
+    showLeaseAgreementModal(tenantId, tenantData) {
+        // Use either provided tenantData or pendingTenantData
+        const data = tenantData || this.pendingTenantData;
+        if (!data) {
+            this.showNotification('No tenant data found. Please start over.', 'error');
+            return;
+        }
+
+        // Calculate lease end date (1 year from date of entry)
+        const dateOfEntry = new Date(data.dateOfEntry);
+        const leaseEnd = new Date(dateOfEntry);
+        leaseEnd.setFullYear(leaseEnd.getFullYear() + 1);
+        
+        const formattedDateOfEntry = dateOfEntry.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+        
+        const formattedLeaseEnd = leaseEnd.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        });
+
+        const modalContent = `
+            <div class="lease-agreement-modal" style="max-height: 70vh; overflow-y: auto;">
+                <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <h3 style="color: var(--primary-blue); margin-bottom: 10px;">LEASE AGREEMENT</h3>
+                    <p style="color: var(--dark-gray);">Please review the lease agreement below</p>
+                </div>
+                
+                <div style="line-height: 1.6; font-size: 0.95rem;">
+                    <p><strong>This agreement is made by and between:</strong></p>
+                    <p style="margin-left: 20px;">
+                        <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
+                        <strong>Tenant/Lessee:</strong> ${data.name}
+                    </p>
+                    
+                    <p>This landlady hereby agrees to lessee the unit <strong>${data.roomNumber}</strong> of her house located at <strong>${data.rentalAddress}</strong>. 
+                    The lesse period shall be for 1 year beginning <strong>${formattedDateOfEntry}</strong> and shall end and may be renewable one (1) year thereafter.</p>
+                    
+                    <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${data.securityDeposit.toLocaleString()}</strong> 
+                    but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
+                    
+                    <p>Limit of occupants be four (4) persons regardless of age, additional pay for excess of two thousand pesos (2,000) per person.</p>
+                    
+                    <p>Increase of monthly rental at any time of the year.</p>
+                    
+                    <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Terms and Conditions:</h4>
+                    
+                    <ol style="margin-left: 20px; padding-left: 0;">
+                        <li><strong>Garbage/Trash</strong> - tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
+                        <li><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke withing the leased area.</li>
+                        <li><strong>Noise</strong> - All radios, television set, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
+                        <li><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
+                        <li><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
+                        <li><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
+                        <li><strong>Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
+                        <li><strong>Light Bulbs</strong> - Tenant at tenant expense shall be reponsible for replacement of all interior light bulb. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
+                        <li><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
+                        <li><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
+                        <li><strong>Upon termination of the lease</strong>, tenant shall be responsible for cleaning the premises. Additional of Php 2,000 if failed to do so.</li>
+                    </ol>
+                    
+                    <p><strong>12. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of <strong>${formattedDateOfEntry}</strong></p>
+                    
+                    <div style="display: flex; justify-content: space-between; margin-top: 30px;">
+                        <div>
+                            <p><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</p>
+                        </div>
+                        <div>
+                            <p><strong>${data.name}</strong><br>Tenant/Lessee</p>
+                        </div>
+                    </div>
+                    
+                    <div style="background: rgba(26, 115, 232, 0.1); padding: 15px; border-radius: 8px; margin-top: 20px;">
+                        <p style="margin: 0; font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
+                            <i class="fas fa-info-circle" style="color: var(--primary-blue);"></i>
+                            The tenant account will be created with "unverified" status. Status will change to "verified" once the tenant changes their temporary password and agrees to these terms.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const agreementModal = ModalManager.openModal(modalContent, {
+            title: 'Lease Agreement - Step 2 of 3',
+            submitText: 'Next: Confirm Creation',
+            onSubmit: () => this.showPasswordConfirmation(data, formattedLeaseEnd)
+        });
+
+        this.leaseAgreementModal = agreementModal;
+    }
+
+    showPasswordConfirmation(tenantData, leaseEndDate) {
+        const modalContent = `
+            <div class="password-confirm-modal">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <i class="fas fa-shield-alt" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                    <h3 style="margin-bottom: 10px;">Security Verification</h3>
+                    <p>Please confirm your password to create the tenant account.</p>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Your Email</label>
+                    <input type="email" id="landlordEmailConfirm" class="form-input" value="${this.currentUser.email}" readonly disabled>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Your Password *</label>
+                    <input type="password" id="landlordPassword" class="form-input" placeholder="Enter your password" autocomplete="current-password">
+                </div>
+                
+                <div id="passwordConfirmError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
+                
+                <div class="security-info">
+                    <i class="fas fa-info-circle"></i>
+                    <small>Your password is required to securely create the tenant account.</small>
+                </div>
+            </div>
+        `;
+
+        // Close the lease agreement modal
+        ModalManager.closeModal(this.leaseAgreementModal);
+
+        // Open password confirmation modal
+        const passwordModal = ModalManager.openModal(modalContent, {
+            title: 'Confirm Your Identity - Step 3 of 3',
+            submitText: 'Create Tenant Account',
+            onSubmit: () => this.createTenantAccountWithPassword(tenantData, leaseEndDate)
+        });
+
+        this.passwordConfirmationModal = passwordModal;
+    }
+
+    async createTenantAccountWithPassword(tenantData, leaseEndDate) {
+        const password = document.getElementById('landlordPassword')?.value;
+        const errorElement = document.getElementById('passwordConfirmError');
+
+        if (!password) {
+            this.showPasswordError('Please enter your password');
+            return;
+        }
+
+        try {
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.disabled = true;
+            }
+
+            // SET THE FLAG: Prevent auth listener from redirecting
+            this.creatingTenant = true;
+            
+            const temporaryPassword = this.generateTemporaryPassword(8);
+            
+            console.log('🔄 Creating tenant account with provided password...');
+            
+            // Create tenant account with the password (only asked once now)
+            const result = await AuthManager.createTenantAccount(tenantData, temporaryPassword, password);
+
+            if (result.success) {
+                console.log('✅ Tenant account created successfully');
+                console.log('🔄 Attempting to send welcome email...');
+                
+                try {
+                    const emailResult = await SendPulseService.sendTenantWelcomeEmail(
+                        tenantData, 
+                        temporaryPassword, 
+                        this.currentUser.email
+                    );
+                    
+                    if (emailResult.success) {
+                        console.log('✅ Welcome email sent successfully to:', tenantData.email);
+                    } else {
+                        console.warn('⚠️ Tenant created but email failed:', emailResult.error);
+                        this.showNotification('Tenant created but email failed to send', 'warning');
+                    }
+                } catch (emailError) {
+                    console.warn('⚠️ Email sending failed, but tenant was created:', emailError);
+                }
+                
+                // Create lease document
+                await this.createLeaseDocument(result.tenantId, tenantData, leaseEndDate);
+                
+                // Close modal and show success
+                ModalManager.closeModal(this.passwordConfirmationModal);
+                this.showNotification('Tenant account and lease created successfully!', 'success');
+
+                // Reload tenants list
+                setTimeout(() => {
+                    this.loadTenantsData();
+                }, 1000);
+            }
+
+        } catch (error) {
+            console.error('Tenant creation error:', error);
+            
+            // Show appropriate error message
+            if (error.code === 'auth/wrong-password') {
+                this.showPasswordError('Incorrect password. Please try again.');
+            } else {
+                this.showNotification(`Failed to create tenant: ${error.message}`, 'error');
+            }
+            
+            // Reset button
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Create Tenant Account';
+                submitBtn.disabled = false;
+            }
+        } finally {
+            // RESET THE FLAG: Allow auth listener to work normally again
+            setTimeout(() => {
+                this.creatingTenant = false;
+                console.log('🔓 Tenant creation completed, auth listener re-enabled');
+            }, 2000);
+        }
+    }
+
+    showPasswordError(message) {
+        const errorElement = document.getElementById('passwordConfirmError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+        
+        // Also reset the submit button
+        const submitBtn = document.querySelector('#modalSubmit');
+        if (submitBtn) {
+            submitBtn.innerHTML = 'Create Tenant Account';
+            submitBtn.disabled = false;
+        }
+    }
+
 
     async createTenantAccount() {
         const name = document.getElementById('tenantName')?.value;
         const email = document.getElementById('tenantEmail')?.value;
         const phone = document.getElementById('tenantPhone')?.value;
-        const property = document.getElementById('tenantProperty')?.value;
-        const unit = document.getElementById('tenantUnit')?.value;
-        const rent = document.getElementById('tenantRent')?.value;
-        const leaseStart = document.getElementById('leaseStart')?.value;
-        const leaseEnd = document.getElementById('leaseEnd')?.value;
-        const emergencyContact = document.getElementById('emergencyContact')?.value;
-        const emergencyPhone = document.getElementById('emergencyPhone')?.value;
+        const occupation = document.getElementById('tenantOccupation')?.value;
+        const age = document.getElementById('tenantAge')?.value;
         
+        // Rental Agreement Fields
+        const roomNumber = document.getElementById('roomNumber')?.value;
+        const rentalAddress = document.getElementById('rentalAddress')?.value;
+        const rentalAmount = document.getElementById('rentalAmount')?.value;
+        const securityDeposit = document.getElementById('securityDeposit')?.value;
+        const paymentMethod = document.getElementById('paymentMethod')?.value;
+        const dateOfEntry = document.getElementById('dateOfEntry')?.value;
+        const firstPaymentDate = document.getElementById('firstPaymentDate')?.value;
+        const paymentDay = document.getElementById('paymentDay')?.value;
+
         const resultElement = document.getElementById('tenantCreationResult');
 
-        if (!name || !email || !unit || !rent || !leaseStart || !leaseEnd) {
-            this.showNotification('Please fill in all required fields (Name, Email, Unit, Rent, and Lease Dates)', 'error');
+        // Validate required fields (including room number)
+        if (!name || !email || !occupation || !age || !phone || !roomNumber ||
+            !rentalAmount || !securityDeposit || !dateOfEntry || !firstPaymentDate || !paymentDay) {
+            this.showNotification('Please fill in all required fields', 'error');
             return;
         }
 
@@ -1605,17 +1933,28 @@ class CasaLink {
             const temporaryPassword = this.generateTemporaryPassword(8);
             
             const tenantData = {
+                // Basic Information
                 name: name,
                 email: email,
-                phone: phone || '',
-                propertyId: property || '',
-                unitId: unit,
-                monthlyRent: rent ? parseFloat(rent) : 0,
-                leaseStart: leaseStart || '',
-                leaseEnd: leaseEnd || '',
-                emergencyContact: emergencyContact || '',
-                emergencyPhone: emergencyPhone || '',
-                landlordId: this.currentUser.uid
+                phone: phone,
+                occupation: occupation,
+                age: parseInt(age),
+                
+                // Rental Agreement Information
+                roomNumber: roomNumber,
+                rentalAddress: rentalAddress || 'Lot 22 Zarate Compound Purok 4, Bakakent Norte, Baguio City',
+                rentalAmount: rentalAmount ? parseFloat(rentalAmount) : 0,
+                securityDeposit: securityDeposit ? parseFloat(securityDeposit) : 0,
+                paymentMethod: paymentMethod || 'Cash',
+                dateOfEntry: dateOfEntry,
+                firstPaymentDate: firstPaymentDate,
+                paymentDay: paymentDay,
+                
+                // Remove or provide default for propertyId
+                // propertyId: '', // Remove this line or provide a default value
+                
+                landlordId: this.currentUser.uid,
+                status: 'unverified'
             };
 
             // Show loading in the main modal
@@ -1625,7 +1964,7 @@ class CasaLink {
                 submitBtn.disabled = true;
             }
 
-            // This will show the password confirmation modal and create the tenant
+            // Create tenant account - this will show the password confirmation modal
             const result = await AuthManager.createTenantAccount(tenantData, temporaryPassword);
 
             if (result.success) {
@@ -1640,88 +1979,17 @@ class CasaLink {
                     
                     if (emailResult.success) {
                         console.log('✅ Welcome email sent successfully to:', tenantData.email);
-                        // Email sent successfully - no action needed
                     } else {
                         console.warn('⚠️ Tenant created but email failed:', emailResult.error);
-                        // Don't throw error - email failure shouldn't block tenant creation
                         this.showNotification('Tenant created but email failed to send', 'warning');
                     }
                 } catch (emailError) {
                     console.warn('⚠️ Email sending failed, but tenant was created:', emailError);
-                    // Don't throw error - continue with success flow
                 }
                 
-                // CREATE LEASE DOCUMENT (your existing code)
-                await this.createLeaseDocument(result.tenantId, tenantData);
+                // SHOW LEASE AGREEMENT MODAL (instead of automatically creating lease)
+                this.showLeaseAgreementModal(result.tenantId, tenantData);
             }
-
-            // CREATE LEASE DOCUMENT AFTER TENANT IS CREATED
-            if (result.success) {
-                await this.createLeaseDocument(result.tenantId, tenantData);
-            }
-
-            // Show success in the main modal
-            if (resultElement) {
-                resultElement.innerHTML = `
-                <div style="background: var(--success); color: white; padding: 20px; border-radius: 12px;">
-                    <h4 style="margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
-                        <i class="fas fa-check-circle"></i> Tenant Account Created!
-                    </h4>
-                    
-                    <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin: 10px 0;">
-                        <p style="margin: 8px 0;"><strong>Name:</strong> ${result.name}</p>
-                        <p style="margin: 8px 0;"><strong>Email:</strong> ${result.email}</p>
-                        <p style="margin: 8px 0;"><strong>Unit:</strong> ${tenantData.unitId}</p>
-                        ${tenantData.monthlyRent ? `<p style="margin: 8px 0;"><strong>Monthly Rent:</strong> ₱${parseFloat(tenantData.monthlyRent).toLocaleString()}</p>` : ''}
-                    </div>
-                    
-                    <div style="background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; margin: 15px 0;">
-                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                            <i class="fas fa-paper-plane" style="color: #4CAF50;"></i>
-                            <strong>Welcome Email Sent!</strong>
-                        </div>
-                        <p style="margin: 0; font-size: 0.95em; opacity: 0.9;">
-                            Login credentials have been automatically emailed to <strong>${result.email}</strong>
-                        </p>
-                    </div>
-                    
-                    <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.1); border-radius: 6px;">
-                        <p style="margin: 0; font-size: 0.9em; display: flex; align-items: center; gap: 8px;">
-                            <i class="fas fa-info-circle"></i> 
-                            The tenant can now login and will be prompted to change their temporary password.
-                        </p>
-                    </div>
-                </div>
-            `;
-                resultElement.style.display = 'block';
-            }
-
-            this.showNotification('Tenant account and lease created successfully!', 'success');
-
-            // Clear form but STAY on tenant management page
-            setTimeout(() => {
-                // Clear all form fields
-                const fields = [
-                    'tenantName', 'tenantEmail', 'tenantPhone', 'tenantProperty', 
-                    'tenantUnit', 'tenantRent', 'leaseStart', 'leaseEnd', 
-                    'emergencyContact', 'emergencyPhone'
-                ];
-                
-                fields.forEach(fieldId => {
-                    const field = document.getElementById(fieldId);
-                    if (field) field.value = '';
-                });
-
-                // Reset button
-                if (submitBtn) {
-                    submitBtn.innerHTML = 'Create Another Tenant';
-                    submitBtn.disabled = false;
-                }
-
-                // RELOAD THE TENANTS LIST to show the new tenant
-                this.loadTenantsData();
-
-            }, 500);
 
         } catch (error) {
             console.error('Tenant creation error:', error);
@@ -1741,75 +2009,154 @@ class CasaLink {
             setTimeout(() => {
                 this.creatingTenant = false;
                 console.log('🔓 Tenant creation completed, auth listener re-enabled');
-            }, 2000); // Small delay to ensure everything is settled
+            }, 2000);
         }
     }
 
-    async createLeaseDocument(tenantId, tenantData) {
+    async finalizeTenantCreation(tenantId, tenantData, leaseEndDate) {
         try {
-            console.log('📝 Creating lease document for tenant:', tenantId);
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.disabled = true;
+            }
+
+            // Create SINGLE lease document
+            await this.createLeaseDocument(tenantId, tenantData, leaseEndDate);
             
+            // Show success message
+            ModalManager.closeModal(this.leaseAgreementModal);
+            
+            this.showNotification('Tenant account and lease created successfully!', 'success');
+
+            // Reload tenants list
+            setTimeout(() => {
+                this.loadTenantsData();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error finalizing tenant creation:', error);
+            this.showNotification(`Failed to create lease: ${error.message}`, 'error');
+            
+            // Reset button
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Confirm & Create Tenant';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    async createLeaseDocument(tenantId, tenantData, leaseEndDate) {
+        try {
+            console.log('📝 Creating SINGLE lease document for tenant:', tenantId);
+            
+            // First, check if lease already exists for this tenant
+            const existingLeaseQuery = await firebaseDb.collection('leases')
+                .where('tenantId', '==', tenantId)
+                .where('isActive', '==', true)
+                .limit(1)
+                .get();
+                
+            if (!existingLeaseQuery.empty) {
+                console.log('⚠️ Active lease already exists for this tenant, updating instead');
+                const existingLeaseId = existingLeaseQuery.docs[0].id;
+                
+                await firebaseDb.collection('leases').doc(existingLeaseId).update({
+                    // Update with new data
+                    tenantName: tenantData.name,
+                    tenantEmail: tenantData.email,
+                    tenantPhone: tenantData.phone,
+                    tenantOccupation: tenantData.occupation,
+                    tenantAge: tenantData.age,
+                    
+                    roomNumber: tenantData.roomNumber,
+                    rentalAddress: tenantData.rentalAddress,
+                    monthlyRent: tenantData.rentalAmount,
+                    securityDeposit: tenantData.securityDeposit,
+                    paymentMethod: tenantData.paymentMethod,
+                    leaseStart: tenantData.dateOfEntry,
+                    leaseEnd: leaseEndDate,
+                    paymentDueDay: parseInt(tenantData.paymentDay),
+                    firstPaymentDate: tenantData.firstPaymentDate,
+                    
+                    updatedAt: new Date().toISOString()
+                });
+                
+                console.log('✅ Existing lease updated:', existingLeaseId);
+                return existingLeaseId;
+            }
+            
+            // Create new lease document if none exists
             const leaseData = {
                 // Tenant Information
                 tenantId: tenantId,
                 tenantName: tenantData.name,
                 tenantEmail: tenantData.email,
                 tenantPhone: tenantData.phone,
-                emergencyContact: tenantData.emergencyContact,
-                emergencyPhone: tenantData.emergencyPhone,
+                tenantOccupation: tenantData.occupation,
+                tenantAge: tenantData.age,
+                
+                // Landlord Information
+                landlordId: this.currentUser.uid,
+                landlordName: 'Nelly D. Virtucio',
                 
                 // Property Information
-                landlordId: this.currentUser.uid,
-                propertyId: tenantData.propertyId,
-                unitId: tenantData.unitId,
+                roomNumber: tenantData.roomNumber,
+                rentalAddress: tenantData.rentalAddress,
                 
                 // Lease Terms
-                monthlyRent: tenantData.monthlyRent,
-                leaseStart: tenantData.leaseStart,
-                leaseEnd: tenantData.leaseEnd,
-                leaseDuration: this.calculateLeaseDuration(tenantData.leaseStart, tenantData.leaseEnd),
+                monthlyRent: tenantData.rentalAmount,
+                securityDeposit: tenantData.securityDeposit,
+                paymentMethod: tenantData.paymentMethod,
+                leaseStart: tenantData.dateOfEntry,
+                leaseEnd: leaseEndDate,
+                leaseDuration: 12, // 1 year in months
+                paymentDueDay: parseInt(tenantData.paymentDay),
+                firstPaymentDate: tenantData.firstPaymentDate,
                 
                 // Lease Status
                 status: 'active',
                 isActive: true,
-                securityDeposit: tenantData.monthlyRent, // Default to one month's rent
                 securityDepositPaid: false,
+                
+                // Agreement Details
+                agreementType: 'standard',
+                maxOccupants: 4,
+                additionalOccupantFee: 2000,
                 
                 // Dates
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 
-                // Additional Lease Terms (can be expanded later)
-                paymentDueDay: 1, // Rent due on 1st of each month
-                lateFee: tenantData.monthlyRent * 0.05, // 5% late fee
-                gracePeriod: 5, // 5-day grace period
-                
-                // Utilities (can be customized per lease)
+                // Utilities
                 includesWater: false,
                 includesElectricity: false,
                 includesInternet: false,
                 
-                // Lease Document Tracking
-                leaseSigned: false,
-                leaseSignedDate: null,
-                digitalCopyUrl: null
+                // Agreement Tracking
+                agreementViewed: false,
+                agreementAccepted: false,
+                agreementAcceptedDate: null
             };
 
             // Create the lease document in Firestore
             const leaseRef = await firebaseDb.collection('leases').add(leaseData);
-            console.log('✅ Lease document created with ID:', leaseRef.id);
+            console.log('✅ New lease document created with ID:', leaseRef.id);
             
             // Update the tenant's user document with lease reference
             await firebaseDb.collection('users').doc(tenantId).update({
                 leaseId: leaseRef.id,
                 currentLease: leaseRef.id,
+                roomNumber: tenantData.roomNumber, // Also store room number in user document
+                status: 'unverified', // Will change to verified after password change and agreement
                 updatedAt: new Date().toISOString()
             });
             
             return leaseRef.id;
             
         } catch (error) {
-            console.error('❌ Error creating lease document:', error);
+            console.error('❌ Error creating/updating lease document:', error);
             throw new Error('Failed to create lease document: ' + error.message);
         }
     }
@@ -2025,15 +2372,15 @@ class CasaLink {
                 hasTemporaryPassword: false,
                 passwordChanged: true,
                 passwordChangedAt: new Date().toISOString(),
-                currentPassword: newPassword, // Store the new current password
-                temporaryPassword: null // Remove the stored temporary password for security
+                currentPassword: newPassword,
+                temporaryPassword: null
             });
             
-            // Close modal
+            // Close password change modal
             ModalManager.closeModal(this.passwordChangeModal);
             
             // Show success message
-            this.showNotification('Password changed successfully! Welcome to CasaLink!', 'success');
+            this.showNotification('Password changed successfully!', 'success');
             
             // Update current user data
             this.currentUser.hasTemporaryPassword = false;
@@ -2041,9 +2388,9 @@ class CasaLink {
             this.currentUser.requiresPasswordChange = false;
             this.currentUser.currentPassword = newPassword;
             
-            // Now show the dashboard
+            // Show lease agreement and verification step
             setTimeout(() => {
-                this.showDashboard();
+                this.showLeaseAgreementVerification();
             }, 1000);
             
         } catch (error) {
@@ -2065,6 +2412,212 @@ class CasaLink {
             errorElement.textContent = message;
             errorElement.style.display = 'block';
         }
+    }
+
+    async showLeaseAgreementVerification() {
+        // Get the tenant's lease data
+        const lease = await DataManager.getTenantLease(this.currentUser.uid);
+        
+        if (!lease) {
+            this.showNotification('No lease agreement found. Please contact your landlord.', 'error');
+            this.showDashboard();
+            return;
+        }
+
+        const modalContent = `
+            <div class="lease-verification-modal" style="max-height: 80vh; overflow-y: auto;">
+                <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                    <h3 style="color: var(--primary-blue); margin-bottom: 10px;">Lease Agreement Verification</h3>
+                    <p style="color: var(--dark-gray);">Please review and agree to your lease agreement</p>
+                </div>
+                
+                <div style="line-height: 1.6; font-size: 0.95rem; margin-bottom: 25px; max-height: 400px; overflow-y: auto; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
+                    <p><strong>This agreement is made by and between:</strong></p>
+                    <p style="margin-left: 20px;">
+                        <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
+                        <strong>Tenant/Lessee:</strong> ${this.currentUser.name || 'Tenant'}
+                    </p>
+                    
+                    <p>This landlady hereby agrees to lessee the unit <strong>${lease.roomNumber || 'N/A'}</strong> of her house located at <strong>${lease.rentalAddress || 'N/A'}</strong>. 
+                    The lesse period shall be for 1 year beginning <strong>${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}</strong>.</p>
+                    
+                    <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</strong> 
+                    but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
+                    
+                    <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Key Terms and Conditions:</h4>
+                    
+                    <ol style="margin-left: 20px; padding-left: 0;">
+                        <li><strong>Garbage/Trash</strong> - Tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
+                        
+                        <li><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke within the leased area.</li>
+                        
+                        <li><strong>Noise</strong> - All radios, television sets, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
+                        
+                        <li><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
+                        
+                        <li><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
+                        
+                        <li><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
+                        
+                        <li><strong>Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
+                        
+                        <li><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
+                        
+                        <li><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
+                        
+                        <li><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
+                        
+                        <li><strong>Cleaning Upon Termination</strong> - Upon termination of the lease, tenant shall be responsible for cleaning the premises. Additional charge of Php 2,000 if failed to do so.</li>
+                        
+                        <li><strong>Occupancy Limit</strong> - Limit of occupants be four (4) persons regardless of age, additional pay for excess of two thousand pesos (2,000) per person.</li>
+                        
+                        <li><strong>Rent Increase</strong> - Increase of monthly rental may occur at any time of the year as determined by the landlady.</li>
+                    </ol>
+
+                    <p style="margin-top: 20px; padding: 15px; background: rgba(26, 115, 232, 0.1); border-radius: 8px;">
+                        <strong>12. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
+                        <strong>${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}</strong>
+                    </p>
+
+                    <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
+                        <div>
+                            <p><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</p>
+                        </div>
+                        <div>
+                            <p><strong>${this.currentUser.name || 'Tenant'}</strong><br>Tenant/Lessee</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Upload Scanned ID *</label>
+                    <input type="file" id="idUpload" class="form-input" accept=".jpg,.jpeg,.png,.pdf" required>
+                    <small style="color: var(--dark-gray);">Upload a scanned copy of your valid ID (Driver's License, Passport, National ID, etc.)</small>
+                </div>
+
+                <div class="form-group">
+                    <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="agreeTerms" style="margin-top: 3px;">
+                        <span>I have read, understood, and agree to all the terms and conditions of this lease agreement. I acknowledge that violating any of these terms may result in termination of my lease and forfeiture of my security deposit.</span>
+                    </label>
+                </div>
+
+                <div id="verificationError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
+                
+                <div class="security-info">
+                    <i class="fas fa-info-circle"></i>
+                    <small>Your account will be verified and you'll gain full access to the tenant dashboard after completing this step. Your ID will be kept confidential and used for verification purposes only.</small>
+                </div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+            title: 'Lease Agreement & Verification - Final Step',
+            submitText: 'Agree & Submit Verification',
+            onSubmit: () => this.submitLeaseVerification(lease.id)
+        });
+
+        this.leaseVerificationModal = modal;
+    }
+
+    async submitLeaseVerification(leaseId) {
+        const idUpload = document.getElementById('idUpload');
+        const agreeTerms = document.getElementById('agreeTerms');
+        const errorElement = document.getElementById('verificationError');
+
+        // Reset error
+        if (errorElement) {
+            errorElement.style.display = 'none';
+            errorElement.textContent = '';
+        }
+
+        // Validation
+        if (!idUpload.files || idUpload.files.length === 0) {
+            this.showVerificationError('Please upload a scanned copy of your ID');
+            return;
+        }
+
+        if (!agreeTerms.checked) {
+            this.showVerificationError('You must agree to the terms and conditions');
+            return;
+        }
+
+        try {
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+                submitBtn.disabled = true;
+            }
+
+            // Upload ID file to Firebase Storage (you'll need to implement this)
+            const idFile = idUpload.files[0];
+            const idUploadUrl = await this.uploadIdFile(idFile, this.currentUser.uid);
+
+            // Update lease agreement with acceptance
+            await firebaseDb.collection('leases').doc(leaseId).update({
+                agreementViewed: true,
+                agreementAccepted: true,
+                agreementAcceptedDate: new Date().toISOString(),
+                idUploadUrl: idUploadUrl,
+                idVerified: false // Landlord can later verify the ID
+            });
+
+            // Update user status to verified
+            await firebaseDb.collection('users').doc(this.currentUser.uid).update({
+                status: 'verified',
+                idUploadUrl: idUploadUrl,
+                verificationCompletedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+
+            // Update current user data
+            this.currentUser.status = 'verified';
+
+            // Close modal
+            ModalManager.closeModal(this.leaseVerificationModal);
+            
+            // Show success message
+            this.showNotification('Verification submitted successfully! Welcome to CasaLink!', 'success');
+            
+            // Show dashboard
+            setTimeout(() => {
+                this.showDashboard();
+            }, 1500);
+
+        } catch (error) {
+            console.error('Verification error:', error);
+            this.showVerificationError('Failed to submit verification: ' + error.message);
+            
+            // Reset button
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Agree & Submit Verification';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    showVerificationError(message) {
+        const errorElement = document.getElementById('verificationError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async uploadIdFile(file, userId) {
+        // This is a simplified version - you'll need to implement Firebase Storage
+        // For now, we'll return a placeholder URL
+        console.log('Uploading ID file for user:', userId);
+        
+        // TODO: Implement actual Firebase Storage upload
+        // const storageRef = firebase.storage().ref();
+        // const fileRef = storageRef.child(`tenant_ids/${userId}/${file.name}`);
+        // await fileRef.put(file);
+        // return await fileRef.getDownloadURL();
+        
+        return `https://example.com/placeholder-id-upload/${userId}`;
     }
 
     // ===== UTILITY METHODS =====

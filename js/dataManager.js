@@ -113,7 +113,6 @@ class DataManager {
         }
     }
 
-    // Add to js/dataManager.js
     static async getTenantLease(tenantId) {
         try {
             const querySnapshot = await firebaseDb.collection('leases')

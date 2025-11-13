@@ -1,4 +1,3 @@
-// js/sendpulseService.js - UPDATED WITH EMAILJS
 class EmailService {
     static async init() {
         if (typeof emailjs !== 'undefined') {
@@ -20,29 +19,27 @@ class EmailService {
                 throw new Error('Tenant email is empty or undefined');
             }
 
-            // UPDATED: Correct parameters for your template
+            
             const templateParams = {
-                // EmailJS requires to_email for the recipient
                 to_email: tenantData.email,
-                
-                // Your template variables
                 tenant_name: tenantData.name,
                 tenant_email: tenantData.email,
                 temporary_password: temporaryPassword,
                 login_url: window.location.origin,
                 landlord_email: landlordEmail,
                 current_year: new Date().getFullYear(),
-                property_name: tenantData.unitId || 'Your Property',
+                room_number: tenantData.roomNumber, // Add this line
+                property_name: tenantData.rentalAddress,
                 monthly_rent: tenantData.monthlyRent ? `₱${parseFloat(tenantData.monthlyRent).toLocaleString()}` : 'Not specified'
             };
 
             console.log('📧 Final template params:', templateParams);
 
             const response = await emailjs.send(
-                'service_tqx1lai',  // Your Service ID
-                'template_i8j2rf9', // Your Template ID  
+                'service_tqx1lai',  
+                'template_i8j2rf9', 
                 templateParams,
-                '9lGLo4WX9k1JISIEc' // Your Public Key
+                '9lGLo4WX9k1JISIEc' 
             );
 
             console.log('✅ Email sent successfully to:', tenantData.email);
@@ -69,7 +66,7 @@ class EmailService {
             await this.init();
             
             const testParams = {
-                to_email: 'c4s4l1nk@gmail.com', // Use your real email for testing
+                to_email: 'c4s4l1nk@gmail.com',
                 to_name: 'Casa Link',
                 tenant_name: 'Casa Link',
                 tenant_email: 'c4s4l1nk@gmail.com',
@@ -94,10 +91,8 @@ class EmailService {
         }
     }
 
-// You can call this from browser console: SendPulseService.testEmailSending()
-
     static async fallbackManualCredentials(tenantData, temporaryPassword, landlordEmail) {
-        // Create credentials for manual sending (your existing method)
+        // Create credentials for manual sending
         const credentials = this.createCredentialsText(tenantData, temporaryPassword, landlordEmail);
         
         // Copy to clipboard

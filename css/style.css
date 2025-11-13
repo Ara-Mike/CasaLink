@@ -13,6 +13,60 @@
     --transition: all 0.3s ease;
 }
 
+/* Lease Verification Modal Styles */
+.lease-verification-modal {
+    line-height: 1.6;
+}
+
+.lease-verification-modal h4 {
+    color: var(--primary-blue);
+    margin: 20px 0 10px 0;
+    font-size: 1.1rem;
+}
+
+.lease-verification-modal ol {
+    margin-left: 20px;
+    padding-left: 0;
+}
+
+.lease-verification-modal li {
+    margin-bottom: 8px;
+    padding-left: 10px;
+}
+
+/* File Input Styling */
+.form-input[type="file"] {
+    padding: 10px;
+    border: 2px dashed #ddd;
+    background: #fafafa;
+}
+
+.form-input[type="file"]:focus {
+    border-color: var(--primary-blue);
+    background: white;
+}
+
+/* Checkbox Styling */
+input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+
+
+/* Form Section Headers */
+.add-tenant-form h4 {
+    border-bottom: 2px solid var(--primary-blue);
+    padding-bottom: 8px;
+    margin-bottom: 20px;
+}
+
+/* Read-only input styling */
+.form-input[readonly] {
+    background-color: #f8f9fa;
+    border-color: #e9ecef;
+    color: #6c757d;
+}
+
 /* ===== BASE STYLES ===== */
 * {
     margin: 0;
