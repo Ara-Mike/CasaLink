@@ -1,42 +1,34 @@
-// sw.js (NEW LOCATION - in root folder)
-const CACHE_NAME = 'casalink-v1.0.0';
-const urlsToCache = [
+// sw.js - SIMPLIFIED VERSION
+const CACHE_NAME = 'casalink-static-v1';
+
+// Only cache absolutely essential files
+const URLS_TO_CACHE = [
   '/',
   '/index.html',
-  '/css/style.css',
-  '/js/app.js',
-  '/js/auth.js',
-  '/js/dataManager.js',
-  '/js/modalManager.js',
-  '/js/pwaManager.js',
-  '/js/notificationManager.js',
-  '/config/firebase.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
+  '/manifest.json',
+  '/css/style.css'
 ];
 
-// Install event - cache essential files
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installing...');
+  console.log('Service Worker: Install');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+        console.log('Service Worker: Caching essential files');
+        return cache.addAll(URLS_TO_CACHE);
       })
       .then(() => self.skipWaiting())
   );
 });
 
-// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activating...');
+  console.log('Service Worker: Activate');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
+            console.log('Service Worker: Deleting old cache', cacheName);
             return caches.delete(cacheName);
           }
         })
@@ -45,36 +37,10 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch event - serve from cache or network
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
-    return;
-  }
-
-  // Handle API requests differently
-  if (event.request.url.includes('/api/') || event.request.url.includes('firebase')) {
-    // Network-first strategy for API calls
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          // Cache successful API responses
-          if (response.status === 200) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(event.request, responseToCache);
-              });
-          }
-          return response;
-        })
-        .catch(() => {
-          // Fallback to cache if network fails
-          return caches.match(event.request);
-        })
-    );
-  } else {
-    // Cache-first strategy for static assets
+  // Only handle HTML requests, let JS/CSS go to network
+  if (event.request.url.indexOf('/index.html') !== -1 || 
+      event.request.destination === 'document') {
     event.respondWith(
       caches.match(event.request)
         .then((response) => {
@@ -83,18 +49,5 @@ self.addEventListener('fetch', (event) => {
         })
     );
   }
+  // For all other requests, use network only
 });
-
-// Background sync for offline actions
-self.addEventListener('sync', (event) => {
-  console.log('Background sync:', event.tag);
-  
-  if (event.tag === 'background-sync') {
-    event.waitUntil(doBackgroundSync());
-  }
-});
-
-async function doBackgroundSync() {
-  // This would sync any pending actions when back online
-  console.log('Performing background sync...');
-}

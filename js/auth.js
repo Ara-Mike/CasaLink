@@ -114,52 +114,59 @@ class AuthManager {
             return () => {};
         }
         
-        // Simple auth state listener - only for page refreshes
-        return firebaseAuth.onAuthStateChanged(async (user) => {
-            console.log('🔄 Auth state changed (page refresh/session):', user ? `User found: ${user.uid}` : 'No user');
+        // Enhanced auth state listener for page refreshes
+        return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
+            console.log('🔄 Firebase auth state changed:', firebaseUser ? `User: ${firebaseUser.uid}` : 'No user');
             
-            if (user) {
+            if (firebaseUser) {
                 try {
-                    const userDoc = await firebaseDb.collection('users').doc(user.uid).get();
+                    const userDoc = await firebaseDb.collection('users').doc(firebaseUser.uid).get();
                     
                     if (userDoc.exists) {
-                        const userData = { 
+                        const userData = userDoc.data();
+                        console.log('📊 User document found:', userData.email);
+                        
+                        // Enhanced user data with proper refresh handling
+                        const enhancedUserData = {
                             id: userDoc.id,
-                            ...userDoc.data(), 
-                            uid: user.uid 
+                            uid: firebaseUser.uid,
+                            email: userData.email,
+                            name: userData.name || userData.email.split('@')[0],
+                            role: userData.role,
+                            isActive: userData.isActive !== false, // Default to true
+                            hasTemporaryPassword: userData.hasTemporaryPassword || false,
+                            passwordChanged: userData.passwordChanged || false,
+                            requiresPasswordChange: userData.requiresPasswordChange || false,
+                            status: userData.status || 'active',
+                            loginCount: userData.loginCount || 0,
+                            lastLogin: userData.lastLogin,
+                            createdAt: userData.createdAt,
+                            updatedAt: userData.updatedAt,
+                            // Tenant specific fields
+                            landlordId: userData.landlordId,
+                            roomNumber: userData.roomNumber,
+                            // Landlord specific fields
+                            properties: userData.properties || []
                         };
                         
-                        console.log('Existing session user data:', userData);
-                        console.log('📊 Login stats on auth change:', { 
-                            loginCount: userData.loginCount, 
-                            hasTemporaryPassword: userData.hasTemporaryPassword,
-                            passwordChanged: userData.passwordChanged 
+                        console.log('✅ Enhanced user data for session:', {
+                            email: enhancedUserData.email,
+                            role: enhancedUserData.role,
+                            requiresPasswordChange: enhancedUserData.requiresPasswordChange
                         });
                         
-                        // CHECK FOR PASSWORD CHANGE REQUIREMENT
-                        let requiresPasswordChange = false;
-                        if (userData.role === 'tenant' && userData.hasTemporaryPassword && !userData.passwordChanged) {
-                            // Check if this is the FIRST real login (loginCount = 0)
-                            if (userData.loginCount === 0) {
-                                requiresPasswordChange = true;
-                                console.log('🔐 FIRST real tenant login via auth listener - password change REQUIRED');
-                            }
-                        }
-                        
-                        callback({
-                            ...userData,
-                            requiresPasswordChange: requiresPasswordChange
-                        });
+                        callback(enhancedUserData);
                     } else {
-                        console.log('User document not found in existing session');
+                        console.error('❌ User document not found in Firestore');
                         await this.logout();
                         callback(null);
                     }
                 } catch (error) {
-                    console.error('Error fetching user data in existing session:', error);
+                    console.error('❌ Error fetching user data in auth listener:', error);
                     callback(null);
                 }
             } else {
+                console.log('👤 No Firebase user - calling callback with null');
                 callback(null);
             }
         });
@@ -301,6 +308,7 @@ class AuthManager {
                 // Login Tracking
                 loginCount: 0,
                 passwordChanged: false,
+                requiresPasswordChange: true,
                 lastLogin: null,
                 
                 // Timestamps

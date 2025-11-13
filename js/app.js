@@ -1,29 +1,96 @@
 class CasaLink {
     constructor() {
+        console.log('🏠 CasaLink constructor starting...');
+        
         this.currentUser = null;
         this.currentRole = null;
         this.isOnline = navigator.onLine;
         this.pendingActions = [];
         this.loginInProgress = false;
-        this.authListenerEnabled = true;
+        this.authListenerEnabled = false; // Start with auth listener disabled
         this.showingLogin = false;
         this.showingDashboard = false;
-        
-        // ADD: Flag to prevent redirect during tenant creation
         this.creatingTenant = false;
+        this.currentPage = this.getStoredPage() || 'dashboard';
+        this.appInitialized = false; // Track if app is fully initialized
         
-        // Bind methods ONCE in constructor
+        // Bind methods
         this.boundLoginClickHandler = this.loginClickHandler.bind(this);
         this.boundLoginKeypressHandler = this.loginKeypressHandler.bind(this);
         this.boundHandleLogin = this.handleLogin.bind(this);
         
-        // Clear any stored authentication immediately
-        this.clearStoredAuth();
-        
-        console.log('🚀 CasaLink constructor starting...');
+        console.log('🔄 Initializing CasaLink...');
         this.init();
     }
 
+    // Store current page in localStorage
+    storeCurrentPage(page) {
+        // Only store non-dashboard pages
+        if (page && page !== 'dashboard') {
+            localStorage.setItem('casalink_current_page', page);
+            console.log('💾 Stored current page:', page);
+        } else {
+            // If it's dashboard, remove any stored page
+            localStorage.removeItem('casalink_current_page');
+            console.log('💾 Cleared stored page (dashboard is default)');
+        }
+    }
+
+    // Get stored page from localStorage with validation
+    getStoredPage() {
+        const storedPage = localStorage.getItem('casalink_current_page');
+        
+        // If no page stored, return null (will default to dashboard)
+        if (!storedPage) {
+            console.log('📖 No stored page found');
+            return null;
+        }
+        
+        // Validate that the stored page is appropriate for the current user role
+        const isValidPage = this.isValidPageForRole(storedPage);
+        
+        if (isValidPage) {
+            console.log('📖 Retrieved valid stored page:', storedPage);
+            return storedPage;
+        } else {
+            console.log('📖 Stored page is invalid for current role, clearing:', storedPage);
+            this.clearStoredPage();
+            return null;
+        }
+    }
+
+    // Validate if a page is appropriate for the current user role
+    isValidPageForRole(page) {
+        const landlordPages = ['dashboard', 'billing', 'maintenance', 'tenants', 'reports'];
+        const tenantPages = ['dashboard', 'tenantBilling', 'tenantMaintenance', 'tenantProfile'];
+        
+        if (this.currentRole === 'landlord') {
+            return landlordPages.includes(page);
+        } else if (this.currentRole === 'tenant') {
+            return tenantPages.includes(page);
+        }
+        
+        return false; // Invalid role
+    }
+
+    // Clear stored page (on logout)
+    clearStoredPage() {
+        localStorage.removeItem('casalink_current_page');
+        console.log('🗑️ Cleared stored page');
+    }
+
+
+    checkAndClearInvalidAuth() {
+        // Only clear auth if there's a specific flag or error condition
+        const shouldClearAuth = localStorage.getItem('force_logout') === 'true';
+        if (shouldClearAuth) {
+            console.log('🔄 Force logout detected, clearing auth...');
+            this.clearStoredAuth();
+            localStorage.removeItem('force_logout');
+        }
+    }
+
+    
     clearStoredAuth() {
         // Clear all localStorage items that might contain user data
         localStorage.removeItem('casalink_user');
@@ -68,65 +135,137 @@ class CasaLink {
     }
 
     async init() {
-        console.log('Initializing CasaLink...');
+        console.log('🔄 CasaLink init() called');
         
-        // Safety first: prevent any auto-redirects
-        this.preventAutoRedirect();
-        
-        // Show loading spinner
-        const spinner = document.getElementById('loadingSpinner');
-        if (spinner) {
-            spinner.classList.remove('hidden');
-        }
-        
-        // Wait for Firebase to be available
-        await this.waitForFirebase();
-        
-        // Setup features that don't require auth
-        this.setupPWAFeatures();
-        this.setupOfflineHandling();
-        this.setupNavigationEvents();
-        
-        // Setup auth listener for PAGE REFRESHES only
-        this.setupAuthListener();
-        
-        // If no auth state is detected within 3 seconds, show login
-        setTimeout(() => {
+        try {
+            // Show loading spinner
             const spinner = document.getElementById('loadingSpinner');
-            if (spinner && !spinner.classList.contains('hidden') && !this.currentUser) {
-                console.log('🕒 Auth timeout, ensuring login page');
-                spinner.classList.add('hidden');
-                this.showLogin();
+            if (spinner) {
+                spinner.classList.remove('hidden');
             }
-        }, 3000);
+            
+            // Wait for Firebase to be available
+            await this.waitForFirebase();
+            
+            // Setup features that don't require auth
+            this.setupPWAFeatures();
+            this.setupOfflineHandling();
+            this.setupNavigationEvents();
+            
+            // Mark app as initialized
+            this.appInitialized = true;
+            
+            // NOW enable auth listener
+            this.authListenerEnabled = true;
+            this.setupAuthListener();
+            
+            // If no auth state is detected within 3 seconds, show login
+            setTimeout(() => {
+                const spinner = document.getElementById('loadingSpinner');
+                if (spinner && !spinner.classList.contains('hidden') && !this.currentUser) {
+                    console.log('🕒 Auth timeout, showing login page');
+                    spinner.classList.add('hidden');
+                    this.showLogin();
+                }
+            }, 3000);
+            
+        } catch (error) {
+            console.error('❌ CasaLink initialization failed:', error);
+            this.showNotification('Application failed to start. Please refresh the page.', 'error');
+            this.showLogin(); // Fallback to login page
+        }
     }
 
     async waitForFirebase() {
         return new Promise((resolve) => {
+            let attempts = 0;
+            const maxAttempts = 50; // 5 seconds total
+            
             const checkFirebase = () => {
-                if (window.firebaseAuth && window.firebaseDb) {
-                    console.log('Firebase is ready');
+                attempts++;
+                
+                // Check if Firebase services are available AND initialized
+                if (window.firebaseAuth && window.firebaseDb && window.firebaseApp) {
+                    console.log('✅ Firebase is ready and initialized');
                     resolve();
+                } else if (attempts >= maxAttempts) {
+                    console.warn('⚠️ Firebase timeout - continuing without full initialization');
+                    resolve(); // Resolve anyway to prevent hanging
                 } else {
-                    console.log('Waiting for Firebase...');
+                    // Check if Firebase SDK is loaded but services aren't initialized yet
+                    if (typeof firebase !== 'undefined' && firebase.apps.length > 0) {
+                        console.log('🔄 Firebase SDK loaded, initializing services...');
+                        try {
+                            // Force initialize if needed
+                            if (!window.firebaseAuth) {
+                                window.firebaseAuth = firebase.auth();
+                            }
+                            if (!window.firebaseDb) {
+                                window.firebaseDb = firebase.firestore();
+                            }
+                            if (!window.firebaseApp) {
+                                window.firebaseApp = firebase.app();
+                            }
+                        } catch (error) {
+                            console.warn('⚠️ Error initializing Firebase services:', error);
+                        }
+                    }
+                    
                     setTimeout(checkFirebase, 100);
                 }
             };
+            
+            console.log('🔄 Waiting for Firebase...');
             checkFirebase();
         });
     }
 
     async showPage(page) {
-        const contentArea = document.getElementById('contentArea');
-        if (!contentArea) {
-            console.error('Content area not found');
+        console.log('🔄 Attempting to show page:', page);
+        
+        // Store the page before showing it
+        this.storeCurrentPage(page);
+        this.currentPage = page;
+        this.updateUrlHash(page);
+
+        if (page !== 'dashboard') {
+            this.updateUrlHash(page);
+        } else {
+            this.updateUrlHash(''); // Clear hash for dashboard
+        }
+        
+        // Ensure we have the main app container
+        let appElement = document.getElementById('app');
+        if (!appElement) {
+            console.error('❌ App element not found');
             return;
         }
-
-        console.log('🔄 Loading page:', page);
+        
+        // Check if we need to render the main app layout first
+        const contentArea = document.getElementById('contentArea');
+        if (!contentArea) {
+            console.log('📋 Content area not found, rendering full app layout first...');
+            
+            // Render the complete app layout
+            appElement.innerHTML = this.getDashboardHTML();
+            
+            // Small delay to ensure DOM is updated
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Now try to get content area again
+            const newContentArea = document.getElementById('contentArea');
+            if (!newContentArea) {
+                console.error('❌ Content area still not found after rendering layout');
+                return;
+            }
+        }
+        
+        // Now we can safely show the page content
+        const finalContentArea = document.getElementById('contentArea');
+        console.log('✅ Content area found, loading page content...');
         
         // Show loading state
-        contentArea.innerHTML = `
+        finalContentArea.innerHTML = `
             <div class="data-loading">
                 <i class="fas fa-spinner fa-spin"></i> Loading ${page}...
             </div>
@@ -139,12 +278,9 @@ class CasaLink {
             
             switch (page) {
                 case 'dashboard':
-                    // For dashboard, use direct HTML method instead of async calls
                     if (this.currentRole === 'landlord') {
-                        console.log('🏠 Getting landlord dashboard...');
                         pageContent = this.getDashboardContentHTML();
                     } else {
-                        console.log('👤 Getting tenant dashboard...');
                         pageContent = await this.getTenantDashboard();
                     }
                     break;
@@ -161,12 +297,22 @@ class CasaLink {
                 case 'tenants':
                     pageContent = await this.getTenantsPage();
                     break;
+                case 'reports':
+                    pageContent = await this.getReportsPage();
+                    break;
+                case 'tenantBilling':
+                    pageContent = await this.getTenantBillingPage();
+                    break;
+                case 'tenantMaintenance':
+                    pageContent = await this.getTenantMaintenancePage();
+                    break;
+                case 'tenantProfile':
+                    pageContent = await this.getTenantProfilePage();
+                    break;
                 default:
                     pageContent = `<div class="page-content"><h1>${page} Page</h1><p>This page is under construction.</p></div>`;
             }
 
-            console.log('✅ Page content type:', typeof pageContent);
-            
             // Handle Promise if returned
             if (pageContent instanceof Promise) {
                 console.log('⚠️ Page content is a Promise, awaiting...');
@@ -175,7 +321,8 @@ class CasaLink {
             
             // Ensure we have a string
             if (typeof pageContent === 'string') {
-                contentArea.innerHTML = pageContent;
+                finalContentArea.innerHTML = pageContent;
+                console.log('✅ Page content loaded successfully');
             } else {
                 console.error('❌ Page content is not a string:', typeof pageContent, pageContent);
                 throw new Error('Invalid page content');
@@ -187,9 +334,17 @@ class CasaLink {
             // Update active navigation state
             this.updateActiveNavState(page);
             
+            // SPECIAL CASE: If dashboard, load fresh data immediately
+            if (page === 'dashboard') {
+                console.log('📊 Force refreshing dashboard data...');
+                setTimeout(() => {
+                    this.loadDashboardData();
+                }, 100);
+            }
+            
         } catch (error) {
             console.error('❌ Error loading page:', error);
-            contentArea.innerHTML = `
+            finalContentArea.innerHTML = `
                 <div class="page-content">
                     <h1>Error Loading Page</h1>
                     <p>There was an error loading the ${page} page. Please try again.</p>
@@ -199,12 +354,43 @@ class CasaLink {
         }
     }
 
+
+    async getReportsPage() {
+        return `
+        <div class="page-content">
+            <div class="page-header">
+                <h1 class="page-title">Reports</h1>
+            </div>
+            <div style="text-align: center; padding: 40px;">
+                <h3>Reports & Analytics</h3>
+                <p>View detailed reports and analytics for your properties.</p>
+                <p><em>Reports feature coming soon!</em></p>
+            </div>
+        </div>
+        `;
+    }
+
+    async getTenantProfilePage() {
+        return `
+        <div class="page-content">
+            <div class="page-header">
+                <h1 class="page-title">My Profile</h1>
+            </div>
+            <div style="text-align: center; padding: 40px;">
+                <h3>Tenant Profile</h3>
+                <p>Manage your personal information and account settings.</p>
+                <p><em>Profile management coming soon!</em></p>
+            </div>
+        </div>
+        `;
+    }
+
     // Add this method - returns just the dashboard content, not the full layout
     getDashboardContentHTML() {
         const isLandlord = this.currentRole === 'landlord';
         
         return `
-        <div class="page-content">
+            <div class="page-content">
             <div class="page-header">
                 <h1 class="page-title">Welcome to Your Dashboard</h1>
                 <div>
@@ -217,7 +403,7 @@ class CasaLink {
                 </div>
             </div>
 
-            <div class="dashboard-cards">
+            <div class="dashboard-cards" id="dashboardCards">
                 ${isLandlord ? `
                     <div class="card">
                         <div class="card-header">
@@ -226,8 +412,8 @@ class CasaLink {
                                 <i class="fas fa-users"></i>
                             </div>
                         </div>
-                        <div class="card-value">0</div>
-                        <div class="card-change positive">
+                        <div class="card-value" id="totalTenants">0</div>
+                        <div class="card-change loading">
                             <i class="fas fa-sync fa-spin"></i>
                             <span>Loading...</span>
                         </div>
@@ -240,8 +426,8 @@ class CasaLink {
                                 <i class="fas fa-money-bill-wave"></i>
                             </div>
                         </div>
-                        <div class="card-value">0</div>
-                        <div class="card-change negative">
+                        <div class="card-value" id="unpaidBills">0</div>
+                        <div class="card-change loading">
                             <i class="fas fa-sync fa-spin"></i>
                             <span>Loading...</span>
                         </div>
@@ -254,8 +440,8 @@ class CasaLink {
                                 <i class="fas fa-tools"></i>
                             </div>
                         </div>
-                        <div class="card-value">0</div>
-                        <div class="card-change negative">
+                        <div class="card-value" id="openMaintenance">0</div>
+                        <div class="card-change loading">
                             <i class="fas fa-sync fa-spin"></i>
                             <span>Loading...</span>
                         </div>
@@ -268,52 +454,14 @@ class CasaLink {
                                 <i class="fas fa-chart-line"></i>
                             </div>
                         </div>
-                        <div class="card-value">₱0</div>
-                        <div class="card-change positive">
+                        <div class="card-value" id="monthlyRevenue">₱0</div>
+                        <div class="card-change loading">
                             <i class="fas fa-sync fa-spin"></i>
                             <span>Loading...</span>
                         </div>
                     </div>
                 ` : `
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">Next Payment</div>
-                            <div class="card-icon tenants">
-                                <i class="fas fa-calendar-alt"></i>
-                            </div>
-                        </div>
-                        <div class="card-value">--</div>
-                        <div class="card-change neutral">
-                            <span>Loading...</span>
-                        </div>
-                    </div>
-                    
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">Maintenance Requests</div>
-                            <div class="card-icon occupied">
-                                <i class="fas fa-tools"></i>
-                            </div>
-                        </div>
-                        <div class="card-value">0</div>
-                        <div class="card-change positive">
-                            <i class="fas fa-sync fa-spin"></i>
-                            <span>Loading...</span>
-                        </div>
-                    </div>
-                    
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">Your Unit</div>
-                            <div class="card-icon complaints">
-                                <i class="fas fa-home"></i>
-                            </div>
-                        </div>
-                        <div class="card-value">N/A</div>
-                        <div class="card-change positive">
-                            <span>Loading...</span>
-                        </div>
-                    </div>
+                    <!-- Tenant dashboard cards... -->
                 `}
             </div>
             
@@ -453,9 +601,69 @@ class CasaLink {
             // Fetch tenants from Firestore where role is 'tenant' and landlordId matches current user
             const tenants = await DataManager.getTenants(this.currentUser.uid);
             
-            console.log('Tenants fetched:', tenants);
+            console.log('Raw tenants data:', tenants);
             
-            if (tenants.length === 0) {
+            // Fetch lease data for each tenant to get room numbers
+            const tenantsWithLeaseData = await Promise.all(
+                tenants.map(async (tenant) => {
+                    console.log(`Processing tenant: ${tenant.name}, Lease ID: ${tenant.leaseId}`);
+                    
+                    let roomNumber = 'N/A';
+                    let rentalAddress = 'N/A';
+                    
+                    // Try to get room number from lease document
+                    if (tenant.leaseId) {
+                        try {
+                            const leaseDoc = await firebaseDb.collection('leases').doc(tenant.leaseId).get();
+                            if (leaseDoc.exists) {
+                                const leaseData = leaseDoc.data();
+                                roomNumber = leaseData.roomNumber || 'N/A';
+                                rentalAddress = leaseData.rentalAddress || 'N/A';
+                                console.log(`Found lease data for ${tenant.name}:`, { roomNumber, rentalAddress });
+                            } else {
+                                console.log(`Lease document ${tenant.leaseId} not found for tenant ${tenant.name}`);
+                            }
+                        } catch (error) {
+                            console.error(`Error fetching lease for tenant ${tenant.id}:`, error);
+                        }
+                    } else {
+                        console.log(`No leaseId found for tenant ${tenant.name}`);
+                        
+                        // Alternative: Try to find lease by tenantId
+                        try {
+                            const leaseQuery = await firebaseDb.collection('leases')
+                                .where('tenantId', '==', tenant.id)
+                                .where('isActive', '==', true)
+                                .limit(1)
+                                .get();
+                                
+                            if (!leaseQuery.empty) {
+                                const leaseData = leaseQuery.docs[0].data();
+                                roomNumber = leaseData.roomNumber || 'N/A';
+                                rentalAddress = leaseData.rentalAddress || 'N/A';
+                                console.log(`Found lease by tenantId for ${tenant.name}:`, { roomNumber, rentalAddress });
+                                
+                                // Update user document with leaseId for future reference
+                                await firebaseDb.collection('users').doc(tenant.id).update({
+                                    leaseId: leaseQuery.docs[0].id
+                                });
+                            }
+                        } catch (queryError) {
+                            console.error(`Error querying lease by tenantId for ${tenant.id}:`, queryError);
+                        }
+                    }
+                    
+                    return {
+                        ...tenant,
+                        roomNumber: roomNumber,
+                        rentalAddress: rentalAddress
+                    };
+                })
+            );
+            
+            console.log('Tenants fetched with lease data:', tenantsWithLeaseData);
+            
+            if (tenantsWithLeaseData.length === 0) {
                 tenantsList.innerHTML = `
                     <div class="empty-state">
                         <i class="fas fa-users"></i>
@@ -464,7 +672,7 @@ class CasaLink {
                     </div>
                 `;
             } else {
-                tenantsList.innerHTML = this.renderTenantsTable(tenants);
+                tenantsList.innerHTML = this.renderTenantsTable(tenantsWithLeaseData);
             }
 
         } catch (error) {
@@ -492,8 +700,10 @@ class CasaLink {
                             <th>Name</th>
                             <th>Email</th>
                             <th>Phone</th>
-                            <th>Unit</th>
-                            <th>Status</th>
+                            <th>Room/Unit</th>
+                            <th>Address</th>
+                            <th>Account Status</th>
+                            <th>Verification Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -505,17 +715,30 @@ class CasaLink {
                                         <div class="tenant-avatar">${tenant.name.charAt(0).toUpperCase()}</div>
                                         <div class="tenant-details">
                                             <div class="tenant-name">${tenant.name}</div>
+                                            <div class="tenant-occupation" style="font-size: 0.8rem; color: var(--dark-gray);">
+                                                ${tenant.occupation || 'No occupation specified'}
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
                                 <td>${tenant.email}</td>
                                 <td>${tenant.phone || 'N/A'}</td>
-                                <td>${tenant.unitId || 'N/A'}</td>
+                                <td>
+                                    <strong>${tenant.roomNumber}</strong>
+                                </td>
+                                <td>
+                                    <small style="color: var(--dark-gray);">${tenant.rentalAddress}</small>
+                                </td>
                                 <td>
                                     <span class="status-badge ${tenant.isActive ? 'active' : 'inactive'}">
                                         ${tenant.isActive ? 'Active' : 'Inactive'}
                                     </span>
-                                    ${tenant.hasTemporaryPassword ? '<span class="status-badge warning" title="Needs password change">New</span>' : ''}
+                                    ${tenant.hasTemporaryPassword ? '<span class="status-badge warning" title="Needs password change">Password Reset</span>' : ''}
+                                </td>
+                                <td>
+                                    <span class="status-badge ${tenant.status === 'verified' ? 'active' : 'warning'}">
+                                        ${tenant.status === 'verified' ? 'Verified' : 'Unverified'}
+                                    </span>
                                 </td>
                                 <td>
                                     <div class="action-buttons">
@@ -569,16 +792,21 @@ class CasaLink {
     }
 
     setupDashboardEvents() {
+        console.log('🔄 Setting up dashboard events with fresh data...');
+        
         // Add Property Button
         document.getElementById('addPropertyBtn')?.addEventListener('click', () => {
             this.showAddPropertyForm();
         });
 
-        // Setup real-time dashboard stats
+        // ALWAYS setup real-time stats when dashboard is shown
         this.setupRealTimeStats();
         
         // Update navigation to show dashboard as active
         this.updateActiveNavState('dashboard');
+        
+        // Force load dashboard data immediately
+        this.loadDashboardData();
     }
 
     setupNavigationEvents() {
@@ -589,6 +817,9 @@ class CasaLink {
                 e.preventDefault();
                 const page = e.target.getAttribute('data-page') || 
                         e.target.closest('[data-page]').getAttribute('data-page');
+                console.log('🧭 Navigation to:', page);
+                
+                // If navigating to dashboard, it will clear the stored page
                 this.showPage(page);
             }
 
@@ -620,6 +851,38 @@ class CasaLink {
         });
     }
 
+    // Update URL hash with current page
+    updateUrlHash(page) {
+        if (page && page !== 'dashboard') {
+            window.location.hash = page;
+            console.log('🔗 Updated URL hash:', page);
+        } else {
+            // Clear hash for dashboard
+            if (window.location.hash) {
+                window.location.hash = '';
+                console.log('🔗 Cleared URL hash (dashboard)');
+            }
+        }
+    }
+
+    // Read page from URL hash
+    getPageFromHash() {
+        const hash = window.location.hash.replace('#', '');
+        if (hash && hash !== 'dashboard') {
+            // Validate the page from hash
+            const isValidPage = this.isValidPageForRole(hash);
+            if (isValidPage) {
+                console.log('🔗 Retrieved valid page from URL hash:', hash);
+                return hash;
+            } else {
+                console.log('🔗 Invalid page in URL hash, ignoring:', hash);
+                return null;
+            }
+        }
+        console.log('🔗 No valid page in URL hash');
+        return null;
+    }
+
     async handleLogout() {
         try {
             console.log('🚪 Starting manual logout...');
@@ -627,10 +890,14 @@ class CasaLink {
             // Set flag to ignore auth changes during logout
             this.manualLogoutInProgress = true;
             
+            // Set force logout flag for next page load
+            localStorage.setItem('force_logout', 'true');
+            
             // Remove event listeners
             this.removeLoginEvents();
             
-            // Clear local storage
+            // Clear all stored data
+            this.clearStoredPage();
             localStorage.removeItem('casalink_user');
             localStorage.removeItem('casalink_pending_actions');
             
@@ -640,6 +907,7 @@ class CasaLink {
             // Reset app state
             this.currentUser = null;
             this.currentRole = null;
+            this.currentPage = 'dashboard';
             
             console.log('✅ User logged out successfully');
             
@@ -657,21 +925,28 @@ class CasaLink {
             this.manualLogoutInProgress = false;
             this.currentUser = null;
             this.currentRole = null;
+            this.currentPage = 'dashboard';
             this.showLogin();
         }
     }
 
     preventAutoRedirect() {
-        // Clear any existing authentication immediately
-        this.clearAuthentication();
+        // Only prevent auto-redirects in specific cases, not on every page load
+        const hasForceLogout = localStorage.getItem('force_logout') === 'true';
+        const hasLoginError = sessionStorage.getItem('login_error') === 'true';
         
-        // Ensure we're showing the login page
+        if (hasForceLogout || hasLoginError) {
+            console.log('🛑 Safety check: Preventing auto-redirect due to error condition');
+            this.clearStoredAuth();
+            sessionStorage.removeItem('login_error');
+        }
+        
+        // Ensure we're showing the appropriate page
         const appElement = document.getElementById('app');
-        const loginHTML = this.getLoginHTML();
-        
-        if (appElement && !appElement.innerHTML.includes('login-container')) {
-            console.log('🛑 Safety check: Ensuring login page is displayed');
-            this.showLogin();
+        if (appElement && !appElement.innerHTML.includes('login-container') && 
+            !appElement.innerHTML.includes('app-container')) {
+            console.log('🔄 Ensuring appropriate page is displayed');
+            // Don't force login page - let auth listener handle it
         }
     }
 
@@ -803,33 +1078,20 @@ class CasaLink {
     }
 
     setupAuthListener() {
-        console.log('Setting up auth state listener...');
+        console.log('🔐 Setting up auth state listener...');
         
-        this.authUnsubscribe = AuthManager.onAuthChange((user) => {
-            // Skip if auth listener is disabled OR during tenant creation
-            if (!this.authListenerEnabled || this.creatingTenant) {
-                console.log('🔒 Auth listener disabled or tenant creation in progress, ignoring change');
+        this.authUnsubscribe = AuthManager.onAuthChange(async (user) => {
+            // Skip if auth listener is disabled OR during tenant creation OR app not initialized
+            if (!this.authListenerEnabled || this.creatingTenant || !this.appInitialized) {
+                console.log('🔒 Auth listener conditions not met:', {
+                    authListenerEnabled: this.authListenerEnabled,
+                    creatingTenant: this.creatingTenant,
+                    appInitialized: this.appInitialized
+                });
                 return;
             }
             
-            if (!user) {
-                console.log('👤 No user detected');
-                return;
-            }
-            
-            // Skip if this is the same user that just logged in manually
-            if (this.currentUser && this.currentUser.uid === user.uid) {
-                console.log('✅ User already logged in manually, ignoring auth listener');
-                return;
-            }
-            
-            console.log('🔄 Authenticated user detected via auth listener (page refresh):', user.email);
-            console.log('📊 Login stats:', { 
-                loginCount: user.loginCount, 
-                hasTemporaryPassword: user.hasTemporaryPassword,
-                passwordChanged: user.passwordChanged,
-                requiresPasswordChange: user.requiresPasswordChange 
-            });
+            console.log('🔄 Auth state changed:', user ? `User found: ${user.email}` : 'No user');
             
             // Hide loading spinner
             const spinner = document.getElementById('loadingSpinner');
@@ -837,42 +1099,97 @@ class CasaLink {
                 spinner.style.display = 'none';
             }
             
-            // Validate user data
-            if (!user.role || !user.email || !user.id) {
-                console.error('❌ Invalid user data');
-                this.showNotification('Session invalid. Please log in again.', 'error');
-                AuthManager.logout();
-                return;
-            }
-            
-            this.currentUser = user;
-            this.currentRole = user.role;
-            
-            console.log('🔄 Restoring session via auth listener for:', user.email);
-            
-            // SIMPLIFIED: Check if password change is required
-            if (user.requiresPasswordChange) {
-                console.log('🔐 Password change required - showing modal');
-                setTimeout(() => {
-                    this.showPasswordChangeModal();
-                }, 1000);
+            if (user) {
+                console.log('✅ Authenticated user detected:', user.email);
+                console.log('📊 User status:', {
+                    role: user.role,
+                    requiresPasswordChange: user.requiresPasswordChange,
+                    hasTemporaryPassword: user.hasTemporaryPassword,
+                    passwordChanged: user.passwordChanged,
+                    status: user.status
+                });
+                
+                // Validate user data
+                if (!user.role || !user.email || !user.id) {
+                    console.error('❌ Invalid user data');
+                    this.showNotification('Session invalid. Please log in again.', 'error');
+                    AuthManager.logout();
+                    return;
+                }
+                
+                this.currentUser = user;
+                this.currentRole = user.role;
+                
+                console.log('🔄 Restoring session for:', user.email);
+                
+                // Handle user based on their status
+                if (user.requiresPasswordChange && user.hasTemporaryPassword) {
+                    console.log('🔐 Password change required - showing modal');
+                    setTimeout(() => {
+                        this.showPasswordChangeModal();
+                    }, 1000);
+                } else if (user.role === 'tenant' && user.passwordChanged && user.status === 'unverified') {
+                    console.log('📝 Password changed but not verified - showing lease agreement');
+                    setTimeout(() => {
+                        this.showLeaseAgreementVerification();
+                    }, 1000);
+                } else {
+                    console.log('🏠 No special requirements - showing stored page');
+                    
+                    // Get the page from URL hash first, then localStorage, then default to dashboard
+                    const hashPage = this.getPageFromHash();
+                    const storedPage = this.getStoredPage();
+                    
+                    // Default to dashboard if no valid page is found
+                    const targetPage = hashPage || storedPage || 'dashboard';
+                    
+                    console.log('🎯 Page selection:', {
+                        hashPage: hashPage,
+                        storedPage: storedPage,
+                        targetPage: targetPage
+                    });
+                    
+                    // Small delay to ensure DOM is ready
+                    setTimeout(() => {
+                        this.showPage(targetPage);
+                    }, 300);
+                }
             } else {
-                console.log('🔄 No password change required - showing dashboard');
+                console.log('👤 No user detected - showing login page');
+                this.currentUser = null;
+                this.currentRole = null;
+                this.clearStoredPage(); // Clear page storage on logout
+                
+                // Small delay to ensure DOM is ready
                 setTimeout(() => {
-                    this.showDashboard();
-                }, 100);
+                    this.showLogin();
+                }, 300);
             }
         });
     }
 
     async loadDashboardData() {
         try {
-            console.log('Loading dashboard data in background...');
+            console.log('🔄 Loading FRESH dashboard data...');
             const stats = await DataManager.getDashboardStats(this.currentUser.uid, this.currentRole);
+            console.log('📊 Fresh dashboard stats:', stats);
             this.updateDashboardWithRealData(stats);
         } catch (error) {
-            console.log('Dashboard data loading failed, using placeholder data:', error);
+            console.log('❌ Dashboard data loading failed:', error);
+            // Show error state in the cards
+            this.showDashboardErrorState();
         }
+    }
+
+    showDashboardErrorState() {
+        const cards = document.querySelectorAll('.dashboard-cards .card');
+        cards.forEach(card => {
+            const changeElement = card.querySelector('.card-change');
+            if (changeElement) {
+                changeElement.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <span>Failed to load</span>';
+                changeElement.className = 'card-change negative';
+            }
+        });
     }
 
     async updateBillsTable(bills) {
@@ -1391,46 +1708,39 @@ class CasaLink {
     }
 
     updateDashboardWithRealData(stats) {
-        if (!stats) return;
+        if (!stats) {
+            console.log('❌ No stats data received');
+            return;
+        }
         
         const isLandlord = this.currentRole === 'landlord';
-        const cards = document.querySelectorAll('.dashboard-cards .card');
         
         if (isLandlord) {
-            // Update landlord dashboard cards
-            if (cards.length >= 4) {
-                cards[0].querySelector('.card-value').textContent = stats.totalTenants || 0;
-                cards[1].querySelector('.card-value').textContent = stats.unpaidBills || 0;
-                cards[2].querySelector('.card-value').textContent = stats.openMaintenance || 0;
-                cards[3].querySelector('.card-value').textContent = `₱${(stats.totalRevenue || 0).toLocaleString()}`;
-                
-                // Update loading states
-                cards.forEach(card => {
-                    const changeElement = card.querySelector('.card-change');
-                    if (changeElement) {
-                        changeElement.innerHTML = '<i class="fas fa-check"></i> <span>Updated</span>';
-                        changeElement.className = 'card-change positive';
-                    }
-                });
-            }
+            // Update landlord dashboard cards with specific element IDs
+            const totalTenantsEl = document.getElementById('totalTenants');
+            const unpaidBillsEl = document.getElementById('unpaidBills');
+            const openMaintenanceEl = document.getElementById('openMaintenance');
+            const monthlyRevenueEl = document.getElementById('monthlyRevenue');
+            
+            if (totalTenantsEl) totalTenantsEl.textContent = stats.totalTenants || 0;
+            if (unpaidBillsEl) unpaidBillsEl.textContent = stats.unpaidBills || 0;
+            if (openMaintenanceEl) openMaintenanceEl.textContent = stats.openMaintenance || 0;
+            if (monthlyRevenueEl) monthlyRevenueEl.textContent = `₱${(stats.totalRevenue || 0).toLocaleString()}`;
+            
+            // Update loading states
+            const cards = document.querySelectorAll('.dashboard-cards .card');
+            cards.forEach(card => {
+                const changeElement = card.querySelector('.card-change');
+                if (changeElement) {
+                    changeElement.innerHTML = '<i class="fas fa-check"></i> <span>Updated</span>';
+                    changeElement.className = 'card-change positive';
+                }
+            });
         } else {
-            // Update tenant dashboard cards
-            if (cards.length >= 3) {
-                cards[0].querySelector('.card-value').textContent = 
-                    stats.nextPaymentDue ? new Date(stats.nextPaymentDue).toLocaleDateString() : 'No bills';
-                cards[1].querySelector('.card-value').textContent = stats.openMaintenance || 0;
-                cards[2].querySelector('.card-value').textContent = stats.unpaidBills || 0;
-                
-                // Update loading states
-                cards.forEach(card => {
-                    const changeElement = card.querySelector('.card-change');
-                    if (changeElement) {
-                        changeElement.innerHTML = '<i class="fas fa-check"></i> <span>Updated</span>';
-                        changeElement.className = 'card-change positive';
-                    }
-                });
-            }
+            // Update tenant dashboard cards...
         }
+        
+        console.log('✅ Dashboard updated with fresh data');
     }
 
     // ===== PAGE CONTENT METHODS =====
@@ -2367,31 +2677,34 @@ class CasaLink {
 
             await AuthManager.changePassword(currentPassword, newPassword);
             
-            // UPDATE: Mark password as changed and store current password
+            // CRITICAL: Update user document with password change but keep status as unverified
             await firebaseDb.collection('users').doc(this.currentUser.uid).update({
                 hasTemporaryPassword: false,
                 passwordChanged: true,
                 passwordChangedAt: new Date().toISOString(),
                 currentPassword: newPassword,
-                temporaryPassword: null
+                temporaryPassword: null,
+                // DO NOT set requiresPasswordChange to false here
+                // DO NOT set status to verified here
+                updatedAt: new Date().toISOString()
             });
             
             // Close password change modal
             ModalManager.closeModal(this.passwordChangeModal);
             
             // Show success message
-            this.showNotification('Password changed successfully!', 'success');
+            this.showNotification('Password changed successfully! Please review your lease agreement.', 'success');
             
-            // Update current user data
+            // Update current user data locally
             this.currentUser.hasTemporaryPassword = false;
             this.currentUser.passwordChanged = true;
-            this.currentUser.requiresPasswordChange = false;
             this.currentUser.currentPassword = newPassword;
+            // Keep requiresPasswordChange as true for now
             
-            // Show lease agreement and verification step
-            setTimeout(() => {
-                this.showLeaseAgreementVerification();
-            }, 1000);
+            console.log('🔄 Password change complete, showing lease agreement verification');
+            
+            // Immediately show lease agreement verification
+            this.showLeaseAgreementVerification();
             
         } catch (error) {
             console.error('Password change error:', error);
@@ -2550,7 +2863,7 @@ class CasaLink {
                 submitBtn.disabled = true;
             }
 
-            // Upload ID file to Firebase Storage (you'll need to implement this)
+            // Upload ID file to Firebase Storage
             const idFile = idUpload.files[0];
             const idUploadUrl = await this.uploadIdFile(idFile, this.currentUser.uid);
 
@@ -2563,16 +2876,18 @@ class CasaLink {
                 idVerified: false // Landlord can later verify the ID
             });
 
-            // Update user status to verified
+            // CRITICAL: Update user status to verified and mark onboarding complete
             await firebaseDb.collection('users').doc(this.currentUser.uid).update({
                 status: 'verified',
                 idUploadUrl: idUploadUrl,
                 verificationCompletedAt: new Date().toISOString(),
+                requiresPasswordChange: false, // NOW we set this to false
                 updatedAt: new Date().toISOString()
             });
 
             // Update current user data
             this.currentUser.status = 'verified';
+            this.currentUser.requiresPasswordChange = false;
 
             // Close modal
             ModalManager.closeModal(this.leaseVerificationModal);
@@ -2673,5 +2988,11 @@ class CasaLink {
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    window.casaLink = new CasaLink();
+    console.log('🏠 DOM Content Loaded - Initializing CasaLink...');
+    if (typeof CasaLink !== 'undefined') {
+        window.casaLink = new CasaLink();
+        console.log('✅ CasaLink initialized via DOMContentLoaded');
+    } else {
+        console.error('❌ CasaLink class not available');
+    }
 });

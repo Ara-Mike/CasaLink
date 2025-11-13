@@ -14,6 +14,9 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="msapplication-TileColor" content="#1A73E8">
     <meta name="msapplication-tap-highlight" content="no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     
     <!-- Icons -->
     <link rel="icon" type="image/png" href="icons/icon-72x72.png" sizes="72x72">
@@ -42,6 +45,33 @@
     
 </head>
 <body>
+    <!-- Emergency Service Worker unregistration -->
+    <script>
+        // Immediately unregister any existing Service Workers
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                registrations.forEach(function(registration) {
+                    console.log('🔄 Unregistering Service Worker:', registration.scope);
+                    registration.unregister().then(function(success) {
+                        if (success) {
+                            console.log('✅ Service Worker unregistered successfully');
+                        }
+                    });
+                });
+            });
+            
+            // Clear all caches
+            if ('caches' in window) {
+                caches.keys().then(function(cacheNames) {
+                    cacheNames.forEach(function(cacheName) {
+                        caches.delete(cacheName);
+                        console.log('🗑️ Deleted cache:', cacheName);
+                    });
+                });
+            }
+        }
+    </script>
+
     <div id="app">
         <!-- Loading spinner -->
         <div class="loading-spinner" id="loadingSpinner">
@@ -81,54 +111,196 @@
     </div>
 
     <!-- Scripts -->
-    <script src="js/sendpulseService.js"></script>
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    <script src="config/firebase.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/dataManager.js"></script>
-    <script src="js/modalManager.js"></script>
-    <script src="js/notificationManager.js"></script>
-    <script src="js/pwaManager.js"></script>
-    <script src="js/analytics.js"></script>
-    <script src="js/performance.js"></script>
-    <script src="js/app.js"></script>
 
     <script>
+        // Cache busting and sequential script loader
         (function() {
-            emailjs.init("9lGLo4WX9k1JISIEc");
+            const CACHE_BUSTER = 'v=1.0.3-' + new Date().getTime();
+            const scripts = [
+                'js/sendpulseService.js',
+                'config/firebase.js', 
+                'js/auth.js',
+                'js/dataManager.js',
+                'js/modalManager.js',
+                'js/notificationManager.js',
+                'js/pwaManager.js',
+                'js/analytics.js',
+                'js/performance.js',
+                'js/app.js'
+            ];
+
+            function loadScripts() {
+                if (scripts.length === 0) {
+                    // All scripts loaded, initialize app
+                    console.log('✅ All scripts loaded successfully');
+                    
+                    // Initialize EmailJS
+                    if (window.emailjs) {
+                        try {
+                            emailjs.init("9lGLo4WX9k1JISIEc");
+                            console.log('✅ EmailJS initialized');
+                        } catch (emailError) {
+                            console.warn('⚠️ EmailJS initialization failed:', emailError);
+                        }
+                    }
+                    
+                    // Initialize app features and start CasaLink
+                    setTimeout(() => {
+                        console.log('🚀 Starting CasaLink application...');
+                        
+                        // Check if Firebase is available before initializing CasaLink
+                        if (typeof firebase === 'undefined') {
+                            console.error('❌ Firebase SDK not loaded - cannot start app');
+                            showFirebaseError();
+                            return;
+                        }
+                        
+                        // Initialize CasaLink app
+                        if (typeof CasaLink !== 'undefined') {
+                            try {
+                                window.casaLink = new CasaLink();
+                                console.log('✅ CasaLink app initialized');
+                            } catch (appError) {
+                                console.error('❌ CasaLink initialization failed:', appError);
+                                showAppError();
+                            }
+                        } else {
+                            console.error('❌ CasaLink class not found');
+                            showAppError();
+                        }
+                        
+                        // Initialize other features
+                        initializeManagers();
+                        
+                    }, 100);
+                    
+                    return;
+                }
+
+                const scriptUrl = scripts.shift() + '?' + CACHE_BUSTER;
+                console.log('📦 Loading:', scriptUrl);
+                
+                const script = document.createElement('script');
+                script.src = scriptUrl;
+                script.onload = function() {
+                    console.log('✅ Loaded:', scriptUrl);
+                    loadScripts();
+                };
+                script.onerror = function() {
+                    console.error('❌ Failed to load:', scriptUrl);
+                    // Continue with next script even if one fails
+                    setTimeout(loadScripts, 100);
+                };
+                document.head.appendChild(script);
+            }
+
+            function initializeManagers() {
+                try {
+                    if (window.PWAManager) {
+                        PWAManager.init();
+                    }
+                    if (window.AnalyticsManager) {
+                        AnalyticsManager.init();
+                    }
+                    if (window.PerformanceOptimizer) {
+                        PerformanceOptimizer.init();
+                    }
+                    
+                    // Hide loading spinner after a delay
+                    setTimeout(() => {
+                        const spinner = document.getElementById('loadingSpinner');
+                        if (spinner) {
+                            spinner.style.display = 'none';
+                        }
+                    }, 2000);
+                } catch (managerError) {
+                    console.warn('⚠️ Manager initialization failed:', managerError);
+                }
+            }
+
+            function showFirebaseError() {
+                const appElement = document.getElementById('app');
+                if (appElement) {
+                    appElement.innerHTML = `
+                        <div class="login-container">
+                            <div class="login-left">
+                                <div class="login-content">
+                                    <div class="login-logo">
+                                        <i class="fas fa-home"></i>
+                                        <span>CasaLink</span>
+                                    </div>
+                                    <h1 class="login-title">Smart Living, Simplified</h1>
+                                    <p class="login-subtitle">Manage your properties and tenant relationships</p>
+                                </div>
+                            </div>
+                            <div class="login-right">
+                                <div style="text-align: center; padding: 40px;">
+                                    <h2>Firebase Error</h2>
+                                    <p>Failed to load Firebase services. Please check your connection.</p>
+                                    <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            function showAppError() {
+                const appElement = document.getElementById('app');
+                if (appElement) {
+                    appElement.innerHTML = `
+                        <div class="login-container">
+                            <div class="login-left">
+                                <div class="login-content">
+                                    <div class="login-logo">
+                                        <i class="fas fa-home"></i>
+                                        <span>CasaLink</span>
+                                    </div>
+                                    <h1 class="login-title">Smart Living, Simplified</h1>
+                                    <p class="login-subtitle">Manage your properties and tenant relationships</p>
+                                </div>
+                            </div>
+                            <div class="login-right">
+                                <div style="text-align: center; padding: 40px;">
+                                    <h2>Application Error</h2>
+                                    <p>Failed to initialize the application. Please refresh the page.</p>
+                                    <button class="btn btn-primary" onclick="window.location.reload()">Retry</button>
+                                    <button class="btn btn-secondary" onclick="clearCacheAndReload()" style="margin-top: 10px;">
+                                        Clear Cache & Retry
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            // Clear cache function
+            window.clearCacheAndReload = function() {
+                if ('caches' in window) {
+                    caches.keys().then(function(cacheNames) {
+                        cacheNames.forEach(function(cacheName) {
+                            caches.delete(cacheName);
+                        });
+                    });
+                }
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                        registrations.forEach(function(registration) {
+                            registration.unregister();
+                        });
+                    });
+                }
+                localStorage.clear();
+                sessionStorage.clear();
+                window.location.reload();
+            };
+
+            // Start loading scripts
+            loadScripts();
         })();
     </script>
-    
 
-    <script>
-        // Initialize PWA features
-        document.addEventListener('DOMContentLoaded', () => {
-            if (window.PWAManager) {
-                PWAManager.init();
-            }
-            if (window.AnalyticsManager) {
-                AnalyticsManager.init();
-            }
-            if (window.PerformanceOptimizer) {
-                PerformanceOptimizer.init();
-            }
-            
-            // Hide loading spinner after app initializes
-            setTimeout(() => {
-                const spinner = document.getElementById('loadingSpinner');
-                if (spinner) {
-                    spinner.style.display = 'none';
-                }
-            }, 1000);
-        });
-
-        // Global error handler
-        window.addEventListener('error', (event) => {
-            console.error('Global error:', event.error);
-            if (window.casaLink) {
-                window.casaLink.showNotification('An error occurred. Please refresh the page.', 'error');
-            }
-        });
-    </script>
 </body>
 </html>

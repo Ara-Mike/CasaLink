@@ -13,6 +13,23 @@
     --transition: all 0.3s ease;
 }
 
+/* Dashboard loading states */
+.card-change.loading {
+    color: var(--dark-gray);
+}
+
+.card-change.loading i {
+    color: var(--primary-blue);
+}
+
+.card-change.positive {
+    color: var(--success);
+}
+
+.card-change.negative {
+    color: var(--danger);
+}
+
 /* Lease Verification Modal Styles */
 .lease-verification-modal {
     line-height: 1.6;

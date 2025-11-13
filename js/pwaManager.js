@@ -3,11 +3,16 @@ class PWAManager {
   static isInstalled = false;
 
   static init() {
-    this.setupInstallPrompt();
-    this.setupOfflineDetection();
-    this.registerServiceWorker();
-    this.checkPWAStatus();
-  }
+        this.setupInstallPrompt();
+        this.setupOfflineDetection();
+        this.registerServiceWorker();
+        this.checkPWAStatus();
+        
+        // Handle cache issues on startup
+        setTimeout(() => {
+            this.handleCacheIssues();
+        }, 2000);
+    }
 
   static setupInstallPrompt() {
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -56,32 +61,12 @@ class PWAManager {
   }
 
   static async registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      try {
-        // Register from root location
-        const registration = await navigator.serviceWorker.register('/sw.js', {
-          scope: '/'
-        });
-        console.log('ServiceWorker registered successfully:', registration);
-
-        // Check for updates
-        registration.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          console.log('New service worker found...');
-          
-          newWorker.addEventListener('statechange', () => {
-            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-              console.log('New service worker installed, update available');
-              this.showUpdateNotification();
-            }
-          });
-        });
-
-      } catch (error) {
-        console.error('ServiceWorker registration failed:', error);
-      }
+        // Don't auto-register on page load
+        // Let the user decide when to install PWA
+        console.log('ℹ️ Service Worker registration deferred');
+        return null;
     }
-  }
+
 
   static showInstallPromotion() {
     // Only show prompt if not already installed and user is engaged
@@ -126,63 +111,36 @@ class PWAManager {
   }
 
   static async installPWA() {
-    if (!this.deferredPrompt) {
-      console.log('No install prompt available');
-      
-      // Show message to user
-      if (window.casaLink) {
-        window.casaLink.showNotification(
-          'Installation not available. Try using your browser\'s menu to install.',
-          'info'
-        );
-      }
-      return;
-    }
+        if (!this.deferredPrompt) {
+            console.log('No install prompt available');
+            return;
+        }
 
-    try {
-      console.log('Showing install prompt to user');
-      
-      // Show the install prompt
-      this.deferredPrompt.prompt();
-      
-      // Wait for the user to respond to the prompt
-      const { outcome } = await this.deferredPrompt.userChoice;
-      
-      console.log(`User response to install prompt: ${outcome}`);
-      
-      if (outcome === 'accepted') {
-        console.log('User accepted the PWA installation');
-        
-        // Show success message
-        if (window.casaLink) {
-          window.casaLink.showNotification('CasaLink is being installed...', 'success');
+        try {
+            // Only register Service Worker when user chooses to install
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('/sw.js', {
+                        scope: '/'
+                    });
+                    console.log('Service Worker registered after user consent');
+                } catch (error) {
+                    console.error('Service Worker registration failed:', error);
+                }
+            }
+
+            // Continue with installation prompt
+            this.deferredPrompt.prompt();
+            const { outcome } = await this.deferredPrompt.userChoice;
+            
+            console.log(`User response to install prompt: ${outcome}`);
+            this.deferredPrompt = null;
+            this.hideInstallPromotion();
+            
+        } catch (error) {
+            console.error('Error during PWA installation:', error);
         }
-      } else {
-        console.log('User dismissed the PWA install prompt');
-        
-        // Show message that they can install later
-        if (window.casaLink) {
-          window.casaLink.showNotification(
-            'You can install CasaLink anytime from your browser menu.',
-            'info'
-          );
-        }
-      }
-      
-      // Clear the deferredPrompt for garbage collection
-      this.deferredPrompt = null;
-      
-      // Hide our custom promotion
-      this.hideInstallPromotion();
-      
-    } catch (error) {
-      console.error('Error during PWA installation:', error);
-      
-      if (window.casaLink) {
-        window.casaLink.showNotification('Installation failed. Please try again.', 'error');
-      }
     }
-  }
 
   static updateOnlineStatus(online) {
     const indicator = document.getElementById('offlineIndicator');
@@ -294,6 +252,42 @@ class PWAManager {
       updateElement.style.display = 'none';
     }
   }
+
+  static async clearProblematicCaches() {
+        if ('caches' in window) {
+            try {
+                const cacheNames = await caches.keys();
+                const deletions = cacheNames.map(cacheName => {
+                    if (cacheName.startsWith('casalink-')) {
+                        console.log('🗑️ Clearing cache:', cacheName);
+                        return caches.delete(cacheName);
+                    }
+                });
+                await Promise.all(deletions);
+                console.log('✅ All problematic caches cleared');
+            } catch (error) {
+                console.error('❌ Error clearing caches:', error);
+            }
+        }
+    }
+
+    static async handleCacheIssues() {
+        // Check if we're having cache issues by testing a key file
+        try {
+            const response = await fetch('/config/firebase.js?t=' + Date.now());
+            if (!response.ok) {
+                throw new Error('File fetch failed');
+            }
+            console.log('✅ Cache check passed');
+        } catch (error) {
+            console.warn('⚠️ Cache issue detected, clearing caches...');
+            await this.clearProblematicCaches();
+            // Reload the page after clearing cache
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        }
+    }
 }
 
 // Make available globally
