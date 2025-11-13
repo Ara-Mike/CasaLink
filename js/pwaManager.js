@@ -323,6 +323,12 @@ class PWAManager {
             promptAvailable: this.promptAvailable
         });
     }
+
+    static resetForNewSession() {
+        console.log('🔄 Reset for new session (compatibility method)');
+        // This is now handled automatically in the init method
+        // No need to manually reset anymore
+    }
 }
 
 // Make available globally
