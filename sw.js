@@ -1,5 +1,23 @@
-// sw.js - Enhanced PWA Service Worker
-const CACHE_NAME = 'casalink-pwa-v1.2.0';
+self.addEventListener('install', (event) => {
+    console.log('🚀 Service Worker: INSTALLING - Skipping waiting immediately');
+    self.skipWaiting(); // Force activation without waiting
+    event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener('activate', (event) => {
+    console.log('🎯 Service Worker: ACTIVATING - Claiming clients immediately');
+    event.waitUntil(
+        Promise.all([
+            self.clients.claim(), // Take control of all pages
+            self.skipWaiting() // Skip any waiting phase
+        ]).then(() => {
+            console.log('✅ Service Worker: ACTIVATED and CONTROLLING');
+        })
+    );
+});
+
+
+const CACHE_NAME = 'casalink-pwa-v3.0.0';
 const URLS_TO_CACHE = [
   '/',
   '/index.html',
@@ -11,103 +29,107 @@ const URLS_TO_CACHE = [
   '/js/dataManager.js',
   '/js/modalManager.js',
   '/js/pwaManager.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap'
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png'
 ];
 
-// Install event - cache essential files
+// Install event - Force immediate activation
 self.addEventListener('install', (event) => {
-  console.log('🚀 Service Worker: Installing...');
+  console.log('🚀 Service Worker: Installing and activating immediately...');
+  
+  // Skip waiting to activate immediately
+  self.skipWaiting();
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('📦 Service Worker: Caching app shell');
+        console.log('📦 Caching app shell');
         return cache.addAll(URLS_TO_CACHE);
       })
       .then(() => {
-        console.log('✅ Service Worker: App shell cached');
-        return self.skipWaiting();
-      })
-      .catch((error) => {
-        console.error('❌ Service Worker: Cache installation failed:', error);
+        console.log('✅ App shell cached successfully');
+        return self.skipWaiting(); // Force activation
       })
   );
 });
 
-// Activate event - clean up old caches
+// Activate event - Take control immediately
 self.addEventListener('activate', (event) => {
-  console.log('🎯 Service Worker: Activating...');
+  console.log('🎯 Service Worker: Activating and claiming clients...');
+  
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('🗑️ Service Worker: Deleting old cache', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => {
-      console.log('✅ Service Worker: Activated and ready');
-      return self.clients.claim();
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheName !== CACHE_NAME) {
+              console.log('🗑️ Deleting old cache:', cacheName);
+              return caches.delete(cacheName);
+            }
+          })
+        );
+      }),
+      // Take control of all clients immediately
+      self.clients.claim()
+    ]).then(() => {
+      console.log('✅ Service Worker activated and controlling page!');
+      // Send message to all clients that we're ready
+      self.clients.matchAll().then((clients) => {
+        clients.forEach((client) => {
+          client.postMessage({
+            type: 'SW_CONTROLLING',
+            message: 'Service Worker is now controlling the page'
+          });
+        });
+      });
     })
   );
 });
 
-// Fetch event - Network first strategy
+// Fetch event - Simple cache-first strategy
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
-
-  // Skip Chrome extensions
-  if (event.request.url.startsWith('chrome-extension://')) return;
+  // Skip non-GET requests and browser extensions
+  if (event.request.method !== 'GET' || 
+      event.request.url.startsWith('chrome-extension://')) {
+    return;
+  }
 
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cache successful responses (except analytics)
-        if (response.status === 200 && !event.request.url.includes('google-analytics')) {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
+    caches.match(event.request)
+      .then((cachedResponse) => {
+        // Return cached version if available
+        if (cachedResponse) {
+          return cachedResponse;
         }
-        return response;
-      })
-      .catch(() => {
-        // Network failed, try cache
-        return caches.match(event.request)
-          .then((cachedResponse) => {
-            if (cachedResponse) {
-              return cachedResponse;
+        
+        // Otherwise fetch from network
+        return fetch(event.request)
+          .then((response) => {
+            // Cache successful responses
+            if (response.status === 200) {
+              const responseToCache = response.clone();
+              caches.open(CACHE_NAME)
+                .then((cache) => {
+                  cache.put(event.request, responseToCache);
+                });
             }
-            // If HTML request, return the app shell
+            return response;
+          })
+          .catch(() => {
+            // Network failed - return offline page for HTML
             if (event.request.destination === 'document') {
               return caches.match('/index.html');
             }
-            // Return a fallback for images
-            if (event.request.destination === 'image') {
-              return new Response(
-                '<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#f0f0f0"/><text x="50" y="50" font-family="Arial" font-size="10" text-anchor="middle" fill="#666">Image</text></svg>',
-                { headers: { 'Content-Type': 'image/svg+xml' } }
-              );
-            }
+            return new Response('Offline');
           });
       })
   );
 });
 
-// Background sync for offline actions
-self.addEventListener('sync', (event) => {
-  console.log('🔄 Background sync:', event.tag);
-  
-  if (event.tag === 'background-sync') {
-    event.waitUntil(doBackgroundSync());
+// Message event - Handle communication from main thread
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
-
-async function doBackgroundSync() {
-  // Sync pending actions when back online
-  console.log('🔄 Performing background sync...');
-}

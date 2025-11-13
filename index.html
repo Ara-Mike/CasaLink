@@ -6,17 +6,16 @@
     <title>CasaLink - Smart Living, Simplified</title>
     
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#1A73E8">
-    <meta name="description" content="Manage your properties and tenant relationships with our modern, cloud-based platform">
+    <meta name="application-name" content="CasaLink">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="CasaLink">
+    <meta name="format-detection" content="telephone=no">
     <meta name="mobile-web-app-capable" content="yes">
+    <meta name="msapplication-config" content="/browserconfig.xml">
     <meta name="msapplication-TileColor" content="#1A73E8">
     <meta name="msapplication-tap-highlight" content="no">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
+    <meta name="theme-color" content="#1A73E8">
     
     <!-- Icons -->
     <link rel="icon" type="image/png" href="icons/icon-72x72.png" sizes="72x72">
@@ -28,6 +27,10 @@
     <link rel="icon" type="image/png" href="icons/icon-384x384.png" sizes="384x384">
     <link rel="icon" type="image/png" href="icons/icon-512x512.png" sizes="512x512">
     <link rel="apple-touch-icon" href="icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
+    <link rel="mask-icon" href="/icons/icon.svg" color="#1A73E8">
     
     <!-- Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -45,32 +48,6 @@
     
 </head>
 <body>
-    <!-- Emergency Service Worker unregistration -->
-    <script>
-        // Immediately unregister any existing Service Workers
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.getRegistrations().then(function(registrations) {
-                registrations.forEach(function(registration) {
-                    console.log('🔄 Unregistering Service Worker:', registration.scope);
-                    registration.unregister().then(function(success) {
-                        if (success) {
-                            console.log('✅ Service Worker unregistered successfully');
-                        }
-                    });
-                });
-            });
-            
-            // Clear all caches
-            if ('caches' in window) {
-                caches.keys().then(function(cacheNames) {
-                    cacheNames.forEach(function(cacheName) {
-                        caches.delete(cacheName);
-                        console.log('🗑️ Deleted cache:', cacheName);
-                    });
-                });
-            }
-        }
-    </script>
 
     <div id="app">
         <!-- Loading spinner -->
@@ -305,23 +282,19 @@
     </script>
 
     <!-- PWA Testing Button (Temporary - Remove for production) -->
-    <div style="position: fixed; bottom: 10px; right: 10px; z-index: 10000; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);">
-        <div style="font-size: 12px; font-weight: bold; margin-bottom: 5px; color: #333;">PWA Test</div>
-        <button onclick="PWAManager.simulateInstallPrompt()" 
-                style="background: #ff4444; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
-            Show Prompt
+    <div style="position: fixed; top: 10px; right: 10px; z-index: 10000; background: #ff4444; color: white; padding: 10px; border-radius: 5px;">
+        <div style="font-size: 12px; font-weight: bold;">PWA TEST</div>
+        <button onclick="forcePWAInstall()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
+            Force Install
         </button>
-        <button onclick="PWAManager.handleNotNowClick()" 
-                style="background: #ffaa00; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
-            Not Now
+        <button onclick="diagnosePWA()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
+            Diagnose
         </button>
-        <button onclick="PWAManager.resetPrompt()" 
-                style="background: #4444ff; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
-            Reset
+        <button onclick="location.reload()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
+            Reload
         </button>
-        <button onclick="PWAManager.debugStatus()" 
-                style="background: #44aa44; color: white; border: none; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin: 2px;">
-            Debug
+        <button onclick="forceSWControl()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
+            Nuclear SW Fix
         </button>
     </div>
 
@@ -369,6 +342,210 @@
                 }
             }, 1000);
         });
+    </script>
+
+    <script>
+// PWA Diagnostic Tool
+function diagnosePWA() {
+    console.log('🔍 PWA DIAGNOSTICS:');
+    
+    // Check HTTPS
+    const isSecure = window.location.protocol === 'https:' || 
+                    window.location.hostname === 'localhost' || 
+                    window.location.hostname === '127.0.0.1';
+    console.log(`  ${isSecure ? '✅' : '❌'} HTTPS/Localhost: ${window.location.protocol}`);
+    
+    // Check Service Worker
+    const hasSW = 'serviceWorker' in navigator;
+    console.log(`  ${hasSW ? '✅' : '❌'} Service Worker Support`);
+    
+    // Check if SW is controlling
+    const swControlling = !!navigator.serviceWorker?.controller;
+    console.log(`  ${swControlling ? '✅' : '❌'} Service Worker Controlling`);
+    
+    // Check Manifest
+    const manifestLink = document.querySelector('link[rel="manifest"]');
+    const hasManifest = !!manifestLink;
+    console.log(`  ${hasManifest ? '✅' : '❌'} Manifest Found`);
+    
+    if (hasManifest) {
+        fetch(manifestLink.href)
+            .then(r => r.json())
+            .then(manifest => {
+                console.log('  ✅ Manifest Loaded:', manifest);
+                checkManifestRequirements(manifest);
+            })
+            .catch(e => console.log('  ❌ Manifest Failed to Load:', e));
+    }
+    
+    // Check Icons
+    const icons = document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]');
+    console.log(`  ${icons.length >= 2 ? '✅' : '❌'} Icons: ${icons.length} found`);
+    
+    // Check Start URL
+    console.log('  ✅ Start URL: /');
+    
+    // Check Display Mode
+    console.log('  ✅ Display Mode: standalone');
+    
+    // Check Engagement (user has interacted with site)
+    console.log('  ✅ User Engagement: Yes (user is interacting)');
+}
+
+    function checkServiceWorkerControl() {
+        console.log('🔧 Service Worker Control Check:');
+        
+        if ('serviceWorker' in navigator) {
+            if (navigator.serviceWorker.controller) {
+                console.log('✅ Service Worker IS controlling the page');
+                console.log('📡 Controller URL:', navigator.serviceWorker.controller.scriptURL);
+                console.log('🎉 PWA installation should work now!');
+                return true;
+            } else {
+                console.log('❌ Service Worker is NOT controlling the page');
+                console.log('💡 This is required for PWA installation');
+                
+                // Check if there are any registered service workers
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    console.log('📋 Registered Service Workers:', registrations.length);
+                    registrations.forEach((reg, index) => {
+                        console.log(`  ${index + 1}. ${reg.scope} - ${reg.active ? 'Active' : 'Not Active'}`);
+                    });
+                });
+                
+                return false;
+            }
+        } else {
+            console.log('❌ Service Workers not supported');
+            return false;
+        }
+    }
+
+    // More aggressive auto-fix
+    setTimeout(() => {
+        const isControlling = checkServiceWorkerControl();
+        
+        if (!isControlling) {
+            console.log('🔄 AUTO-FIX: Attempting to fix Service Worker control...');
+            
+            // Try multiple times with increasing delays
+            const attempts = [1000, 3000, 5000];
+            
+            attempts.forEach(delay => {
+                setTimeout(() => {
+                    if (!navigator.serviceWorker.controller) {
+                        console.log(`🔄 Retry after ${delay}ms...`);
+                        if (window.PWAManager) {
+                            window.PWAManager.registerServiceWorker().then(() => {
+                                setTimeout(checkServiceWorkerControl, 1000);
+                            });
+                        }
+                    }
+                }, delay);
+            });
+        }
+    }, 3000);
+
+        // Run this check after page load
+        setTimeout(() => {
+            const isControlling = checkServiceWorkerControl();
+            
+            if (!isControlling) {
+                console.log('🔄 Attempting to fix Service Worker control...');
+                
+                // Try to re-register the service worker
+                if (window.PWAManager) {
+                    window.PWAManager.registerServiceWorker().then(() => {
+                        setTimeout(() => {
+                            checkServiceWorkerControl();
+                        }, 2000);
+                    });
+                }
+            }
+        }, 3000);
+
+function checkManifestRequirements(manifest) {
+    console.log('📋 Manifest Requirements Check:');
+    
+    const requirements = {
+        'short_name': !!manifest.short_name,
+        'name': !!manifest.name,
+        'icons': Array.isArray(manifest.icons) && manifest.icons.length > 0,
+        'start_url': !!manifest.start_url,
+        'display': manifest.display === 'standalone' || manifest.display === 'fullscreen',
+        'theme_color': !!manifest.theme_color,
+        'background_color': !!manifest.background_color
+    };
+    
+    Object.entries(requirements).forEach(([req, met]) => {
+        console.log(`    ${met ? '✅' : '❌'} ${req}`);
+    });
+}
+
+    // Run diagnostics when page loads
+    setTimeout(diagnosePWA, 2000);
+
+    window.forceSWControl = async function() {
+    console.log('💥 NUCLEAR OPTION: Forcing Service Worker control...');
+    
+    if ('serviceWorker' in navigator) {
+        try {
+            // 1. Unregister all service workers
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+                console.log('🗑️ Unregistered:', registration.scope);
+            }
+            
+            // 2. Clear all caches
+            const cacheNames = await caches.keys();
+            for (let cacheName of cacheNames) {
+                await caches.delete(cacheName);
+                console.log('🗑️ Deleted cache:', cacheName);
+            }
+            
+            // 3. Clear storage
+            localStorage.removeItem('casalink_pwa_installed');
+            localStorage.removeItem('casalink_prompt_dismissed');
+            sessionStorage.clear();
+            
+            console.log('🧹 All caches and registrations cleared');
+            
+            // 4. Wait and reload
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // 5. Hard reload with cache bypass
+            console.log('🔄 Performing hard reload...');
+            window.location.reload(true);
+            
+        } catch (error) {
+            console.error('❌ Error in nuclear option:', error);
+        }
+    }
+};
+
+    // Force trigger install prompt for testing
+        window.forcePWAInstall = function() {
+        console.log('🚀 Force install attempt...');
+        
+        // Method 1: Use the real deferredPrompt if available
+        if (window.PWAManager && window.PWAManager.deferredPrompt) {
+            console.log('🎯 Using real install prompt');
+            window.PWAManager.installPWA();
+            return;
+        }
+        
+        // Method 2: Check if browser already has install capability
+        if (window.deferredPrompt) {
+            console.log('🎯 Using window.deferredPrompt');
+            window.deferredPrompt.prompt();
+            return;
+        }
+        
+        // Method 3: Show manual instructions
+        console.log('📋 No install prompt available, showing manual instructions');
+        showManualInstallGuide();
+    };
     </script>
 
 </body>

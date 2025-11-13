@@ -623,6 +623,10 @@ class CasaLink {
             day: 'numeric'
         }) : 'Not specified';
 
+        // Format payment schedule
+        const paymentDay = lease.paymentDueDay || 'Not specified';
+        const paymentSchedule = this.getPaymentScheduleText(paymentDay);
+
         const modalContent = `
             <div class="lease-agreement-view-modal" style="max-height: 80vh; overflow-y: auto;">
                 <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
@@ -651,6 +655,23 @@ class CasaLink {
                             <strong>Security Deposit:</strong><br>
                             ₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}
                         </div>
+                        <div>
+                            <strong>Payment Method:</strong><br>
+                            ${lease.paymentMethod || 'Cash'}
+                        </div>
+                        <div>
+                            <strong>Agreed Payment Schedule:</strong><br>
+                            ${paymentSchedule}
+                        </div>
+                    </div>
+                    
+                    <!-- Payment Schedule Details -->
+                    <div style="margin-top: 15px; padding: 15px; background: rgba(26, 115, 232, 0.05); border-radius: 6px; border-left: 3px solid var(--primary-blue);">
+                        <strong style="color: var(--primary-blue);">📅 Payment Instructions:</strong><br>
+                        <small style="color: var(--dark-gray);">
+                            Rent payments are due on the <strong>${paymentDay}${this.getOrdinalSuffix(paymentDay)}</strong> of each month. 
+                            Late payments may incur penalties as per the agreement terms.
+                        </small>
                     </div>
                 </div>
 
@@ -683,7 +704,9 @@ class CasaLink {
                         
                         <li style="margin-bottom: 10px;"><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
                         
-                        <li style="margin-bottom: 10px;"><strong>Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
+                        <li style="margin-bottom: 10px;"><strong>Payment Schedule</strong> - Monthly rental payment of <strong>₱${lease.monthlyRent ? lease.monthlyRent.toLocaleString() : '0'}</strong> is due on the <strong>${paymentDay}${this.getOrdinalSuffix(paymentDay)}</strong> day of each month. Late payments will incur penalties as specified in this agreement.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Utilities Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
                         
                         <li style="margin-bottom: 10px;"><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
                         
@@ -699,7 +722,7 @@ class CasaLink {
                     </ol>
 
                     <p style="margin-top: 20px; padding: 15px; background: rgba(26, 115, 232, 0.1); border-radius: 8px;">
-                        <strong>14. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
+                        <strong>15. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
                         <strong>${leaseStart}</strong>
                     </p>
 
@@ -729,22 +752,44 @@ class CasaLink {
         `;
 
         const modal = ModalManager.openModal(modalContent, {
-        title: 'Lease Agreement & Terms',
-        submitText: 'Close',
-        showFooter: true,
-        onSubmit: () => ModalManager.closeModal(modal),
-        extraButtons: [
-            {
-                text: '<i class="fas fa-print"></i> Print',
-                className: 'btn btn-secondary',
-                onClick: () => this.printLeaseAgreement()
-            }
-        ]
-    });
+            title: 'Lease Agreement & Terms',
+            submitText: 'Close',
+            showFooter: true,
+            onSubmit: () => ModalManager.closeModal(modal),
+            extraButtons: [
+                {
+                    text: '<i class="fas fa-print"></i> Print',
+                    className: 'btn btn-secondary',
+                    onClick: () => this.printLeaseAgreement()
+                }
+            ]
+        });
 
         // Store reference to the modal
         this.leaseViewModal = modal;
-        this.currentLeaseData = lease;
+    }
+
+    getPaymentScheduleText(paymentDay) {
+        if (!paymentDay || paymentDay === 'Not specified') return 'Not specified';
+        
+        const day = parseInt(paymentDay);
+        if (isNaN(day)) return paymentDay;
+        
+        return `Every ${day}${this.getOrdinalSuffix(day)} of the month`;
+    }
+
+    getOrdinalSuffix(day) {
+        if (!day || typeof day !== 'number') return '';
+        
+        if (day >= 11 && day <= 13) return 'th';
+        
+        const lastDigit = day % 10;
+        switch (lastDigit) {
+            case 1: return 'st';
+            case 2: return 'nd';
+            case 3: return 'rd';
+            default: return 'th';
+        }
     }
 
     printLeaseAgreement() {
@@ -1789,6 +1834,12 @@ class CasaLink {
     getLoginHTML() {
         return `
         <div class="login-container">
+            <div style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+                <button class="btn btn-secondary" onclick="PWAManager.forceInstallPrompt()" 
+                        style="padding: 8px 12px; font-size: 0.8rem;">
+                    <i class="fas fa-download"></i> Install App
+                </button>
+            </div>
             <div class="login-left">
                 <div class="login-content">
                     <div class="login-logo">
@@ -2314,8 +2365,205 @@ class CasaLink {
         `;
     }
 
+    async getAvailableRooms() {
+        try {
+            console.log('🔄 Fetching available rooms...');
+            
+            const roomsSnapshot = await firebaseDb.collection('rooms')
+                .where('isAvailable', '==', true)
+                .get();
+            
+            if (roomsSnapshot.empty) {
+                console.log('📦 No available rooms found, creating default rooms collection...');
+                return await this.createDefaultRooms();
+            }
+            
+            const rooms = roomsSnapshot.docs.map(doc => ({
+                id: doc.id, // This will now be the room number (e.g., "1A", "2B")
+                roomNumber: doc.id, // Use document ID as room number
+                ...doc.data()
+            }));
+            
+            console.log(`✅ Found ${rooms.length} available rooms:`, rooms.map(r => r.roomNumber));
+            return rooms;
+            
+        } catch (error) {
+            console.error('❌ Error fetching available rooms:', error);
+            // Fallback to creating default rooms
+            return await this.createDefaultRooms();
+        }
+    }
+
+    async createDefaultRooms() {
+        try {
+            console.log('🏗️ Creating default rooms collection...');
+            
+            const defaultRooms = [
+                // 1st floor: 1A-1E - 10,000 PHP
+                { roomNumber: '1A', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1B', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1C', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1D', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1E', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
+                
+                // 1st floor: 2A-2E - 12,000 PHP
+                { roomNumber: '2A', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2B', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2C', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2D', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2E', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
+                
+                // 1st floor: 3A-3E - 14,000 PHP
+                { roomNumber: '3A', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3B', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3C', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3D', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3E', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
+                
+                // 1st floor: 4A-4E - 15,000 PHP
+                { roomNumber: '4A', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4B', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4C', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4D', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4E', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
+                
+                // 1st floor: 5A-5B - 15,500 PHP
+                { roomNumber: '5A', floor: '1', monthlyRent: 15500, securityDeposit: 15500, isAvailable: true, occupiedBy: null },
+                { roomNumber: '5B', floor: '1', monthlyRent: 15500, securityDeposit: 15500, isAvailable: true, occupiedBy: null }
+            ];
+            
+            const batch = firebaseDb.batch();
+            const createdRooms = [];
+            
+            defaultRooms.forEach(room => {
+                // Use roomNumber as the document ID instead of auto-generated ID
+                const roomRef = firebaseDb.collection('rooms').doc(room.roomNumber);
+                batch.set(roomRef, {
+                    floor: room.floor,
+                    monthlyRent: room.monthlyRent,
+                    securityDeposit: room.securityDeposit,
+                    isAvailable: room.isAvailable,
+                    occupiedBy: room.occupiedBy,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                createdRooms.push({
+                    id: room.roomNumber, // Use roomNumber as ID
+                    roomNumber: room.roomNumber,
+                    floor: room.floor,
+                    monthlyRent: room.monthlyRent,
+                    securityDeposit: room.securityDeposit,
+                    isAvailable: room.isAvailable,
+                    occupiedBy: room.occupiedBy
+                });
+            });
+            
+            await batch.commit();
+            console.log('✅ Created default rooms collection with 22 available units');
+            
+            return createdRooms;
+            
+        } catch (error) {
+            console.error('❌ Error creating default rooms:', error);
+            // Return hardcoded rooms as fallback
+            return this.getHardcodedRooms();
+        }
+    }
+
+    getHardcodedRooms() {
+        // Fallback hardcoded rooms in case Firestore fails
+        return [
+            { id: '1A', roomNumber: '1A', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true },
+            { id: '1B', roomNumber: '1B', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true },
+            { id: '1C', roomNumber: '1C', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true },
+            { id: '1D', roomNumber: '1D', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true },
+            { id: '1E', roomNumber: '1E', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true },
+            { id: '2A', roomNumber: '2A', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true },
+            { id: '2B', roomNumber: '2B', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true },
+            { id: '2C', roomNumber: '2C', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true },
+            { id: '2D', roomNumber: '2D', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true },
+            { id: '2E', roomNumber: '2E', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true },
+            { id: '3A', roomNumber: '3A', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true },
+            { id: '3B', roomNumber: '3B', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true },
+            { id: '3C', roomNumber: '3C', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true },
+            { id: '3D', roomNumber: '3D', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true },
+            { id: '3E', roomNumber: '3E', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true },
+            { id: '4A', roomNumber: '4A', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true },
+            { id: '4B', roomNumber: '4B', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true },
+            { id: '4C', roomNumber: '4C', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true },
+            { id: '4D', roomNumber: '4D', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true },
+            { id: '4E', roomNumber: '4E', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true },
+            { id: '5A', roomNumber: '5A', monthlyRent: 15500, securityDeposit: 15500, isAvailable: true },
+            { id: '5B', roomNumber: '5B', monthlyRent: 15500, securityDeposit: 15500, isAvailable: true }
+        ];
+    }
+
+    setupRoomSelection() {
+        const roomSelect = document.getElementById('roomNumber');
+        const rentalAmountInput = document.getElementById('rentalAmount');
+        const securityDepositInput = document.getElementById('securityDeposit');
+        
+        if (roomSelect) {
+            roomSelect.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                if (selectedOption.value) {
+                    const rent = selectedOption.getAttribute('data-rent');
+                    const deposit = selectedOption.getAttribute('data-deposit');
+                    
+                    rentalAmountInput.value = rent || '';
+                    securityDepositInput.value = deposit || '';
+                } else {
+                    rentalAmountInput.value = '';
+                    securityDepositInput.value = '';
+                }
+            });
+        }
+    }
+
+    async debugRoomAvailability() {
+        try {
+            const allRoomsSnapshot = await firebaseDb.collection('rooms').get();
+            const availableRoomsSnapshot = await firebaseDb.collection('rooms')
+                .where('isAvailable', '==', true)
+                .get();
+            
+            console.log('🐛 Room Availability Debug:', {
+                totalRooms: allRoomsSnapshot.size,
+                availableRooms: availableRoomsSnapshot.size,
+                occupiedRooms: allRoomsSnapshot.size - availableRoomsSnapshot.size,
+                availableRoomNumbers: availableRoomsSnapshot.docs.map(doc => doc.data().roomNumber)
+            });
+            
+            return {
+                total: allRoomsSnapshot.size,
+                available: availableRoomsSnapshot.size,
+                occupied: allRoomsSnapshot.size - availableRoomsSnapshot.size
+            };
+        } catch (error) {
+            console.error('Debug error:', error);
+            return null;
+        }
+    }
+
     // Landlord creates tenant accounts
     async showAddTenantForm() {
+        // Fetch available rooms from Firestore
+        const availableRooms = await this.getAvailableRooms();
+        
+        let roomOptions = '';
+        let availabilityMessage = '';
+        
+        if (availableRooms.length === 0) {
+            roomOptions = '<option value="">No available rooms</option>';
+            availabilityMessage = '<div style="color: var(--danger); margin-top: 10px; padding: 10px; background: rgba(234, 67, 53, 0.1); border-radius: 6px;"><i class="fas fa-exclamation-triangle"></i> No available rooms. All units are currently occupied.</div>';
+        } else {
+            roomOptions = availableRooms.map(room => 
+                `<option value="${room.roomNumber}" data-rent="${room.monthlyRent}" data-deposit="${room.securityDeposit}">${room.roomNumber} - ₱${room.monthlyRent.toLocaleString()}</option>`
+            ).join('');
+            
+            availabilityMessage = `<small style="color: var(--dark-gray);">${availableRooms.length} available room(s) found</small>`;
+        }
+
         const modalContent = `
             <div class="add-tenant-form">
                 <h4 style="margin-bottom: 20px; color: var(--primary-blue);">Tenant Information</h4>
@@ -2351,8 +2599,11 @@ class CasaLink {
                 
                 <div class="form-group">
                     <label class="form-label">Room Number / Unit *</label>
-                    <input type="text" id="roomNumber" class="form-input" placeholder="Unit 101 or Room 5" required>
-                    <small style="color: var(--dark-gray);">Specific room or unit being rented</small>
+                    <select id="roomNumber" class="form-input" required ${availableRooms.length === 0 ? 'disabled' : ''}>
+                        <option value="">Select a room/unit</option>
+                        ${roomOptions}
+                    </select>
+                    ${availabilityMessage}
                 </div>
                 
                 <div class="form-group">
@@ -2364,17 +2615,19 @@ class CasaLink {
                 
                 <div class="form-group">
                     <label class="form-label">Monthly Rental Amount (₱) *</label>
-                    <input type="number" id="rentalAmount" class="form-input" placeholder="5000" min="0" step="0.01" required>
+                    <input type="number" id="rentalAmount" class="form-input" placeholder="0" min="0" step="0.01" required readonly>
+                    <small style="color: var(--dark-gray);">Auto-filled based on selected room</small>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Security Deposit (₱) *</label>
-                    <input type="number" id="securityDeposit" class="form-input" placeholder="5000" min="0" step="0.01" required>
+                    <input type="number" id="securityDeposit" class="form-input" placeholder="0" min="0" step="0.01" required readonly>
+                    <small style="color: var(--dark-gray);">Auto-filled based on selected room</small>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Payment Method</label>
-                    <select id="paymentMethod" class="form-input">
+                    <select id="paymentMethod" class="form-input" ${availableRooms.length === 0 ? 'disabled' : ''}>
                         <option value="Cash">Cash</option>
                         <option value="Bank Transfer">Bank Transfer</option>
                         <option value="GCash">GCash</option>
@@ -2384,17 +2637,17 @@ class CasaLink {
                 
                 <div class="form-group">
                     <label class="form-label">Date of Entry *</label>
-                    <input type="date" id="dateOfEntry" class="form-input" required>
+                    <input type="date" id="dateOfEntry" class="form-input" required ${availableRooms.length === 0 ? 'disabled' : ''}>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Date of 1st Payment *</label>
-                    <input type="date" id="firstPaymentDate" class="form-input" required>
+                    <input type="date" id="firstPaymentDate" class="form-input" required ${availableRooms.length === 0 ? 'disabled' : ''}>
                 </div>
                 
                 <div class="form-group">
                     <label class="form-label">Day of Payment *</label>
-                    <select id="paymentDay" class="form-input" required>
+                    <select id="paymentDay" class="form-input" required ${availableRooms.length === 0 ? 'disabled' : ''}>
                         <option value="">Select payment day</option>
                         <option value="5">5th of the month</option>
                         <option value="10">10th of the month</option>
@@ -2405,30 +2658,30 @@ class CasaLink {
                     </select>
                 </div>
                 
-                <div class="security-info">
-                    <i class="fas fa-info-circle"></i>
-                    <small>You'll review the lease agreement and confirm with your password in the next steps.</small>
-                </div>
-                
                 <div id="tenantCreationResult" style="display: none; margin-top: 15px; padding: 10px; border-radius: 8px;"></div>
             </div>
         `;
 
         const modal = ModalManager.openModal(modalContent, {
             title: 'Add New Tenant - Step 1 of 3',
-            submitText: 'Next: Review Agreement',
-            onSubmit: () => this.validateTenantForm()
+            submitText: availableRooms.length === 0 ? 'No Available Rooms' : 'Next: Review Agreement',
+            onSubmit: availableRooms.length === 0 ? () => {} : () => this.validateTenantForm()
         });
 
-        // Set default dates
-        setTimeout(() => {
-            const today = new Date().toISOString().split('T')[0];
-            const firstPayment = new Date();
-            firstPayment.setDate(firstPayment.getDate() + 5); // 5 days from now
-            
-            document.getElementById('dateOfEntry').value = today;
-            document.getElementById('firstPaymentDate').value = firstPayment.toISOString().split('T')[0];
-        }, 100);
+        // Only set up dates and event listeners if there are available rooms
+        if (availableRooms.length > 0) {
+            setTimeout(() => {
+                const today = new Date().toISOString().split('T')[0];
+                const firstPayment = new Date();
+                firstPayment.setDate(firstPayment.getDate() + 5);
+                
+                document.getElementById('dateOfEntry').value = today;
+                document.getElementById('firstPaymentDate').value = firstPayment.toISOString().split('T')[0];
+                
+                // Add event listener for room selection
+                this.setupRoomSelection();
+            }, 100);
+        }
 
         this.addTenantModal = modal;
     }
@@ -2440,15 +2693,22 @@ class CasaLink {
         const phone = document.getElementById('tenantPhone')?.value;
         const occupation = document.getElementById('tenantOccupation')?.value;
         const age = document.getElementById('tenantAge')?.value;
-        const roomNumber = document.getElementById('roomNumber')?.value;
+        const roomSelect = document.getElementById('roomNumber');
+        const selectedRoom = roomSelect?.options[roomSelect.selectedIndex];
         const rentalAmount = document.getElementById('rentalAmount')?.value;
         const securityDeposit = document.getElementById('securityDeposit')?.value;
         const dateOfEntry = document.getElementById('dateOfEntry')?.value;
         const firstPaymentDate = document.getElementById('firstPaymentDate')?.value;
         const paymentDay = document.getElementById('paymentDay')?.value;
 
+        // Check if room select is disabled (no available rooms)
+        if (roomSelect && roomSelect.disabled) {
+            this.showNotification('No available rooms to assign. All units are occupied.', 'error');
+            return;
+        }
+
         // Validate required fields
-        if (!name || !email || !occupation || !age || !phone || !roomNumber ||
+        if (!name || !email || !occupation || !age || !phone || !selectedRoom?.value ||
             !rentalAmount || !securityDeposit || !dateOfEntry || !firstPaymentDate || !paymentDay) {
             this.showNotification('Please fill in all required fields', 'error');
             return;
@@ -2461,7 +2721,7 @@ class CasaLink {
             phone: phone,
             occupation: occupation,
             age: parseInt(age),
-            roomNumber: roomNumber,
+            roomNumber: selectedRoom.value, // Now this is the actual room number (e.g., "1A")
             rentalAddress: document.getElementById('rentalAddress')?.value || 'Lot 22 Zarate Compound Purok 4, Bakakent Norte, Baguio City',
             rentalAmount: rentalAmount ? parseFloat(rentalAmount) : 0,
             securityDeposit: securityDeposit ? parseFloat(securityDeposit) : 0,
@@ -2860,6 +3120,47 @@ class CasaLink {
         }
     }
 
+    async migrateRoomsToUseRoomNumbers() {
+        try {
+            console.log('🔄 Migrating rooms to use room numbers as document IDs...');
+            
+            const roomsSnapshot = await firebaseDb.collection('rooms').get();
+            
+            if (roomsSnapshot.empty) {
+                console.log('No rooms to migrate');
+                return;
+            }
+            
+            const batch = firebaseDb.batch();
+            let migratedCount = 0;
+            
+            // Delete old rooms and create new ones with proper IDs
+            for (const doc of roomsSnapshot.docs) {
+                const roomData = doc.data();
+                const roomNumber = roomData.roomNumber;
+                
+                if (roomNumber) {
+                    // Create new document with room number as ID
+                    const newRoomRef = firebaseDb.collection('rooms').doc(roomNumber);
+                    batch.set(newRoomRef, {
+                        ...roomData,
+                        updatedAt: new Date().toISOString()
+                    });
+                    
+                    // Delete old document
+                    batch.delete(doc.ref);
+                    migratedCount++;
+                }
+            }
+            
+            await batch.commit();
+            console.log(`✅ Migrated ${migratedCount} rooms to use room numbers as document IDs`);
+            
+        } catch (error) {
+            console.error('❌ Error migrating rooms:', error);
+        }
+    }
+
     async createLeaseDocument(tenantId, tenantData, leaseEndDate) {
         try {
             console.log('📝 Creating SINGLE lease document for tenant:', tenantId);
@@ -2870,7 +3171,18 @@ class CasaLink {
                 .where('isActive', '==', true)
                 .limit(1)
                 .get();
-                
+
+            if (tenantData.roomNumber) {
+                await firebaseDb.collection('rooms').doc(tenantData.roomNumber).update({
+                    isAvailable: false,
+                    occupiedBy: tenantId,
+                    occupiedAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+                console.log('✅ Room marked as occupied:', tenantData.roomNumber);
+            }
+
+            
             if (!existingLeaseQuery.empty) {
                 console.log('⚠️ Active lease already exists for this tenant, updating instead');
                 const existingLeaseId = existingLeaseQuery.docs[0].id;
