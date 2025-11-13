@@ -16,6 +16,25 @@ class DataManager {
         console.log('✅ DataManager initialized');
     }
 
+    static testDueDateCalculation() {
+        const testLease = {
+            paymentDueDay: 15, // 15th of each month
+            monthlyRent: 5000,
+            isActive: true
+        };
+        
+        const testBills = [];
+        
+        const nextDueDate = this.calculateNextDueDate(testLease, testBills);
+        console.log('🧪 Test due date calculation:', {
+            paymentDay: testLease.paymentDueDay,
+            calculatedDueDate: nextDueDate,
+            formattedDate: nextDueDate ? nextDueDate.toLocaleDateString() : 'N/A'
+        });
+        
+        return nextDueDate;
+    }
+
     // ===== DASHBOARD STATISTICS METHODS =====
     static async getDashboardStats(userId, userRole) {
         console.log(`📊 Getting dashboard stats for ${userRole}: ${userId}`);
@@ -31,9 +50,19 @@ class DataManager {
                     this.getTenantLease(userId)
                 ]);
 
+                if (lease && lease.isActive) {
+                    await this.generateMonthlyBillsForTenant(userId, lease);
+                    
+                    // Refresh bills after potential generation
+                    const updatedBills = await this.getTenantBills(userId);
+                    // Use updatedBills for calculations...
+                }
+
                 const unpaidBills = bills.filter(bill => bill.status === 'pending');
                 const totalDue = unpaidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
-                const nextDueDate = unpaidBills.length > 0 ? unpaidBills[0].dueDate : null;
+                
+                // Calculate next due date from lease information
+                const nextDueDate = this.calculateNextDueDate(lease, bills);
                 
                 const openMaintenance = maintenance.filter(req => 
                     ['open', 'in-progress'].includes(req.status)
@@ -56,7 +85,10 @@ class DataManager {
                     openMaintenance: openMaintenance.length,
                     recentUpdates: maintenance.filter(req => 
                         new Date(req.updatedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-                    ).length
+                    ).length,
+
+                    // Lease information for calculations
+                    lease: lease
                 };
             }
             
@@ -65,6 +97,41 @@ class DataManager {
             return this.getFallbackStats(userRole);
         }
     }
+
+    static calculateNextDueDate(lease, bills) {
+        if (!lease) return null;
+        
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        
+        // Get payment day from lease (e.g., 5th, 10th, 15th, etc.)
+        const paymentDay = lease.paymentDueDay || 1; // Default to 1st if not specified
+        
+        // Calculate due date for current month
+        const dueDateThisMonth = new Date(currentYear, currentMonth, paymentDay);
+        
+        // If today is after the due date this month, calculate for next month
+        let nextDueDate = today <= dueDateThisMonth ? dueDateThisMonth : new Date(currentYear, currentMonth + 1, paymentDay);
+        
+        // Check if there are any unpaid bills that might affect the next due date
+        const unpaidBills = bills.filter(bill => bill.status === 'pending');
+        if (unpaidBills.length > 0) {
+            // If there are unpaid bills, use the earliest unpaid bill's due date
+            const earliestUnpaid = unpaidBills.reduce((earliest, bill) => {
+                const billDate = new Date(bill.dueDate);
+                return (!earliest || billDate < earliest) ? billDate : earliest;
+            }, null);
+            
+            if (earliestUnpaid && earliestUnpaid < nextDueDate) {
+                nextDueDate = earliestUnpaid;
+            }
+        }
+        
+        return nextDueDate;
+    }
+
+
 
     static getFallbackStats(userRole) {
         if (userRole === 'tenant') {
@@ -374,6 +441,7 @@ class DataManager {
                 const leaseData = doc.data();
                 const updates = {};
                 
+                // Add missing fields with default values
                 if (leaseData.isActive === undefined) updates.isActive = true;
                 if (!leaseData.status) updates.status = 'active';
                 if (!leaseData.monthlyRent) updates.monthlyRent = 0;
@@ -381,6 +449,9 @@ class DataManager {
                     updates.leaseEnd = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
                 }
                 if (!leaseData.roomNumber) updates.roomNumber = 'N/A';
+                
+                // Ensure payment due day is set (default to 1st of month)
+                if (!leaseData.paymentDueDay) updates.paymentDueDay = 1;
                 
                 if (Object.keys(updates).length > 0) {
                     migrationPromises.push(
@@ -396,6 +467,52 @@ class DataManager {
             console.error('❌ Lease migration failed:', error);
         }
     }
+
+    static async generateMonthlyBillsForTenant(tenantId, lease) {
+        try {
+            if (!lease || !lease.isActive) return;
+            
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const paymentDay = lease.paymentDueDay || 1;
+            
+            // Calculate due date for this month
+            const dueDate = new Date(currentYear, currentMonth, paymentDay);
+            
+            // Check if bill already exists for this month
+            const existingBill = await firebaseDb.collection('bills')
+                .where('tenantId', '==', tenantId)
+                .where('dueDate', '>=', new Date(currentYear, currentMonth, 1).toISOString())
+                .where('dueDate', '<=', new Date(currentYear, currentMonth + 1, 0).toISOString())
+                .limit(1)
+                .get();
+                
+            if (existingBill.empty) {
+                // Create new bill for this month
+                const billData = {
+                    tenantId: tenantId,
+                    landlordId: lease.landlordId,
+                    tenantName: lease.tenantName,
+                    roomNumber: lease.roomNumber,
+                    type: 'rent',
+                    totalAmount: lease.monthlyRent,
+                    dueDate: dueDate.toISOString(),
+                    status: 'pending',
+                    description: `Monthly Rent - ${today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+                    createdAt: new Date().toISOString()
+                };
+                
+                await firebaseDb.collection('bills').add(billData);
+                console.log(`✅ Generated monthly bill for ${lease.tenantName}`);
+            }
+            
+        } catch (error) {
+            console.error('Error generating monthly bill:', error);
+        }
+    }
+
+
 
     // ===== CORE DATA METHODS =====
     static async getTenants(landlordId) {
@@ -473,9 +590,46 @@ class DataManager {
             
             if (querySnapshot.empty) return null;
             
+            const leaseData = querySnapshot.docs[0].data();
+            
             return {
                 id: querySnapshot.docs[0].id,
-                ...querySnapshot.docs[0].data()
+                // Basic lease info
+                tenantId: leaseData.tenantId,
+                landlordId: leaseData.landlordId,
+                tenantName: leaseData.tenantName,
+                
+                // Property info
+                roomNumber: leaseData.roomNumber,
+                rentalAddress: leaseData.rentalAddress,
+                
+                // Financial terms
+                monthlyRent: leaseData.monthlyRent,
+                securityDeposit: leaseData.securityDeposit,
+                paymentMethod: leaseData.paymentMethod,
+                paymentDueDay: leaseData.paymentDueDay,
+                
+                // Lease period
+                leaseStart: leaseData.leaseStart,
+                leaseEnd: leaseData.leaseEnd,
+                leaseDuration: leaseData.leaseDuration,
+                
+                // Status
+                status: leaseData.status,
+                isActive: leaseData.isActive,
+                
+                // Agreement tracking
+                agreementViewed: leaseData.agreementViewed,
+                agreementAccepted: leaseData.agreementAccepted,
+                agreementAcceptedDate: leaseData.agreementAcceptedDate,
+                
+                // Additional terms
+                maxOccupants: leaseData.maxOccupants,
+                additionalOccupantFee: leaseData.additionalOccupantFee,
+                
+                // Dates
+                createdAt: leaseData.createdAt,
+                updatedAt: leaseData.updatedAt
             };
         } catch (error) {
             console.error('Error getting tenant lease:', error);

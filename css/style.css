@@ -1084,6 +1084,54 @@ header {
         padding-bottom: 10px;
     }
 
+    /* Lease Agreement Modal Styles */
+.lease-agreement-view-modal {
+    font-family: 'Inter', sans-serif;
+}
+
+.lease-agreement-view-modal h4 {
+    color: var(--primary-blue);
+    margin: 20px 0 10px 0;
+    font-size: 1.1rem;
+    border-bottom: 2px solid var(--primary-blue);
+    padding-bottom: 5px;
+}
+
+
+
+.lease-agreement-view-modal ol {
+    margin-left: 20px;
+    padding-left: 0;
+}
+
+.lease-agreement-view-modal li {
+    margin-bottom: 8px;
+    padding-left: 10px;
+    text-align: justify;
+}
+
+.lease-agreement-view-modal strong {
+    color: var(--text-dark);
+}
+
+/* Print styles for lease agreement */
+@media print {
+    .lease-agreement-view-modal {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    
+    .modal-header,
+    .modal-footer {
+        display: none !important;
+    }
+    
+    .modal-content {
+        box-shadow: none !important;
+        border: 1px solid #000 !important;
+    }
+}
+
     /*  New tenant dashboard icons */
     .card-icon.success { background-color: var(--success); }
     .card-icon.wallet { background-color: #9334E6; }
@@ -1192,19 +1240,32 @@ header {
 
 /* Print Styles */
 @media print {
-    .sidebar,
-    .header-actions,
-    .btn,
-    .pwa-install-prompt,
-    .notification {
+    body * {
+        visibility: hidden;
+    }
+    
+    .modal-content,
+    .modal-content * {
+        visibility: visible;
+    }
+    
+    .modal-content {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none !important;
+        border: none !important;
+    }
+    
+    .modal-header,
+    .modal-footer,
+    .modal-close {
         display: none !important;
     }
     
-    .main-content {
-        margin-left: 0;
-    }
-    
-    .content-area {
-        padding: 0;
+    .lease-agreement-view-modal {
+        max-height: none !important;
+        overflow: visible !important;
     }
 }

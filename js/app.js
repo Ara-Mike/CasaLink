@@ -566,12 +566,200 @@ class CasaLink {
         `;
     }
 
+    async showLeaseAgreement() {
+        try {
+            console.log('📄 Fetching lease agreement for tenant:', this.currentUser.uid);
+            
+            // Show loading state
+            const submitBtn = document.querySelector('#viewLeaseBtn');
+            if (submitBtn) {
+                const originalText = submitBtn.innerHTML;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+                submitBtn.disabled = true;
+            }
+
+            // Fetch lease data from Firestore
+            const lease = await DataManager.getTenantLease(this.currentUser.uid);
+            
+            if (!lease) {
+                this.showNotification('No lease agreement found. Please contact your landlord.', 'error');
+                return;
+            }
+
+            // Reset button state
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-file-contract"></i> View Lease Agreement';
+                submitBtn.disabled = false;
+            }
+
+            // Display the lease agreement modal
+            this.displayLeaseAgreementModal(lease);
+
+        } catch (error) {
+            console.error('Error fetching lease agreement:', error);
+            this.showNotification('Failed to load lease agreement. Please try again.', 'error');
+            
+            // Reset button state
+            const submitBtn = document.querySelector('#viewLeaseBtn');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-file-contract"></i> View Lease Agreement';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    // Method to display the lease agreement in a modal
+    displayLeaseAgreementModal(lease) {
+        // Format dates for display
+        const leaseStart = lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }) : 'Not specified';
+        
+        const leaseEnd = lease.leaseEnd ? new Date(lease.leaseEnd).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }) : 'Not specified';
+
+        const modalContent = `
+            <div class="lease-agreement-view-modal" style="max-height: 80vh; overflow-y: auto;">
+                <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                    <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                    <h3 style="color: var(--primary-blue); margin-bottom: 10px;">Your Lease Agreement</h3>
+                    <p style="color: var(--dark-gray);">Review your current lease terms and conditions</p>
+                </div>
+
+                <!-- Lease Summary -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--primary-blue);">
+                    <h4 style="color: var(--primary-blue); margin-bottom: 15px;">Lease Summary</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div>
+                            <strong>Room/Unit:</strong><br>
+                            ${lease.roomNumber || 'N/A'}
+                        </div>
+                        <div>
+                            <strong>Monthly Rent:</strong><br>
+                            ₱${lease.monthlyRent ? lease.monthlyRent.toLocaleString() : '0'}
+                        </div>
+                        <div>
+                            <strong>Lease Period:</strong><br>
+                            ${leaseStart} to ${leaseEnd}
+                        </div>
+                        <div>
+                            <strong>Security Deposit:</strong><br>
+                            ₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full Lease Agreement -->
+                <div style="line-height: 1.6; font-size: 0.95rem; margin-bottom: 25px; max-height: 400px; overflow-y: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background: #fafafa;">
+                    <p><strong>This agreement is made by and between:</strong></p>
+                    <p style="margin-left: 20px;">
+                        <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
+                        <strong>Tenant/Lessee:</strong> ${this.currentUser.name || 'Tenant'}
+                    </p>
+                    
+                    <p>This landlady hereby agrees to lessee the unit <strong>${lease.roomNumber || 'N/A'}</strong> of her house located at <strong>${lease.rentalAddress || 'N/A'}</strong>. 
+                    The lesse period shall be for 1 year beginning <strong>${leaseStart}</strong> and shall end and may be renewable one (1) year thereafter.</p>
+                    
+                    <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</strong> 
+                    but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
+                    
+                    <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Terms and Conditions:</h4>
+                    
+                    <ol style="margin-left: 20px; padding-left: 0;">
+                        <li style="margin-bottom: 10px;"><strong>Garbage/Trash</strong> - Tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke within the leased area.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Noise</strong> - All radios, television sets, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Cleaning Upon Termination</strong> - Upon termination of the lease, tenant shall be responsible for cleaning the premises. Additional charge of Php 2,000 if failed to do so.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Occupancy Limit</strong> - Limit of occupants be four (4) persons regardless of age, additional pay for excess of two thousand pesos (2,000) per person.</li>
+                        
+                        <li style="margin-bottom: 10px;"><strong>Rent Increase</strong> - Increase of monthly rental may occur at any time of the year as determined by the landlady.</li>
+                    </ol>
+
+                    <p style="margin-top: 20px; padding: 15px; background: rgba(26, 115, 232, 0.1); border-radius: 8px;">
+                        <strong>14. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
+                        <strong>${leaseStart}</strong>
+                    </p>
+
+                    <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
+                        <div>
+                            <p><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</p>
+                        </div>
+                        <div>
+                            <p><strong>${this.currentUser.name || 'Tenant'}</strong><br>Tenant/Lessee</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Agreement Status -->
+                <div style="background: ${lease.agreementAccepted ? 'rgba(52, 168, 83, 0.1)' : 'rgba(251, 188, 4, 0.1)'}; 
+                            padding: 15px; border-radius: 8px; border-left: 4px solid ${lease.agreementAccepted ? 'var(--success)' : 'var(--warning)'};">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <i class="fas ${lease.agreementAccepted ? 'fa-check-circle' : 'fa-exclamation-circle'}" 
+                        style="color: ${lease.agreementAccepted ? 'var(--success)' : 'var(--warning)'};"></i>
+                        <div>
+                            <strong>Agreement Status:</strong> ${lease.agreementAccepted ? 'Accepted and Verified' : 'Pending Acceptance'}
+                            ${lease.agreementAcceptedDate ? `<br><small>Accepted on: ${new Date(lease.agreementAcceptedDate).toLocaleDateString()}</small>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+        title: 'Lease Agreement & Terms',
+        submitText: 'Close',
+        showFooter: true,
+        onSubmit: () => ModalManager.closeModal(modal),
+        extraButtons: [
+            {
+                text: '<i class="fas fa-print"></i> Print',
+                className: 'btn btn-secondary',
+                onClick: () => this.printLeaseAgreement()
+            }
+        ]
+    });
+
+        // Store reference to the modal
+        this.leaseViewModal = modal;
+        this.currentLeaseData = lease;
+    }
+
+    printLeaseAgreement() {
+        window.print();
+    }
+
     getTenantDashboardHTML() {
         return `
             <div class="page-content">
                 <div class="page-header">
                     <h1 class="page-title">Welcome to Your Dashboard</h1>
                     <div>
+                        <button class="btn btn-secondary" id="viewLeaseBtn" onclick="casaLink.showLeaseAgreement()">
+                            <i class="fas fa-file-contract"></i> View Lease Agreement
+                        </button>
                         <button class="btn btn-primary" id="payRentBtn" onclick="casaLink.showPaymentModal()">
                             <i class="fas fa-credit-card"></i> Pay Rent
                         </button>
@@ -1908,7 +2096,7 @@ class CasaLink {
 
     // Helper methods for tenant dashboard
     getDueDateText(dueDate) {
-        if (!dueDate) return 'No due date';
+        if (!dueDate) return 'No due date set';
         
         const today = new Date();
         const due = new Date(dueDate);
@@ -1918,8 +2106,11 @@ class CasaLink {
         if (diffDays === 0) return 'Due today';
         if (diffDays === 1) return 'Due tomorrow';
         if (diffDays > 1) return `Due in ${diffDays} days`;
+        if (diffDays === -1) return 'Overdue by 1 day';
         return `Overdue by ${Math.abs(diffDays)} days`;
     }
+
+
 
     getPaymentStatus(status) {
         const statusMap = {
@@ -1961,26 +2152,49 @@ class CasaLink {
     }
 
     updateTenantDashboard(stats) {
-        // ACCOUNT OVERVIEW
-        this.updateCard('currentBalance', `₱${(stats.totalDue || 0).toLocaleString()}`);
-        this.updateCard('balanceDueDate', this.getDueDateText(stats.nextDueDate));
-        this.updateCard('paymentStatus', this.getPaymentStatus(stats.paymentStatus));
-        this.updateCard('paymentStatusDetails', this.getPaymentStatusDetails(stats.paymentStatus));
-        this.updateCard('roomNumber', stats.roomNumber || 'N/A');
-        this.updateCard('monthlyRent', `₱${(stats.monthlyRent || 0).toLocaleString()}`);
-        
-        // BILLING & PAYMENTS
-        this.updateCard('pendingBills', stats.unpaidBills || 0);
-        this.updateCard('nextDueDate', stats.nextDueDate ? new Date(stats.nextDueDate).toLocaleDateString() : 'N/A');
-        this.updateCard('lastPaymentAmount', `₱${(stats.lastPaymentAmount || 0).toLocaleString()}`);
-        this.updateCard('lastPaymentDate', stats.lastPaymentDate ? `Paid on ${new Date(stats.lastPaymentDate).toLocaleDateString()}` : 'No payments');
-        
-        // MAINTENANCE
-        this.updateCard('openRequests', stats.openMaintenance || 0);
-        this.updateCard('recentUpdates', stats.recentUpdates || 0);
-        
-        this.updateLoadingStates();
+    // ACCOUNT OVERVIEW
+    this.updateCard('currentBalance', `₱${(stats.totalDue || 0).toLocaleString()}`);
+    this.updateCard('balanceDueDate', this.getDueDateText(stats.nextDueDate));
+    this.updateCard('paymentStatus', this.getPaymentStatus(stats.paymentStatus));
+    this.updateCard('paymentStatusDetails', this.getPaymentStatusDetails(stats.paymentStatus));
+    this.updateCard('roomNumber', stats.roomNumber || 'N/A');
+    this.updateCard('monthlyRent', `₱${(stats.monthlyRent || 0).toLocaleString()}`);
+    
+    // BILLING & PAYMENTS
+    this.updateCard('pendingBills', stats.unpaidBills || 0);
+    
+    // Format the next due date properly
+    if (stats.nextDueDate) {
+        const dueDate = new Date(stats.nextDueDate);
+        this.updateCard('nextDueDate', dueDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            year: 'numeric'
+        }));
+    } else {
+        this.updateCard('nextDueDate', 'Not set');
     }
+    
+    this.updateCard('lastPaymentAmount', `₱${(stats.lastPaymentAmount || 0).toLocaleString()}`);
+    
+    // Format last payment date
+    if (stats.lastPaymentDate) {
+        const paymentDate = new Date(stats.lastPaymentDate);
+        this.updateCard('lastPaymentDate', `Paid on ${paymentDate.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            year: 'numeric'
+        })}`);
+    } else {
+        this.updateCard('lastPaymentDate', 'No payments yet');
+    }
+    
+    // MAINTENANCE
+    this.updateCard('openRequests', stats.openMaintenance || 0);
+    this.updateCard('recentUpdates', stats.recentUpdates || 0);
+    
+    this.updateLoadingStates();
+}
 
     updateLandlordDashboard(stats) {
         // PROPERTY OVERVIEW
