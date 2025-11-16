@@ -35,15 +35,136 @@ class DataManager {
         return nextDueDate;
     }
 
+    static calculateLandlordStats(tenants, leases, bills, maintenance) {
+        console.log('🧮 Calculating landlord statistics...');
+        
+        // PROPERTY OVERVIEW
+        const totalUnits = 22; // Fixed total units as per your structure
+        
+        // Active leases (both isActive and status check)
+        const activeLeases = leases.filter(lease => 
+            lease.isActive !== false && 
+            (lease.status === 'active' || lease.status === 'verified' || !lease.status)
+        );
+        
+        const occupiedUnits = activeLeases.length;
+        const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
+        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+        
+        // Total tenants (active and verified)
+        const activeTenants = tenants.filter(tenant => 
+            tenant.isActive !== false && 
+            (tenant.status === 'verified' || tenant.status === 'active' || !tenant.status)
+        ).length;
+        
+        // Average monthly rent (only from active leases with rent amount)
+        const leasesWithRent = activeLeases.filter(lease => lease.monthlyRent && lease.monthlyRent > 0);
+        const totalRent = leasesWithRent.reduce((sum, lease) => sum + (lease.monthlyRent || 0), 0);
+        const averageRent = leasesWithRent.length > 0 ? Math.round(totalRent / leasesWithRent.length) : 0;
+        
+        // FINANCIAL OVERVIEW
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        
+        // Monthly revenue (paid bills this month)
+        const monthlyRevenue = bills
+            .filter(bill => {
+                if (bill.status !== 'paid') return false;
+                const billDate = new Date(bill.paidDate || bill.dueDate);
+                return billDate.getMonth() === currentMonth && 
+                    billDate.getFullYear() === currentYear;
+            })
+            .reduce((total, bill) => total + (bill.totalAmount || 0), 0);
+        
+        // Rent collection rate (percentage of expected rent collected this month)
+        const expectedMonthlyRent = totalRent; // Total rent from all active leases
+        const collectionRate = expectedMonthlyRent > 0 ? 
+            Math.round((monthlyRevenue / expectedMonthlyRent) * 100) : 0;
+        
+        // Late payments (bills overdue)
+        const latePayments = bills.filter(bill => 
+            bill.status === 'pending' && 
+            new Date(bill.dueDate) < today
+        ).length;
+        
+        // Unpaid bills (all pending bills)
+        const unpaidBills = bills.filter(bill => bill.status === 'pending').length;
+        
+        // OPERATIONS
+        // Lease renewals (leases ending in next 30 days)
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        
+        const upcomingRenewals = leases.filter(lease => {
+            if (!lease.leaseEnd || !lease.isActive) return false;
+            const leaseEnd = new Date(lease.leaseEnd);
+            return leaseEnd <= thirtyDaysFromNow && leaseEnd >= today;
+        }).length;
+        
+        // Open maintenance (new requests)
+        const openMaintenance = maintenance.filter(req => 
+            req.status === 'open' || !req.status
+        ).length;
+        
+        // Maintenance backlog (all pending maintenance)
+        const maintenanceBacklog = maintenance.filter(req => 
+            ['open', 'in-progress'].includes(req.status) || !req.status
+        ).length;
+        
+        const stats = {
+            // Property Overview
+            totalTenants: activeTenants,
+            totalUnits: totalUnits,
+            occupiedUnits: occupiedUnits,
+            vacantUnits: vacantUnits,
+            occupancyRate: occupancyRate,
+            averageRent: averageRent,
+            
+            // Financial Overview
+            collectionRate: collectionRate,
+            totalRevenue: monthlyRevenue,
+            latePayments: latePayments,
+            unpaidBills: unpaidBills,
+            
+            // Operations
+            upcomingRenewals: upcomingRenewals,
+            openMaintenance: openMaintenance,
+            maintenanceBacklog: maintenanceBacklog
+        };
+        
+        console.log('📊 Calculated landlord stats:', stats);
+        return stats;
+    }
+
     // ===== DASHBOARD STATISTICS METHODS =====
     static async getDashboardStats(userId, userRole) {
         console.log(`📊 Getting dashboard stats for ${userRole}: ${userId}`);
         
         try {
             if (userRole === 'landlord') {
-                // ... existing landlord logic
+                // Fetch all necessary data in parallel
+                const [tenants, leases, bills, maintenanceRequests] = await Promise.all([
+                    this.getTenants(userId),
+                    this.getLandlordLeases(userId),
+                    this.getBills(userId),
+                    this.getMaintenanceRequests(userId)
+                ]);
+
+                console.log('📦 Fetched data counts:', {
+                    tenants: tenants.length,
+                    leases: leases.length,
+                    bills: bills.length,
+                    maintenance: maintenanceRequests.length
+                });
+
+                // Calculate statistics
+                const stats = this.calculateLandlordStats(tenants, leases, bills, maintenanceRequests);
+                console.log('✅ Calculated dashboard stats:', stats);
+                return stats;
+                
             } else {
-                // Tenant-specific stats
+                // Tenant-specific stats (keep existing tenant logic)
                 const [bills, maintenance, lease] = await Promise.all([
                     this.getTenantBills(userId),
                     this.getTenantMaintenanceRequests(userId),
@@ -52,8 +173,6 @@ class DataManager {
 
                 if (lease && lease.isActive) {
                     await this.generateMonthlyBillsForTenant(userId, lease);
-                    
-                    // Refresh bills after potential generation
                     const updatedBills = await this.getTenantBills(userId);
                     // Use updatedBills for calculations...
                 }
@@ -61,42 +180,34 @@ class DataManager {
                 const unpaidBills = bills.filter(bill => bill.status === 'pending');
                 const totalDue = unpaidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
                 
-                // Calculate next due date from lease information
                 const nextDueDate = this.calculateNextDueDate(lease, bills);
-                
                 const openMaintenance = maintenance.filter(req => 
                     ['open', 'in-progress'].includes(req.status)
                 );
 
                 return {
-                    // Account Overview
                     totalDue: totalDue,
                     nextDueDate: nextDueDate,
                     paymentStatus: unpaidBills.length > 0 ? 'pending' : 'current',
                     roomNumber: lease?.roomNumber || 'N/A',
                     monthlyRent: lease?.monthlyRent || 0,
-                    
-                    // Billing & Payments
                     unpaidBills: unpaidBills.length,
                     lastPaymentAmount: this.getLastPaymentAmount(bills),
                     lastPaymentDate: this.getLastPaymentDate(bills),
-                    
-                    // Maintenance
                     openMaintenance: openMaintenance.length,
                     recentUpdates: maintenance.filter(req => 
                         new Date(req.updatedAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
                     ).length,
-
-                    // Lease information for calculations
                     lease: lease
                 };
             }
             
         } catch (error) {
-            console.error('Dashboard stats error:', error);
+            console.error('❌ Dashboard stats error:', error);
             return this.getFallbackStats(userRole);
         }
     }
+
 
     static calculateNextDueDate(lease, bills) {
         if (!lease) return null;

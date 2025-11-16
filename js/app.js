@@ -223,18 +223,17 @@ class CasaLink {
     async showPage(page) {
         console.log('🔄 Attempting to show page:', page);
         
+        // Clean up previous page listeners
+        if (this.currentPage === 'dashboard') {
+            this.cleanupDashboardListeners();
+        }
+        
         // Store the page before showing it
         this.storeCurrentPage(page);
         this.currentPage = page;
         this.updateUrlHash(page);
 
-        if (page !== 'dashboard') {
-            this.updateUrlHash(page);
-        } else {
-            this.updateUrlHash(''); // Clear hash for dashboard
-        }
-        
-        // Ensure we have the main app container
+        // ... rest of your existing showPage method remains the same
         let appElement = document.getElementById('app');
         if (!appElement) {
             console.error('❌ App element not found');
@@ -278,7 +277,6 @@ class CasaLink {
             
             switch (page) {
                 case 'dashboard':
-                    // Use the new method that handles both landlord and tenant dashboards
                     pageContent = this.getDashboardContentHTML();
                     break;
                 case 'billing':
@@ -331,11 +329,12 @@ class CasaLink {
             // Update active navigation state
             this.updateActiveNavState(page);
             
-            // SPECIAL CASE: If dashboard, load fresh data immediately
+            // SPECIAL CASE: If dashboard, load fresh data immediately and setup listeners
             if (page === 'dashboard') {
-                console.log('📊 Force refreshing dashboard data...');
+                console.log('📊 Force refreshing dashboard data and setting up listeners...');
                 setTimeout(() => {
                     this.loadDashboardData();
+                    this.setupRealTimeStats(); // Start real-time listeners
                 }, 100);
             }
             
@@ -1185,6 +1184,39 @@ class CasaLink {
         });
     }
 
+    async debugDashboardData() {
+        console.log('🐛 DEBUG: Dashboard Data Sources');
+        
+        try {
+            const userId = this.currentUser.uid;
+            
+            const [tenants, leases, bills, maintenance] = await Promise.all([
+                DataManager.getTenants(userId),
+                DataManager.getLandlordLeases(userId),
+                DataManager.getBills(userId),
+                DataManager.getMaintenanceRequests(userId)
+            ]);
+            
+            console.log('📊 RAW DATA COUNTS:', {
+                tenants: tenants.length,
+                leases: leases.length,
+                bills: bills.length,
+                maintenance: maintenance.length
+            });
+            
+            console.log('👥 TENANTS:', tenants);
+            console.log('📄 LEASES:', leases);
+            console.log('💰 BILLS:', bills);
+            console.log('🔧 MAINTENANCE:', maintenance);
+            
+            const stats = await DataManager.getDashboardStats(userId, 'landlord');
+            console.log('📈 CALCULATED STATS:', stats);
+            
+        } catch (error) {
+            console.error('❌ Debug error:', error);
+        }
+    }
+
     setupBillingPage() {
         // Generate bill button
         document.getElementById('generateBillBtn')?.addEventListener('click', () => {
@@ -1208,14 +1240,14 @@ class CasaLink {
             this.showAddPropertyForm();
         });
 
-        // ALWAYS setup real-time stats when dashboard is shown
-        this.setupRealTimeStats();
+        // Setup real-time stats when dashboard is shown
+        // Note: setupRealTimeStats is now called from showPage for dashboard
         
         // Update navigation to show dashboard as active
         this.updateActiveNavState('dashboard');
         
         // Force load dashboard data immediately
-        this.loadDashboardData();
+        // Note: loadDashboardData is now called from showPage for dashboard
     }
 
     setupNavigationEvents() {
@@ -2270,78 +2302,202 @@ class CasaLink {
     }
 
     updateTenantDashboard(stats) {
-    // ACCOUNT OVERVIEW
-    this.updateCard('currentBalance', `₱${(stats.totalDue || 0).toLocaleString()}`);
-    this.updateCard('balanceDueDate', this.getDueDateText(stats.nextDueDate));
-    this.updateCard('paymentStatus', this.getPaymentStatus(stats.paymentStatus));
-    this.updateCard('paymentStatusDetails', this.getPaymentStatusDetails(stats.paymentStatus));
-    this.updateCard('roomNumber', stats.roomNumber || 'N/A');
-    this.updateCard('monthlyRent', `₱${(stats.monthlyRent || 0).toLocaleString()}`);
-    
-    // BILLING & PAYMENTS
-    this.updateCard('pendingBills', stats.unpaidBills || 0);
-    
-    // Format the next due date properly
-    if (stats.nextDueDate) {
-        const dueDate = new Date(stats.nextDueDate);
-        this.updateCard('nextDueDate', dueDate.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            year: 'numeric'
-        }));
-    } else {
-        this.updateCard('nextDueDate', 'Not set');
-    }
-    
-    this.updateCard('lastPaymentAmount', `₱${(stats.lastPaymentAmount || 0).toLocaleString()}`);
-    
-    // Format last payment date
-    if (stats.lastPaymentDate) {
-        const paymentDate = new Date(stats.lastPaymentDate);
-        this.updateCard('lastPaymentDate', `Paid on ${paymentDate.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            year: 'numeric'
-        })}`);
-    } else {
-        this.updateCard('lastPaymentDate', 'No payments yet');
-    }
-    
-    // MAINTENANCE
-    this.updateCard('openRequests', stats.openMaintenance || 0);
-    this.updateCard('recentUpdates', stats.recentUpdates || 0);
-    
-    this.updateLoadingStates();
-}
-
-    updateLandlordDashboard(stats) {
-        // PROPERTY OVERVIEW
-        this.updateCard('occupancyRate', `${stats.occupancyRate}%`);
-        this.updateCard('vacantUnits', stats.vacantUnits);
-        this.updateCard('occupancyDetails', `${stats.occupiedUnits}/${stats.totalUnits} units`);
-        this.updateCard('totalTenants', stats.totalTenants);
-        this.updateCard('averageRent', `₱${Math.round(stats.averageRent || 0).toLocaleString()}`);
+        // ACCOUNT OVERVIEW
+        this.updateCard('currentBalance', `₱${(stats.totalDue || 0).toLocaleString()}`);
+        this.updateCard('balanceDueDate', this.getDueDateText(stats.nextDueDate));
+        this.updateCard('paymentStatus', this.getPaymentStatus(stats.paymentStatus));
+        this.updateCard('paymentStatusDetails', this.getPaymentStatusDetails(stats.paymentStatus));
+        this.updateCard('roomNumber', stats.roomNumber || 'N/A');
+        this.updateCard('monthlyRent', `₱${(stats.monthlyRent || 0).toLocaleString()}`);
         
-        // FINANCIAL OVERVIEW
-        this.updateCard('collectionRate', `${stats.collectionRate}%`);
-        this.updateCard('monthlyRevenue', `₱${(stats.totalRevenue || 0).toLocaleString()}`);
-        this.updateCard('latePayments', stats.latePayments);
-        this.updateCard('unpaidBills', stats.unpaidBills);
+        // BILLING & PAYMENTS
+        this.updateCard('pendingBills', stats.unpaidBills || 0);
         
-        // OPERATIONS
-        this.updateCard('upcomingRenewals', stats.upcomingRenewals);
-        this.updateCard('openMaintenance', stats.openMaintenance);
-        this.updateCard('maintenanceBacklog', stats.maintenanceBacklog);
+        // Format the next due date properly
+        if (stats.nextDueDate) {
+            const dueDate = new Date(stats.nextDueDate);
+            this.updateCard('nextDueDate', dueDate.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+            }));
+        } else {
+            this.updateCard('nextDueDate', 'Not set');
+        }
+        
+        this.updateCard('lastPaymentAmount', `₱${(stats.lastPaymentAmount || 0).toLocaleString()}`);
+        
+        // Format last payment date
+        if (stats.lastPaymentDate) {
+            const paymentDate = new Date(stats.lastPaymentDate);
+            this.updateCard('lastPaymentDate', `Paid on ${paymentDate.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+            })}`);
+        } else {
+            this.updateCard('lastPaymentDate', 'No payments yet');
+        }
+        
+        // MAINTENANCE
+        this.updateCard('openRequests', stats.openMaintenance || 0);
+        this.updateCard('recentUpdates', stats.recentUpdates || 0);
         
         this.updateLoadingStates();
     }
 
+    updateLandlordDashboard(stats) {
+        if (!stats) {
+            console.log('❌ No stats data available for dashboard');
+            this.showDashboardErrorState();
+            return;
+        }
+        
+        console.log('🔄 Updating landlord dashboard with stats:', stats);
+        
+        try {
+            // PROPERTY OVERVIEW
+            this.updateCard('occupancyRate', `${stats.occupancyRate}%`);
+            this.updateCard('vacantUnits', stats.vacantUnits);
+            this.updateCard('occupancyDetails', `${stats.occupiedUnits}/${stats.totalUnits} units`);
+            this.updateCard('totalTenants', stats.totalTenants);
+            this.updateCard('averageRent', `₱${stats.averageRent.toLocaleString()}`);
+            
+            // FINANCIAL OVERVIEW
+            this.updateCard('collectionRate', `${stats.collectionRate}%`);
+            this.updateCard('monthlyRevenue', `₱${stats.totalRevenue.toLocaleString()}`);
+            this.updateCard('latePayments', stats.latePayments);
+            this.updateCard('unpaidBills', stats.unpaidBills);
+            
+            // OPERATIONS
+            this.updateCard('upcomingRenewals', stats.upcomingRenewals);
+            this.updateCard('openMaintenance', stats.openMaintenance);
+            this.updateCard('maintenanceBacklog', stats.maintenanceBacklog);
+            
+            this.updateLoadingStates();
+            console.log('✅ Dashboard updated successfully');
+            
+        } catch (error) {
+            console.error('❌ Error updating dashboard:', error);
+            this.showDashboardErrorState();
+        }
+    }
+
+    setupRealTimeStats() {
+        console.log('🔄 Setting up real-time dashboard stats...');
+        
+        // Refresh data every 30 seconds when on dashboard
+        this.dashboardInterval = setInterval(() => {
+            if (this.currentRole === 'landlord' && this.currentPage === 'dashboard') {
+                console.log('🔄 Auto-refreshing dashboard data...');
+                this.loadDashboardData();
+            }
+        }, 30000); // 30 seconds
+        
+        // Set up Firestore listeners for real-time updates
+        this.setupFirestoreListeners();
+    }
+
+    cleanupDashboardListeners() {
+        console.log('🧹 Cleaning up dashboard listeners...');
+        
+        if (this.tenantsListener) {
+            this.tenantsListener();
+            this.tenantsListener = null;
+        }
+        if (this.leasesListener) {
+            this.leasesListener();
+            this.leasesListener = null;
+        }
+        if (this.billsListener) {
+            this.billsListener();
+            this.billsListener = null;
+        }
+        if (this.maintenanceListener) {
+            this.maintenanceListener();
+            this.maintenanceListener = null;
+        }
+        if (this.dashboardInterval) {
+            clearInterval(this.dashboardInterval);
+            this.dashboardInterval = null;
+        }
+        
+        console.log('✅ Dashboard listeners cleaned up');
+    }
+
+    setupFirestoreListeners() {
+        if (this.currentRole !== 'landlord') return;
+        
+        console.log('👂 Setting up Firestore listeners for real-time updates...');
+        
+        try {
+            // Listen for tenant changes
+            this.tenantsListener = firebaseDb.collection('users')
+                .where('landlordId', '==', this.currentUser.uid)
+                .where('role', '==', 'tenant')
+                .onSnapshot((snapshot) => {
+                    console.log('👥 Tenants data changed, refreshing dashboard...');
+                    if (this.currentPage === 'dashboard') {
+                        this.loadDashboardData();
+                    }
+                }, (error) => {
+                    console.error('❌ Tenants listener error:', error);
+                });
+            
+            // Listen for lease changes
+            this.leasesListener = firebaseDb.collection('leases')
+                .where('landlordId', '==', this.currentUser.uid)
+                .onSnapshot((snapshot) => {
+                    console.log('📄 Leases data changed, refreshing dashboard...');
+                    if (this.currentPage === 'dashboard') {
+                        this.loadDashboardData();
+                    }
+                }, (error) => {
+                    console.error('❌ Leases listener error:', error);
+                });
+            
+            // Listen for bill changes
+            this.billsListener = firebaseDb.collection('bills')
+                .where('landlordId', '==', this.currentUser.uid)
+                .onSnapshot((snapshot) => {
+                    console.log('💰 Bills data changed, refreshing dashboard...');
+                    if (this.currentPage === 'dashboard') {
+                        this.loadDashboardData();
+                    }
+                }, (error) => {
+                    console.error('❌ Bills listener error:', error);
+                });
+                
+            // Listen for maintenance changes
+            this.maintenanceListener = firebaseDb.collection('maintenance')
+                .where('landlordId', '==', this.currentUser.uid)
+                .onSnapshot((snapshot) => {
+                    console.log('🔧 Maintenance data changed, refreshing dashboard...');
+                    if (this.currentPage === 'dashboard') {
+                        this.loadDashboardData();
+                    }
+                }, (error) => {
+                    console.error('❌ Maintenance listener error:', error);
+                });
+                
+            console.log('✅ All Firestore listeners set up successfully');
+            
+        } catch (error) {
+            console.error('❌ Error setting up Firestore listeners:', error);
+        }
+    }
+
     updateCard(elementId, value) {
-        const element = document.getElementById(elementId);
-        if (element) {
-            element.textContent = value;
-        } else {
-            console.warn(`Element not found: ${elementId}`);
+        try {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = value;
+                console.log(`✅ Updated ${elementId}: ${value}`);
+            } else {
+                console.warn(`⚠️ Element not found: ${elementId}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error updating card ${elementId}:`, error);
         }
     }
 
