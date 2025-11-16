@@ -578,7 +578,7 @@ class CasaLink {
                 submitBtn.disabled = true;
             }
 
-            // Fetch lease data from Firestore
+            // Fetch FRESH lease data from Firestore
             const lease = await DataManager.getTenantLease(this.currentUser.uid);
             
             if (!lease) {
@@ -586,13 +586,20 @@ class CasaLink {
                 return;
             }
 
+            console.log('🔍 Lease data for dashboard view:', {
+                roomNumber: lease.roomNumber,
+                occupants: lease.occupants,
+                totalOccupants: lease.totalOccupants,
+                maxOccupants: lease.maxOccupants
+            });
+
             // Reset button state
             if (submitBtn) {
                 submitBtn.innerHTML = '<i class="fas fa-file-contract"></i> View Lease Agreement';
                 submitBtn.disabled = false;
             }
 
-            // Display the lease agreement modal
+            // Display the lease agreement modal with updated data
             this.displayLeaseAgreementModal(lease);
 
         } catch (error) {
@@ -610,138 +617,133 @@ class CasaLink {
 
     // Method to display the lease agreement in a modal
     displayLeaseAgreementModal(lease) {
-        // Format dates for display
-        const leaseStart = lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        }) : 'Not specified';
-        
-        const leaseEnd = lease.leaseEnd ? new Date(lease.leaseEnd).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        }) : 'Not specified';
+        // Get member information with proper fallbacks
+        const occupants = lease.occupants || [this.currentUser.name];
+        const primaryTenant = occupants[0];
+        const additionalMembers = occupants.slice(1);
+        const totalOccupants = lease.totalOccupants || occupants.length;
+        const maxOccupants = lease.maxOccupants || 1;
 
-        // Format payment schedule
+        console.log('👥 Displaying lease with occupants:', {
+            allOccupants: occupants,
+            totalOccupants,
+            maxOccupants,
+            additionalMembersCount: additionalMembers.length
+        });
+
+        // Format dates
+        const leaseStart = lease.leaseStart
+            ? new Date(lease.leaseStart).toLocaleDateString('en-US', { year: "numeric", month: "long", day: "numeric" })
+            : 'Not specified';
+
+        const leaseEnd = lease.leaseEnd
+            ? new Date(lease.leaseEnd).toLocaleDateString('en-US', { year: "numeric", month: "long", day: "numeric" })
+            : 'Not specified';
+
+        // Payment Schedule
         const paymentDay = lease.paymentDueDay || 'Not specified';
         const paymentSchedule = this.getPaymentScheduleText(paymentDay);
 
         const modalContent = `
             <div class="lease-agreement-view-modal" style="max-height: 80vh; overflow-y: auto;">
+
+                <!-- HEADER -->
                 <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
                     <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
                     <h3 style="color: var(--primary-blue); margin-bottom: 10px;">Your Lease Agreement</h3>
                     <p style="color: var(--dark-gray);">Review your current lease terms and conditions</p>
                 </div>
 
-                <!-- Lease Summary -->
+                <!-- LEASE SUMMARY -->
                 <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--primary-blue);">
                     <h4 style="color: var(--primary-blue); margin-bottom: 15px;">Lease Summary</h4>
+
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                        <div>
-                            <strong>Room/Unit:</strong><br>
-                            ${lease.roomNumber || 'N/A'}
-                        </div>
-                        <div>
-                            <strong>Monthly Rent:</strong><br>
-                            ₱${lease.monthlyRent ? lease.monthlyRent.toLocaleString() : '0'}
-                        </div>
-                        <div>
-                            <strong>Lease Period:</strong><br>
-                            ${leaseStart} to ${leaseEnd}
-                        </div>
-                        <div>
-                            <strong>Security Deposit:</strong><br>
-                            ₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}
-                        </div>
-                        <div>
-                            <strong>Payment Method:</strong><br>
-                            ${lease.paymentMethod || 'Cash'}
-                        </div>
-                        <div>
-                            <strong>Agreed Payment Schedule:</strong><br>
-                            ${paymentSchedule}
-                        </div>
+                        <div><strong>Room/Unit:</strong><br>${lease.roomNumber || 'N/A'}</div>
+                        <div><strong>Primary Tenant:</strong><br>${primaryTenant}</div>
+                        <div><strong>Total Occupants:</strong><br>${totalOccupants} of ${maxOccupants}</div>
+                        <div><strong>Monthly Rent:</strong><br>₱${lease.monthlyRent ? lease.monthlyRent.toLocaleString() : '0'}</div>
+                        <div><strong>Lease Period:</strong><br>${leaseStart} to ${leaseEnd}</div>
+                        <div><strong>Security Deposit:</strong><br>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</div>
+                        <div><strong>Payment Method:</strong><br>${lease.paymentMethod || 'Cash'}</div>
+                        <div><strong>Agreed Payment Schedule:</strong><br>${paymentSchedule}</div>
                     </div>
-                    
-                    <!-- Payment Schedule Details -->
-                    <div style="margin-top: 15px; padding: 15px; background: rgba(26, 115, 232, 0.05); border-radius: 6px; border-left: 3px solid var(--primary-blue);">
+
+                    <!-- Additional Occupants -->
+                    ${additionalMembers.length > 0 ? `
+                        <div style="margin-top: 15px; padding: 15px; background: rgba(52,168,83,0.1); border-radius: 6px;">
+                            <strong>Additional Occupants:</strong><br>
+                            ${additionalMembers.map(m => `• ${m}`).join('<br>')}
+                        </div>
+                    ` : ''}
+
+                    <!-- Payment instructions -->
+                    <div style="margin-top: 15px; padding: 15px; background: rgba(26,115,232,0.05); border-radius: 6px; border-left: 3px solid var(--primary-blue);">
                         <strong style="color: var(--primary-blue);">📅 Payment Instructions:</strong><br>
                         <small style="color: var(--dark-gray);">
-                            Rent payments are due on the <strong>${paymentDay}${this.getOrdinalSuffix(paymentDay)}</strong> of each month. 
-                            Late payments may incur penalties as per the agreement terms.
+                            Rent is due on the <strong>${paymentDay}${this.getOrdinalSuffix(parseInt(paymentDay))}</strong> 
+                            of each month.
                         </small>
                     </div>
                 </div>
 
-                <!-- Full Lease Agreement -->
+                <!-- FULL LEASE AGREEMENT -->
                 <div style="line-height: 1.6; font-size: 0.95rem; margin-bottom: 25px; max-height: 400px; overflow-y: auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background: #fafafa;">
+                    
                     <p><strong>This agreement is made by and between:</strong></p>
                     <p style="margin-left: 20px;">
                         <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
-                        <strong>Tenant/Lessee:</strong> ${this.currentUser.name || 'Tenant'}
+                        <strong>Tenant/Lessee:</strong> ${primaryTenant}
                     </p>
-                    
-                    <p>This landlady hereby agrees to lessee the unit <strong>${lease.roomNumber || 'N/A'}</strong> of her house located at <strong>${lease.rentalAddress || 'N/A'}</strong>. 
-                    The lesse period shall be for 1 year beginning <strong>${leaseStart}</strong> and shall end and may be renewable one (1) year thereafter.</p>
-                    
-                    <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</strong> 
-                    but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
-                    
+
+                    <p>
+                        This landlady hereby agrees to lease the unit <strong>${lease.roomNumber || 'N/A'}</strong> located at
+                        <strong>${lease.rentalAddress || 'N/A'}</strong>. The lease period shall be for 1 year beginning 
+                        <strong>${leaseStart}</strong> and ending <strong>${leaseEnd}</strong>.
+                    </p>
+
+                    <p>
+                        In case of failure to stay for 1 year, the landlady will not refund the security deposit of 
+                        <strong>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</strong>.
+                    </p>
+
                     <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Terms and Conditions:</h4>
-                    
-                    <ol style="margin-left: 20px; padding-left: 0;">
-                        <li style="margin-bottom: 10px;"><strong>Garbage/Trash</strong> - Tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke within the leased area.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Noise</strong> - All radios, television sets, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Payment Schedule</strong> - Monthly rental payment of <strong>₱${lease.monthlyRent ? lease.monthlyRent.toLocaleString() : '0'}</strong> is due on the <strong>${paymentDay}${this.getOrdinalSuffix(paymentDay)}</strong> day of each month. Late payments will incur penalties as specified in this agreement.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Utilities Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Cleaning Upon Termination</strong> - Upon termination of the lease, tenant shall be responsible for cleaning the premises. Additional charge of Php 2,000 if failed to do so.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Occupancy Limit</strong> - Limit of occupants be four (4) persons regardless of age, additional pay for excess of two thousand pesos (2,000) per person.</li>
-                        
-                        <li style="margin-bottom: 10px;"><strong>Rent Increase</strong> - Increase of monthly rental may occur at any time of the year as determined by the landlady.</li>
+
+                    <ol style="margin-left: 20px;">
+                        <li><strong>Garbage:</strong> Dispose every Thursday at Purok 6.</li>
+                        <li><strong>Smoking:</strong> Strictly prohibited inside the premises.</li>
+                        <li><strong>Noise:</strong> Keep appliances and noise to a minimum.</li>
+                        <li><strong>Visitors:</strong> Max 10; all must leave before 10 PM.</li>
+                        <li><strong>Locks:</strong> Tenant provides padlocks and removes them when leaving.</li>
+                        <li><strong>Walls/Hallways:</strong> No nails; keep hallways clean.</li>
+                        <li><strong>Rent Due:</strong> Every <strong>${paymentDay}${this.getOrdinalSuffix(paymentDay)}</strong>.</li>
+                        <li><strong>Utilities:</strong> Must be paid on time.</li>
+                        <li><strong>Light Bulbs:</strong> Tenant replaces worn-out bulbs.</li>
+                        <li><strong>Damage:</strong> Tenant covers damages from self or guests.</li>
+                        <li><strong>Security:</strong> Responsible for personal belongings.</li>
+                        <li><strong>Cleaning Fee:</strong> ₱2,000 if unit is not cleaned upon vacating.</li>
+                        <li><strong>Occupancy Limit:</strong> Max ${maxOccupants} persons; ₱2,000 per extra member.</li>
+                        <li><strong>Rent Increase:</strong> Landlady may increase rent anytime.</li>
                     </ol>
 
-                    <p style="margin-top: 20px; padding: 15px; background: rgba(26, 115, 232, 0.1); border-radius: 8px;">
-                        <strong>15. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
-                        <strong>${leaseStart}</strong>
+                    <p style="margin-top: 20px; padding: 15px; background: rgba(26,115,232,0.1); border-radius: 8px;">
+                        <strong>15. Acknowledgement:</strong> Parties acknowledge the terms on <strong>${leaseStart}</strong>.
                     </p>
 
-                    <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
-                        <div>
-                            <p><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</p>
-                        </div>
-                        <div>
-                            <p><strong>${this.currentUser.name || 'Tenant'}</strong><br>Tenant/Lessee</p>
-                        </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">
+                        <div><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</div>
+                        <div><strong>${primaryTenant}</strong><br>Tenant/Lessee</div>
                     </div>
                 </div>
 
-                <!-- Agreement Status -->
-                <div style="background: ${lease.agreementAccepted ? 'rgba(52, 168, 83, 0.1)' : 'rgba(251, 188, 4, 0.1)'}; 
-                            padding: 15px; border-radius: 8px; border-left: 4px solid ${lease.agreementAccepted ? 'var(--success)' : 'var(--warning)'};">
+                <!-- AGREEMENT STATUS -->
+                <div style="background: ${lease.agreementAccepted ? 'rgba(52,168,83,0.1)' : 'rgba(251,188,4,0.1)'}; padding: 15px; border-radius: 8px; border-left: 4px solid ${
+                    lease.agreementAccepted ? 'var(--success)' : 'var(--warning)'
+                };">
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <i class="fas ${lease.agreementAccepted ? 'fa-check-circle' : 'fa-exclamation-circle'}" 
-                        style="color: ${lease.agreementAccepted ? 'var(--success)' : 'var(--warning)'};"></i>
+                            style="color: ${lease.agreementAccepted ? 'var(--success)' : 'var(--warning)'};">
+                        </i>
                         <div>
                             <strong>Agreement Status:</strong> ${lease.agreementAccepted ? 'Accepted and Verified' : 'Pending Acceptance'}
                             ${lease.agreementAcceptedDate ? `<br><small>Accepted on: ${new Date(lease.agreementAcceptedDate).toLocaleDateString()}</small>` : ''}
@@ -765,9 +767,10 @@ class CasaLink {
             ]
         });
 
-        // Store reference to the modal
         this.leaseViewModal = modal;
     }
+
+
 
     getPaymentScheduleText(paymentDay) {
         if (!paymentDay || paymentDay === 'Not specified') return 'Not specified';
@@ -1483,6 +1486,32 @@ class CasaLink {
         };
     }
 
+    async forceMemberCollection() {
+        console.log('🔧 FORCING member collection...');
+        
+        const user = this.currentUser;
+        if (!user) {
+            console.log('❌ No user logged in');
+            return;
+        }
+        
+        const lease = await DataManager.getTenantLease(user.uid);
+        if (!lease) {
+            console.log('❌ No lease found');
+            return;
+        }
+        
+        // Clear occupants to force member collection
+        await firebaseDb.collection('leases').doc(lease.id).update({
+            occupants: [],
+            totalOccupants: 0,
+            updatedAt: new Date().toISOString()
+        });
+        
+        console.log('✅ Cleared occupants, should trigger member collection on next check');
+        this.showMemberInformationCollection();
+    }
+
     setupAuthListener() {
         console.log('🔐 Setting up auth state listener...');
         
@@ -1535,10 +1564,84 @@ class CasaLink {
                         this.showPasswordChangeModal();
                     }, 1000);
                 } else if (user.role === 'tenant' && user.passwordChanged && user.status === 'unverified') {
-                    console.log('📝 Password changed but not verified - showing lease agreement');
-                    setTimeout(() => {
-                        this.showLeaseAgreementVerification();
-                    }, 1000);
+                    console.log('🎯 TRIGGER: Tenant needs verification - checking member info');
+                    console.log('📊 User state:', {
+                        passwordChanged: user.passwordChanged,
+                        status: user.status,
+                        requiresPasswordChange: user.requiresPasswordChange
+                    });
+                    
+                    // IMPORTANT: Use a longer timeout to ensure everything is loaded
+                    setTimeout(async () => {
+                        try {
+                            console.log('🔍 STEP 1: Fetching lease data...');
+                            const lease = await DataManager.getTenantLease(user.uid);
+                            
+                            if (!lease) {
+                                console.log('❌ STEP 1 FAILED: No lease found');
+                                this.showLeaseAgreementVerification();
+                                return;
+                            }
+                            
+                            console.log('✅ STEP 1 SUCCESS: Lease found', {
+                                roomNumber: lease.roomNumber,
+                                maxOccupants: lease.maxOccupants,
+                                occupants: lease.occupants,
+                                totalOccupants: lease.totalOccupants
+                            });
+                            
+                            console.log('🔍 STEP 2: Fetching room data...');
+                            const room = await this.getRoomByNumber(lease.roomNumber);
+                            
+                            if (!room) {
+                                console.log('❌ STEP 2 FAILED: No room found');
+                                this.showLeaseAgreementVerification();
+                                return;
+                            }
+                            
+                            console.log('✅ STEP 2 SUCCESS: Room found', {
+                                roomNumber: room.roomNumber,
+                                maxMembers: room.maxMembers
+                            });
+                            
+                            const maxMembers = room.maxMembers || 1;
+                            const hasOccupants = lease.occupants && lease.occupants.length > 0;
+                            
+                            console.log('🔍 STEP 3: Decision making...', {
+                                maxMembers: maxMembers,
+                                hasOccupants: hasOccupants,
+                                occupantsCount: lease.occupants?.length,
+                                shouldShowMemberForm: (maxMembers > 1 && !hasOccupants)
+                            });
+                            
+                            // CRITICAL: Check if we need member collection
+                            if (maxMembers > 1 && !hasOccupants) {
+                                console.log('🚀 STEP 3 DECISION: SHOW MEMBER COLLECTION FORM');
+                                console.log('📝 Reason: Room allows', maxMembers, 'members but no occupants recorded');
+                                
+                                // Small delay to ensure modal system is ready
+                                setTimeout(() => {
+                                    this.showMemberInformationCollection();
+                                }, 500);
+                                
+                            } else {
+                                console.log('🚀 STEP 3 DECISION: SKIP TO LEASE AGREEMENT');
+                                console.log('📝 Reason:', 
+                                    maxMembers <= 1 ? 'Room only allows 1 member' : 
+                                    'Occupants already recorded: ' + JSON.stringify(lease.occupants)
+                                );
+                                
+                                setTimeout(() => {
+                                    this.showLeaseAgreementVerification();
+                                }, 500);
+                            }
+                            
+                        } catch (error) {
+                            console.error('❌ ONBOARDING FLOW ERROR:', error);
+                            console.log('🔄 Falling back to lease agreement due to error');
+                            this.showLeaseAgreementVerification();
+                        }
+                    }, 1500); // Increased timeout to ensure everything is ready
                 } else {
                     console.log('🏠 No special requirements - showing stored page');
                     
@@ -2396,76 +2499,76 @@ class CasaLink {
 
     async createDefaultRooms() {
         try {
-            console.log('🏗️ Creating default rooms collection...');
+            console.log('🏗️ Creating default rooms collection with member limits...');
             
             const defaultRooms = [
-                // 1st floor: 1A-1E - 10,000 PHP
-                { roomNumber: '1A', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '1B', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '1C', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '1D', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '1E', floor: '1', monthlyRent: 10000, securityDeposit: 10000, isAvailable: true, occupiedBy: null },
+                // 1st floor: 1A-1E - 10,000 PHP - MAX 1 MEMBER
+                { roomNumber: '1A', floor: '1', monthlyRent: 10000, securityDeposit: 10000, maxMembers: 1, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1B', floor: '1', monthlyRent: 10000, securityDeposit: 10000, maxMembers: 1, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1C', floor: '1', monthlyRent: 10000, securityDeposit: 10000, maxMembers: 1, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1D', floor: '1', monthlyRent: 10000, securityDeposit: 10000, maxMembers: 1, isAvailable: true, occupiedBy: null },
+                { roomNumber: '1E', floor: '1', monthlyRent: 10000, securityDeposit: 10000, maxMembers: 1, isAvailable: true, occupiedBy: null },
                 
-                // 1st floor: 2A-2E - 12,000 PHP
-                { roomNumber: '2A', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '2B', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '2C', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '2D', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '2E', floor: '1', monthlyRent: 12000, securityDeposit: 12000, isAvailable: true, occupiedBy: null },
+                // 1st floor: 2A-2E - 12,000 PHP - MAX 2 MEMBERS
+                { roomNumber: '2A', floor: '1', monthlyRent: 12000, securityDeposit: 12000, maxMembers: 2, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2B', floor: '1', monthlyRent: 12000, securityDeposit: 12000, maxMembers: 2, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2C', floor: '1', monthlyRent: 12000, securityDeposit: 12000, maxMembers: 2, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2D', floor: '1', monthlyRent: 12000, securityDeposit: 12000, maxMembers: 2, isAvailable: true, occupiedBy: null },
+                { roomNumber: '2E', floor: '1', monthlyRent: 12000, securityDeposit: 12000, maxMembers: 2, isAvailable: true, occupiedBy: null },
                 
-                // 1st floor: 3A-3E - 14,000 PHP
-                { roomNumber: '3A', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '3B', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '3C', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '3D', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '3E', floor: '1', monthlyRent: 14000, securityDeposit: 14000, isAvailable: true, occupiedBy: null },
+                // 1st floor: 3A-3E - 14,000 PHP - MAX 4 MEMBERS
+                { roomNumber: '3A', floor: '1', monthlyRent: 14000, securityDeposit: 14000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3B', floor: '1', monthlyRent: 14000, securityDeposit: 14000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3C', floor: '1', monthlyRent: 14000, securityDeposit: 14000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3D', floor: '1', monthlyRent: 14000, securityDeposit: 14000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '3E', floor: '1', monthlyRent: 14000, securityDeposit: 14000, maxMembers: 4, isAvailable: true, occupiedBy: null },
                 
-                // 1st floor: 4A-4E - 15,000 PHP
-                { roomNumber: '4A', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '4B', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '4C', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '4D', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
-                { roomNumber: '4E', floor: '1', monthlyRent: 15000, securityDeposit: 15000, isAvailable: true, occupiedBy: null },
+                // 1st floor: 4A-4E - 15,000 PHP - MAX 4 MEMBERS
+                { roomNumber: '4A', floor: '1', monthlyRent: 15000, securityDeposit: 15000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4B', floor: '1', monthlyRent: 15000, securityDeposit: 15000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4C', floor: '1', monthlyRent: 15000, securityDeposit: 15000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4D', floor: '1', monthlyRent: 15000, securityDeposit: 15000, maxMembers: 4, isAvailable: true, occupiedBy: null },
+                { roomNumber: '4E', floor: '1', monthlyRent: 15000, securityDeposit: 15000, maxMembers: 4, isAvailable: true, occupiedBy: null },
                 
-                // 1st floor: 5A-5B - 15,500 PHP
-                { roomNumber: '5A', floor: '1', monthlyRent: 15500, securityDeposit: 15500, isAvailable: true, occupiedBy: null },
-                { roomNumber: '5B', floor: '1', monthlyRent: 15500, securityDeposit: 15500, isAvailable: true, occupiedBy: null }
+                // 1st floor: 5A-5B - 15,500 PHP - MAX 5 MEMBERS
+                { roomNumber: '5A', floor: '1', monthlyRent: 15500, securityDeposit: 15500, maxMembers: 5, isAvailable: true, occupiedBy: null },
+                { roomNumber: '5B', floor: '1', monthlyRent: 15500, securityDeposit: 15500, maxMembers: 5, isAvailable: true, occupiedBy: null }
             ];
             
             const batch = firebaseDb.batch();
             const createdRooms = [];
             
             defaultRooms.forEach(room => {
-                // Use roomNumber as the document ID instead of auto-generated ID
                 const roomRef = firebaseDb.collection('rooms').doc(room.roomNumber);
                 batch.set(roomRef, {
                     floor: room.floor,
                     monthlyRent: room.monthlyRent,
                     securityDeposit: room.securityDeposit,
+                    maxMembers: room.maxMembers,
                     isAvailable: room.isAvailable,
                     occupiedBy: room.occupiedBy,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 });
                 createdRooms.push({
-                    id: room.roomNumber, // Use roomNumber as ID
+                    id: room.roomNumber,
                     roomNumber: room.roomNumber,
                     floor: room.floor,
                     monthlyRent: room.monthlyRent,
                     securityDeposit: room.securityDeposit,
+                    maxMembers: room.maxMembers,
                     isAvailable: room.isAvailable,
                     occupiedBy: room.occupiedBy
                 });
             });
             
             await batch.commit();
-            console.log('✅ Created default rooms collection with 22 available units');
+            console.log('✅ Created default rooms collection with member limits');
             
             return createdRooms;
             
         } catch (error) {
             console.error('❌ Error creating default rooms:', error);
-            // Return hardcoded rooms as fallback
             return this.getHardcodedRooms();
         }
     }
@@ -2545,6 +2648,31 @@ class CasaLink {
         }
     }
 
+    getMemberLimitText(maxMembers) {
+        // Handle undefined, null, or missing values
+        if (maxMembers === undefined || maxMembers === null || isNaN(maxMembers)) {
+            return 'Max 1 Member'; // Default fallback
+        }
+        
+        const memberCount = parseInt(maxMembers);
+        switch(memberCount) {
+            case 1: return 'Max 1 Member';
+            case 2: return 'Max 2 Members';
+            case 4: return 'Max 4 Members';
+            case 5: return 'Max 5 Members';
+            default: return `Max ${memberCount} Members`;
+        }
+    }
+
+    getMemberLimitTextFallback(maxMembers) {
+        const memberCount = parseInt(maxMembers) || 1;
+        if (memberCount === 1) return 'Max 1 Member';
+        if (memberCount === 2) return 'Max 2 Members';
+        if (memberCount === 4) return 'Max 4 Members';
+        if (memberCount === 5) return 'Max 5 Members';
+        return `Max ${memberCount} Members`;
+    }
+
     // Landlord creates tenant accounts
     async showAddTenantForm() {
         // Fetch available rooms from Firestore
@@ -2557,9 +2685,32 @@ class CasaLink {
             roomOptions = '<option value="">No available rooms</option>';
             availabilityMessage = '<div style="color: var(--danger); margin-top: 10px; padding: 10px; background: rgba(234, 67, 53, 0.1); border-radius: 6px;"><i class="fas fa-exclamation-triangle"></i> No available rooms. All units are currently occupied.</div>';
         } else {
-            roomOptions = availableRooms.map(room => 
-                `<option value="${room.roomNumber}" data-rent="${room.monthlyRent}" data-deposit="${room.securityDeposit}">${room.roomNumber} - ₱${room.monthlyRent.toLocaleString()}</option>`
-            ).join('');
+            roomOptions = availableRooms.map(room => {
+            // Use room.maxMembers with fallback to determine from room number
+            let maxMembers = room.maxMembers;
+            
+            // If maxMembers is undefined, determine from room number
+            if (maxMembers === undefined || maxMembers === null) {
+                if (room.roomNumber && room.roomNumber.startsWith('1')) {
+                    maxMembers = 1;
+                } else if (room.roomNumber && room.roomNumber.startsWith('2')) {
+                    maxMembers = 2;
+                } else if (room.roomNumber && (room.roomNumber.startsWith('3') || room.roomNumber.startsWith('4'))) {
+                    maxMembers = 4;
+                } else if (room.roomNumber && room.roomNumber.startsWith('5')) {
+                    maxMembers = 5;
+                } else {
+                    maxMembers = 1; // Default fallback
+                }
+            }
+            
+            // Use the helper function directly instead of this.getMemberLimitText
+            const memberText = this.getMemberLimitText ? 
+                this.getMemberLimitText(maxMembers) : 
+                this.getMemberLimitTextFallback(maxMembers);
+            
+            return `<option value="${room.roomNumber}" data-rent="${room.monthlyRent}" data-deposit="${room.securityDeposit}" data-max-members="${maxMembers}">${room.roomNumber} - ₱${room.monthlyRent.toLocaleString()} (${memberText})</option>`;
+        }).join('');
             
             availabilityMessage = `<small style="color: var(--dark-gray);">${availableRooms.length} available room(s) found</small>`;
         }
@@ -2604,6 +2755,9 @@ class CasaLink {
                         ${roomOptions}
                     </select>
                     ${availabilityMessage}
+                    <div id="memberLimitInfo" style="margin-top: 8px; padding: 8px; background: rgba(26, 115, 232, 0.1); border-radius: 4px; display: none;">
+                        <small style="color: var(--primary-blue);"><i class="fas fa-info-circle"></i> <span id="memberLimitText">Member limit information</span></small>
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -2679,12 +2833,356 @@ class CasaLink {
                 document.getElementById('firstPaymentDate').value = firstPayment.toISOString().split('T')[0];
                 
                 // Add event listener for room selection
-                this.setupRoomSelection();
+                this.setupRoomSelectionWithMemberInfo();
             }, 100);
         }
 
         this.addTenantModal = modal;
     }
+
+    setupRoomSelectionWithMemberInfo() {
+        const roomSelect = document.getElementById('roomNumber');
+        const rentalAmountInput = document.getElementById('rentalAmount');
+        const securityDepositInput = document.getElementById('securityDeposit');
+        const memberLimitInfo = document.getElementById('memberLimitInfo');
+        const memberLimitText = document.getElementById('memberLimitText');
+        
+        if (roomSelect) {
+            roomSelect.addEventListener('change', (e) => {
+                const selectedOption = e.target.options[e.target.selectedIndex];
+                if (selectedOption.value) {
+                    const rent = selectedOption.getAttribute('data-rent');
+                    const deposit = selectedOption.getAttribute('data-deposit');
+                    const maxMembers = selectedOption.getAttribute('data-max-members');
+                    
+                    rentalAmountInput.value = rent || '';
+                    securityDepositInput.value = deposit || '';
+                    
+                    // Show member limit information with fallback
+                    if (memberLimitInfo && memberLimitText) {
+                        const memberLimit = maxMembers ? parseInt(maxMembers) : 1;
+                        memberLimitText.textContent = `This unit allows maximum ${memberLimit} member(s)`;
+                        memberLimitInfo.style.display = 'block';
+                        
+                        // Store max members for later use
+                        this.selectedRoomMaxMembers = memberLimit;
+                    }
+                } else {
+                    rentalAmountInput.value = '';
+                    securityDepositInput.value = '';
+                    if (memberLimitInfo) {
+                        memberLimitInfo.style.display = 'none';
+                    }
+                    this.selectedRoomMaxMembers = null;
+                }
+            });
+        }
+    }
+
+    async getRoomByNumber(roomNumber) {
+        try {
+            if (!roomNumber) {
+                console.warn('⚠️ No room number provided');
+                return null;
+            }
+            
+            const roomDoc = await firebaseDb.collection('rooms').doc(roomNumber).get();
+            if (roomDoc.exists) {
+                const roomData = roomDoc.data();
+                
+                // Ensure maxMembers is set based on room number if missing
+                let maxMembers = roomData.maxMembers;
+                if (maxMembers === undefined || maxMembers === null) {
+                    if (roomNumber.startsWith('1')) {
+                        maxMembers = 1;
+                    } else if (roomNumber.startsWith('2')) {
+                        maxMembers = 2;
+                    } else if (roomNumber.startsWith('3') || roomNumber.startsWith('4')) {
+                        maxMembers = 4;
+                    } else if (roomNumber.startsWith('5')) {
+                        maxMembers = 5;
+                    } else {
+                        maxMembers = 1;
+                    }
+                    
+                    // Update the room document with the calculated maxMembers
+                    await firebaseDb.collection('rooms').doc(roomNumber).update({
+                        maxMembers: maxMembers,
+                        updatedAt: new Date().toISOString()
+                    });
+                    
+                    console.log(`📝 Auto-updated ${roomNumber} with maxMembers: ${maxMembers}`);
+                }
+                
+                console.log('✅ Room found:', { roomNumber, maxMembers });
+                return { 
+                    id: roomDoc.id, 
+                    ...roomData,
+                    maxMembers: maxMembers // Ensure we return the calculated value
+                };
+            } else {
+                console.warn('⚠️ Room not found:', roomNumber);
+                return null;
+            }
+        } catch (error) {
+            console.error('❌ Error fetching room:', error);
+            return null;
+        }
+    }
+
+    async debugLeaseData() {
+        console.log('🔍 DEBUG: Checking current lease data in Firestore...');
+        
+        const user = this.currentUser;
+        if (!user) {
+            console.log('❌ No user logged in');
+            return;
+        }
+        
+        const lease = await DataManager.getTenantLease(user.uid);
+        console.log('📄 CURRENT LEASE DATA:', {
+            id: lease?.id,
+            roomNumber: lease?.roomNumber,
+            occupants: lease?.occupants,
+            totalOccupants: lease?.totalOccupants,
+            maxOccupants: lease?.maxOccupants
+        });
+        
+        if (lease?.occupants) {
+            console.log('👥 OCCUPANTS DETAILS:', {
+                count: lease.occupants.length,
+                list: lease.occupants,
+                primary: lease.occupants[0],
+                additional: lease.occupants.slice(1)
+            });
+        }
+    }
+
+    async saveMemberInformation(lease, maxMembers, currentOccupants = [], skipValidation = false) {
+        try {
+            console.log('💾 Saving member information...');
+            
+            // Start with current occupants, or just primary tenant if empty
+            let members = currentOccupants.length > 0 ? [...currentOccupants] : [this.currentUser.name];
+            
+            // Ensure primary tenant is included
+            if (!members.includes(this.currentUser.name)) {
+                members.unshift(this.currentUser.name);
+            }
+
+            // Collect additional member names
+            const additionalMembersAllowed = maxMembers - members.length;
+            for (let i = 1; i <= additionalMembersAllowed; i++) {
+                const memberName = document.getElementById(`memberName${i}`)?.value?.trim();
+                if (memberName && !members.includes(memberName)) {
+                    console.log(`✅ Adding member ${i}:`, memberName);
+                    members.push(memberName);
+                }
+            }
+
+            console.log('👥 Final member list to save:', members);
+
+            // Update lease document with member information
+            await firebaseDb.collection('leases').doc(lease.id).update({
+                occupants: members,
+                totalOccupants: members.length,
+                updatedAt: new Date().toISOString()
+            });
+
+            // Update user document
+            await firebaseDb.collection('users').doc(this.currentUser.uid).update({
+                roomMembers: members,
+                totalRoomMembers: members.length,
+                updatedAt: new Date().toISOString()
+            });
+
+            console.log('✅ Member information saved to Firestore');
+
+            // Close modal
+            if (this.memberInfoModal) {
+                ModalManager.closeModal(this.memberInfoModal);
+            }
+            
+            // Show success message
+            const additionalCount = members.length - (currentOccupants.length > 0 ? currentOccupants.length : 1);
+            if (additionalCount > 0) {
+                this.showNotification(`Member information saved! ${additionalCount} additional member(s) added.`, 'success');
+            } else {
+                this.showNotification('Proceeding with current occupants.', 'info');
+            }
+            
+            // CRITICAL: Add a delay to ensure Firestore updates are committed
+            console.log('⏳ Waiting for Firestore to commit changes...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Now proceed to lease agreement with fresh data
+            console.log('🚀 Proceeding to lease agreement verification...');
+            this.showLeaseAgreementVerification();
+
+        } catch (error) {
+            console.error('❌ Error saving member information:', error);
+            this.showNotification('Failed to save member information.', 'error');
+        }
+    }
+
+    async saveMemberInformation(lease, maxMembers, skipValidation = false) {
+        try {
+            console.log('💾 Saving member information...');
+            
+            const additionalMembers = maxMembers - 1;
+            const members = [this.currentUser.name]; // Primary tenant is always first
+            
+            // Collect additional member names
+            for (let i = 1; i <= additionalMembers; i++) {
+                const memberName = document.getElementById(`memberName${i}`)?.value?.trim();
+                if (memberName) {
+                    console.log(`✅ Adding member ${i}:`, memberName);
+                    members.push(memberName);
+                } else {
+                    console.log(`⏭️ Skipping empty member ${i}`);
+                }
+            }
+
+            console.log('👥 Final member list:', members);
+
+            // Update lease document with member information
+            await firebaseDb.collection('leases').doc(lease.id).update({
+                occupants: members,
+                totalOccupants: members.length,
+                updatedAt: new Date().toISOString()
+            });
+
+            // Update user document
+            await firebaseDb.collection('users').doc(this.currentUser.uid).update({
+                roomMembers: members,
+                totalRoomMembers: members.length,
+                updatedAt: new Date().toISOString()
+            });
+
+            console.log('✅ Member information saved successfully');
+            
+            // Close modal if it exists
+            if (this.memberInfoModal) {
+                ModalManager.closeModal(this.memberInfoModal);
+            }
+            
+            // Show success message
+            if (members.length > 1) {
+                this.showNotification(`Member information saved! ${members.length - 1} additional member(s) added.`, 'success');
+            } else {
+                this.showNotification('Proceeding with primary tenant only.', 'info');
+            }
+            
+            // Small delay before showing lease agreement
+            setTimeout(() => {
+                this.showLeaseAgreementVerification();
+            }, 1000);
+
+        } catch (error) {
+            console.error('❌ Error saving member information:', error);
+            
+            const errorElement = document.getElementById('memberInfoError');
+            if (errorElement) {
+                errorElement.textContent = 'Failed to save member information. Please try again.';
+                errorElement.style.display = 'block';
+            } else {
+                this.showNotification('Failed to save member information.', 'error');
+            }
+        }
+    }
+
+    async showMemberInformationCollection() {
+        try {
+            console.log('👥 Starting member information collection...');
+            
+            const lease = await DataManager.getTenantLease(this.currentUser.uid);
+            if (!lease) {
+                this.showNotification('No lease information found.', 'error');
+                this.showLeaseAgreementVerification(); // Fallback to lease agreement
+                return;
+            }
+
+            const room = await this.getRoomByNumber(lease.roomNumber);
+            const maxMembers = room?.maxMembers || 1;
+            
+            console.log('🏠 Member collection for:', {
+                roomNumber: lease.roomNumber,
+                maxMembers: maxMembers,
+                currentUser: this.currentUser.name
+            });
+            
+            // If max members is 1, skip this step and go directly to lease agreement
+            if (maxMembers <= 1) {
+                console.log('⏭️ Skipping member collection - max members is 1');
+                this.showLeaseAgreementVerification();
+                return;
+            }
+
+            let memberFields = '';
+            const additionalMembers = maxMembers - 1; // Primary tenant is already counted
+            
+            console.log(`📝 Generating fields for ${additionalMembers} additional members`);
+
+            for (let i = 1; i <= additionalMembers; i++) {
+                memberFields += `
+                    <div class="form-group">
+                        <label class="form-label">Additional Member ${i} - Full Name</label>
+                        <input type="text" id="memberName${i}" class="form-input" placeholder="Enter full name">
+                        <small style="color: var(--dark-gray);">Optional - enter if this member will be staying with you</small>
+                    </div>
+                `;
+            }
+
+            const modalContent = `
+                <div class="member-info-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-users" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Additional Member Information</h3>
+                        <p>Your unit <strong>${lease.roomNumber}</strong> allows up to <strong>${maxMembers} members</strong>.</p>
+                        <p>Please provide information for additional members staying with you.</p>
+                    </div>
+                    
+                    <div style="background: rgba(26, 115, 232, 0.1); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <p style="margin: 0; font-size: 0.9rem;">
+                            <i class="fas fa-info-circle" style="color: var(--primary-blue);"></i>
+                            <strong>Primary Tenant:</strong> ${this.currentUser.name}<br>
+                            <strong>Room:</strong> ${lease.roomNumber}<br>
+                            <strong>Maximum occupants:</strong> ${maxMembers}<br>
+                            <strong>Additional members allowed:</strong> ${additionalMembers}
+                        </p>
+                    </div>
+                    
+                    ${memberFields}
+                    
+                    <div id="memberInfoError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
+                    
+                    <div class="security-info">
+                        <i class="fas fa-info-circle"></i>
+                        <small>This information will be included in your lease agreement. You can skip optional members if they won't be staying with you.</small>
+                    </div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Member Information - Step 3 of 5',
+                submitText: 'Next: Review Lease Agreement',
+                onSubmit: () => this.saveMemberInformation(lease, maxMembers),
+                onCancel: () => {
+                    // If user cancels, still proceed to lease agreement but with only primary tenant
+                    this.saveMemberInformation(lease, maxMembers, true);
+                }
+            });
+
+            this.memberInfoModal = modal;
+
+        } catch (error) {
+            console.error('❌ Error showing member information collection:', error);
+            this.showNotification('Error loading member information form.', 'error');
+            // Fallback to lease agreement
+            this.showLeaseAgreementVerification();
+        }
+    }
+
 
 
     validateTenantForm() {
@@ -2736,15 +3234,28 @@ class CasaLink {
         this.showLeaseAgreementModal(null, this.pendingTenantData);
     }
 
+    getOrdinalSuffix(day) {
+        if (!day || typeof day !== 'number') return '';
+        
+        if (day >= 11 && day <= 13) return 'th';
+        
+        const lastDigit = day % 10;
+        switch (lastDigit) {
+            case 1: return 'st';
+            case 2: return 'nd';
+            case 3: return 'rd';
+            default: return 'th';
+        }
+    }
+
     showLeaseAgreementModal(tenantId, tenantData) {
-        // Use either provided tenantData or pendingTenantData
         const data = tenantData || this.pendingTenantData;
         if (!data) {
             this.showNotification('No tenant data found. Please start over.', 'error');
             return;
         }
 
-        // Calculate lease end date (1 year from date of entry)
+        // Calculate lease end date
         const dateOfEntry = new Date(data.dateOfEntry);
         const leaseEnd = new Date(dateOfEntry);
         leaseEnd.setFullYear(leaseEnd.getFullYear() + 1);
@@ -2761,6 +3272,19 @@ class CasaLink {
             day: 'numeric' 
         });
 
+        // Get max members for the room
+        const maxMembers = this.selectedRoomMaxMembers || 1;
+        const additionalFee = 2000;
+
+        // Format tenant section (this will show primary tenant only since members haven't been added yet)
+        const tenantLesseeSection = `
+            <p style="margin-left: 20px;">
+                <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
+                <strong>Tenant/Lessee:</strong> ${data.name}<br>
+                <em>Additional occupants can be added by the tenant during account setup</em>
+            </p>
+        `;
+
         const modalContent = `
             <div class="lease-agreement-modal" style="max-height: 70vh; overflow-y: auto;">
                 <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
@@ -2770,10 +3294,7 @@ class CasaLink {
                 
                 <div style="line-height: 1.6; font-size: 0.95rem;">
                     <p><strong>This agreement is made by and between:</strong></p>
-                    <p style="margin-left: 20px;">
-                        <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
-                        <strong>Tenant/Lessee:</strong> ${data.name}
-                    </p>
+                    ${tenantLesseeSection}
                     
                     <p>This landlady hereby agrees to lessee the unit <strong>${data.roomNumber}</strong> of her house located at <strong>${data.rentalAddress}</strong>. 
                     The lesse period shall be for 1 year beginning <strong>${formattedDateOfEntry}</strong> and shall end and may be renewable one (1) year thereafter.</p>
@@ -2781,27 +3302,42 @@ class CasaLink {
                     <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${data.securityDeposit.toLocaleString()}</strong> 
                     but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
                     
-                    <p>Limit of occupants be four (4) persons regardless of age, additional pay for excess of two thousand pesos (2,000) per person.</p>
+                    <p><strong>Limit of occupants be ${maxMembers} ${maxMembers === 1 ? 'person' : 'persons'} regardless of age</strong>, additional pay for excess of two thousand pesos (${additionalFee.toLocaleString()}) per person.</p>
                     
-                    <p>Increase of monthly rental at any time of the year.</p>
+                    <p><strong>Increase of monthly rental may occur at any time of the year as determined by the landlady.</strong></p>
                     
+                    <!-- Occupancy Information -->
+                    <div style="background: rgba(52, 168, 83, 0.1); padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 4px solid var(--success);">
+                        <h5 style="margin: 0 0 10px 0; color: var(--success);"><i class="fas fa-home"></i> Room Information Summary</h5>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 0.9rem;">
+                            <div><strong>Room Number:</strong> ${data.roomNumber}</div>
+                            <div><strong>Monthly Rent:</strong> ₱${data.rentalAmount.toLocaleString()}</div>
+                            <div><strong>Security Deposit:</strong> ₱${data.securityDeposit.toLocaleString()}</div>
+                            <div><strong>Maximum Occupants:</strong> ${maxMembers} ${maxMembers === 1 ? 'person' : 'persons'}</div>
+                            <div><strong>Primary Tenant:</strong> ${data.name}</div>
+                            <div><strong>Additional Members Allowed:</strong> ${maxMembers - 1}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Rest of the agreement content remains the same -->
                     <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Terms and Conditions:</h4>
                     
                     <ol style="margin-left: 20px; padding-left: 0;">
                         <li><strong>Garbage/Trash</strong> - tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
-                        <li><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke withing the leased area.</li>
+                        <li><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke within the leased area.</li>
                         <li><strong>Noise</strong> - All radios, television set, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
                         <li><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
                         <li><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
                         <li><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
-                        <li><strong>Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
-                        <li><strong>Light Bulbs</strong> - Tenant at tenant expense shall be reponsible for replacement of all interior light bulb. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
+                        <li><strong>Payment Schedule</strong> - Monthly rental payment of <strong>₱${data.rentalAmount.toLocaleString()}</strong> is due on the <strong>${data.paymentDay}${this.getOrdinalSuffix(parseInt(data.paymentDay))}</strong> day of each month. Late payments will incur penalties as specified in this agreement.</li>
+                        <li><strong>Utilities Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
+                        <li><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
                         <li><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
                         <li><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
-                        <li><strong>Upon termination of the lease</strong>, tenant shall be responsible for cleaning the premises. Additional of Php 2,000 if failed to do so.</li>
+                        <li><strong>Cleaning Upon Termination</strong> - Upon termination of the lease, tenant shall be responsible for cleaning the premises. Additional charge of Php 2,000 if failed to do so.</li>
                     </ol>
                     
-                    <p><strong>12. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of <strong>${formattedDateOfEntry}</strong></p>
+                    <p><strong>13. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of <strong>${formattedDateOfEntry}</strong></p>
                     
                     <div style="display: flex; justify-content: space-between; margin-top: 30px;">
                         <div>
@@ -2815,7 +3351,7 @@ class CasaLink {
                     <div style="background: rgba(26, 115, 232, 0.1); padding: 15px; border-radius: 8px; margin-top: 20px;">
                         <p style="margin: 0; font-size: 0.9rem; display: flex; align-items: center; gap: 10px;">
                             <i class="fas fa-info-circle" style="color: var(--primary-blue);"></i>
-                            The tenant account will be created with "unverified" status. Status will change to "verified" once the tenant changes their temporary password and agrees to these terms.
+                            The tenant account will be created with "unverified" status. Status will change to "verified" once the tenant changes their temporary password, provides additional occupant information, and agrees to these terms.
                         </p>
                     </div>
                 </div>
@@ -3161,17 +3697,135 @@ class CasaLink {
         }
     }
 
+    async updateRoomMemberLimits() {
+        try {
+            console.log('🔄 Updating room member limits...');
+            
+            const roomsSnapshot = await firebaseDb.collection('rooms').get();
+            const batch = firebaseDb.batch();
+            let updatedCount = 0;
+
+            roomsSnapshot.forEach(doc => {
+                const roomData = doc.data();
+                const roomNumber = roomData.roomNumber || doc.id;
+                
+                // Determine maxMembers based on room number
+                let maxMembers = 1; // Default
+                
+                if (roomNumber.startsWith('1')) {
+                    maxMembers = 1;
+                } else if (roomNumber.startsWith('2')) {
+                    maxMembers = 2;
+                } else if (roomNumber.startsWith('3') || roomNumber.startsWith('4')) {
+                    maxMembers = 4;
+                } else if (roomNumber.startsWith('5')) {
+                    maxMembers = 5;
+                }
+
+                // Only update if maxMembers is different or doesn't exist
+                if (roomData.maxMembers !== maxMembers) {
+                    batch.update(doc.ref, { maxMembers: maxMembers });
+                    updatedCount++;
+                    console.log(`📝 Updating ${roomNumber}: maxMembers = ${maxMembers}`);
+                }
+            });
+
+            if (updatedCount > 0) {
+                await batch.commit();
+                console.log(`✅ Updated ${updatedCount} rooms with member limits`);
+            } else {
+                console.log('✅ All rooms already have correct member limits');
+            }
+            
+        } catch (error) {
+            console.error('❌ Error updating room member limits:', error);
+        }
+    }
+
+    async debugOnboardingFlow() {
+            console.log('🐛 DEBUG: Tenant Onboarding Flow');
+            
+            const user = this.currentUser;
+            if (!user) {
+                console.log('❌ No current user');
+                return;
+            }
+            
+            console.log('👤 Current User:', {
+                id: user.id,
+                email: user.email,
+                role: user.role,
+                passwordChanged: user.passwordChanged,
+                status: user.status
+            });
+            
+            const lease = await DataManager.getTenantLease(user.uid);
+            console.log('📄 Lease Data:', lease);
+            
+            if (lease) {
+                const room = await this.getRoomByNumber(lease.roomNumber);
+                console.log('🏠 Room Data:', room);
+            }
+            
+            console.log('🔚 End Debug');
+        }
+
+        async debugOnboardingFlow() {
+        console.log('🐛 DEBUG: Starting onboarding flow analysis...');
+        
+        const user = this.currentUser;
+        if (!user) {
+            console.log('❌ No current user');
+            return;
+        }
+        
+        console.log('👤 Current User:', {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            passwordChanged: user.passwordChanged,
+            status: user.status,
+            requiresPasswordChange: user.requiresPasswordChange
+        });
+        
+        const lease = await DataManager.getTenantLease(user.uid);
+        console.log('📄 Lease Data:', {
+            exists: !!lease,
+            id: lease?.id,
+            roomNumber: lease?.roomNumber,
+            maxOccupants: lease?.maxOccupants,
+            occupants: lease?.occupants,
+            totalOccupants: lease?.totalOccupants
+        });
+        
+        if (lease?.roomNumber) {
+            const room = await this.getRoomByNumber(lease.roomNumber);
+            console.log('🏠 Room Data:', {
+                exists: !!room,
+                roomNumber: room?.roomNumber,
+                maxMembers: room?.maxMembers
+            });
+        }
+        
+        console.log('🔚 End Debug');
+    }
+
     async createLeaseDocument(tenantId, tenantData, leaseEndDate) {
         try {
             console.log('📝 Creating SINGLE lease document for tenant:', tenantId);
-            
-            // First, check if lease already exists for this tenant
+
+            // 🔹 Get room info so we can include max members in lease
+            const room = await this.getRoomByNumber(tenantData.roomNumber);
+            const maxMembers = room?.maxMembers || 1;
+
+            // Check if active lease already exists
             const existingLeaseQuery = await firebaseDb.collection('leases')
                 .where('tenantId', '==', tenantId)
                 .where('isActive', '==', true)
                 .limit(1)
                 .get();
 
+            // Mark room as occupied
             if (tenantData.roomNumber) {
                 await firebaseDb.collection('rooms').doc(tenantData.roomNumber).update({
                     isAvailable: false,
@@ -3182,19 +3836,18 @@ class CasaLink {
                 console.log('✅ Room marked as occupied:', tenantData.roomNumber);
             }
 
-            
+            // 🔄 If lease exists → update instead of creating
             if (!existingLeaseQuery.empty) {
                 console.log('⚠️ Active lease already exists for this tenant, updating instead');
                 const existingLeaseId = existingLeaseQuery.docs[0].id;
-                
+
                 await firebaseDb.collection('leases').doc(existingLeaseId).update({
-                    // Update with new data
                     tenantName: tenantData.name,
                     tenantEmail: tenantData.email,
                     tenantPhone: tenantData.phone,
                     tenantOccupation: tenantData.occupation,
                     tenantAge: tenantData.age,
-                    
+
                     roomNumber: tenantData.roomNumber,
                     rentalAddress: tenantData.rentalAddress,
                     monthlyRent: tenantData.rentalAmount,
@@ -3204,87 +3857,113 @@ class CasaLink {
                     leaseEnd: leaseEndDate,
                     paymentDueDay: parseInt(tenantData.paymentDay),
                     firstPaymentDate: tenantData.firstPaymentDate,
-                    
+
+                    // 🔹 EMPTY OCCUPANCY INFO (to trigger member collection)
+                    maxOccupants: maxMembers,
+                    occupants: [],
+                    totalOccupants: 0,
+
                     updatedAt: new Date().toISOString()
                 });
-                
+
+                console.log('🏠 UPDATED lease occupant info → EMPTY:', {
+                    maxOccupants: maxMembers,
+                    occupants: [],
+                    totalOccupants: 0
+                });
+
                 console.log('✅ Existing lease updated:', existingLeaseId);
                 return existingLeaseId;
             }
-            
-            // Create new lease document if none exists
+
+            // 🆕 Create NEW lease document
             const leaseData = {
-                // Tenant Information
+                // Tenant Info
                 tenantId: tenantId,
                 tenantName: tenantData.name,
                 tenantEmail: tenantData.email,
                 tenantPhone: tenantData.phone,
                 tenantOccupation: tenantData.occupation,
                 tenantAge: tenantData.age,
-                
-                // Landlord Information
+
+                // Landlord Info
                 landlordId: this.currentUser.uid,
                 landlordName: 'Nelly D. Virtucio',
-                
-                // Property Information
+
+                // Property
                 roomNumber: tenantData.roomNumber,
                 rentalAddress: tenantData.rentalAddress,
-                
+
                 // Lease Terms
                 monthlyRent: tenantData.rentalAmount,
                 securityDeposit: tenantData.securityDeposit,
                 paymentMethod: tenantData.paymentMethod,
                 leaseStart: tenantData.dateOfEntry,
                 leaseEnd: leaseEndDate,
-                leaseDuration: 12, // 1 year in months
+                leaseDuration: 12,
                 paymentDueDay: parseInt(tenantData.paymentDay),
                 firstPaymentDate: tenantData.firstPaymentDate,
-                
-                // Lease Status
+
+                // 🔹 EMPTY OCCUPANCY SECTION (CRITICAL)
+                maxOccupants: maxMembers,
+                occupants: [],       // EMPTY ARRAY to trigger member collection
+                totalOccupants: 0,   // ZERO to trigger member collection
+
+                // Status
                 status: 'active',
                 isActive: true,
                 securityDepositPaid: false,
-                
+
                 // Agreement Details
                 agreementType: 'standard',
-                maxOccupants: 4,
                 additionalOccupantFee: 2000,
-                
+
                 // Dates
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                
+
                 // Utilities
                 includesWater: false,
                 includesElectricity: false,
                 includesInternet: false,
-                
+
                 // Agreement Tracking
                 agreementViewed: false,
                 agreementAccepted: false,
                 agreementAcceptedDate: null
             };
 
-            // Create the lease document in Firestore
+            console.log('🚨 LEASE CREATION - Occupants EMPTY:', {
+                maxOccupants: maxMembers,
+                occupants: [],
+                totalOccupants: 0,
+                shouldTriggerMemberCollection: (maxMembers > 1)
+            });
+
+            // Save Lease Document
             const leaseRef = await firebaseDb.collection('leases').add(leaseData);
             console.log('✅ New lease document created with ID:', leaseRef.id);
-            
-            // Update the tenant's user document with lease reference
+
+            // Update tenant's user record
             await firebaseDb.collection('users').doc(tenantId).update({
                 leaseId: leaseRef.id,
                 currentLease: leaseRef.id,
-                roomNumber: tenantData.roomNumber, // Also store room number in user document
-                status: 'unverified', // Will change to verified after password change and agreement
+                roomNumber: tenantData.roomNumber,
+                status: 'unverified',
                 updatedAt: new Date().toISOString()
             });
-            
+
             return leaseRef.id;
-            
+
         } catch (error) {
             console.error('❌ Error creating/updating lease document:', error);
             throw new Error('Failed to create lease document: ' + error.message);
         }
     }
+
+
+
+
 
     // Helper method to calculate lease duration
     calculateLeaseDuration(startDate, endDate) {
@@ -3440,12 +4119,6 @@ class CasaLink {
             return;
         }
 
-        // Check if new password is same as temporary password
-        if (newPassword === currentPassword) {
-            this.showPasswordChangeError('New password cannot be the same as temporary password');
-            return;
-        }
-
         try {
             // Show loading state
             const submitBtn = document.querySelector('#modalSubmit');
@@ -3456,34 +4129,46 @@ class CasaLink {
 
             await AuthManager.changePassword(currentPassword, newPassword);
             
-            // CRITICAL: Update user document with password change but keep status as unverified
+            // Update user document
             await firebaseDb.collection('users').doc(this.currentUser.uid).update({
                 hasTemporaryPassword: false,
                 passwordChanged: true,
                 passwordChangedAt: new Date().toISOString(),
                 currentPassword: newPassword,
                 temporaryPassword: null,
-                // DO NOT set requiresPasswordChange to false here
-                // DO NOT set status to verified here
                 updatedAt: new Date().toISOString()
             });
             
             // Close password change modal
             ModalManager.closeModal(this.passwordChangeModal);
             
-            // Show success message
-            this.showNotification('Password changed successfully! Please review your lease agreement.', 'success');
-            
-            // Update current user data locally
+            // Update current user data
             this.currentUser.hasTemporaryPassword = false;
             this.currentUser.passwordChanged = true;
-            this.currentUser.currentPassword = newPassword;
-            // Keep requiresPasswordChange as true for now
             
-            console.log('🔄 Password change complete, showing lease agreement verification');
+            console.log('✅ Password changed! Directly checking for member collection...');
             
-            // Immediately show lease agreement verification
-            this.showLeaseAgreementVerification();
+            // DIRECT APPROACH - This should work immediately
+            setTimeout(async () => {
+                const lease = await DataManager.getTenantLease(this.currentUser.uid);
+                const room = await this.getRoomByNumber(lease.roomNumber);
+                const maxMembers = room?.maxMembers || 1;
+                const hasOccupants = Array.isArray(lease.occupants) && lease.occupants.length > 0;
+                
+                console.log('🔍 Direct check after password change:', {
+                    maxMembers: maxMembers,
+                    hasOccupants: hasOccupants,
+                    occupants: lease.occupants
+                });
+                
+                if (maxMembers > 1 && !hasOccupants) {
+                    console.log('🚀 Showing member collection form');
+                    this.showMemberInformationCollection();
+                } else {
+                    console.log('🚀 Showing lease agreement');
+                    this.showLeaseAgreementVerification();
+                }
+            }, 1000);
             
         } catch (error) {
             console.error('Password change error:', error);
@@ -3507,110 +4192,194 @@ class CasaLink {
     }
 
     async showLeaseAgreementVerification() {
-        // Get the tenant's lease data
-        const lease = await DataManager.getTenantLease(this.currentUser.uid);
-        
-        if (!lease) {
-            this.showNotification('No lease agreement found. Please contact your landlord.', 'error');
-            this.showDashboard();
-            return;
-        }
+        try {
+            console.log('📄 Loading lease agreement verification with FRESH data...');
+            
+            // Get FRESH lease data to ensure we have the latest occupants
+            const lease = await DataManager.getTenantLease(this.currentUser.uid);
+            
+            if (!lease) {
+                this.showNotification('No lease agreement found. Please contact your landlord.', 'error');
+                this.showDashboard();
+                return;
+            }
 
-        const modalContent = `
-            <div class="lease-verification-modal" style="max-height: 80vh; overflow-y: auto;">
-                <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
-                    <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
-                    <h3 style="color: var(--primary-blue); margin-bottom: 10px;">Lease Agreement Verification</h3>
-                    <p style="color: var(--dark-gray);">Please review and agree to your lease agreement</p>
-                </div>
-                
-                <div style="line-height: 1.6; font-size: 0.95rem; margin-bottom: 25px; max-height: 400px; overflow-y: auto; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
-                    <p><strong>This agreement is made by and between:</strong></p>
+            console.log('🔍 Fresh lease data:', {
+                roomNumber: lease.roomNumber,
+                occupants: lease.occupants,
+                totalOccupants: lease.totalOccupants,
+                maxOccupants: lease.maxOccupants
+            });
+
+            // Get room information for max members
+            const room = await this.getRoomByNumber(lease.roomNumber);
+            const maxMembers = room?.maxMembers || 1;
+            const additionalFee = 2000;
+
+            // Get member information - use the fresh data from Firestore
+            const occupants = lease.occupants || [this.currentUser.name];
+            const primaryTenant = occupants[0];
+            const additionalMembers = occupants.slice(1);
+
+            console.log('👥 Processing occupants:', {
+                allOccupants: occupants,
+                primaryTenant: primaryTenant,
+                additionalMembers: additionalMembers,
+                additionalMembersCount: additionalMembers.length
+            });
+
+            // Format the tenant/lessee section to include all members
+            let tenantLesseeSection = '';
+            if (additionalMembers.length > 0) {
+                tenantLesseeSection = `
                     <p style="margin-left: 20px;">
                         <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
-                        <strong>Tenant/Lessee:</strong> ${this.currentUser.name || 'Tenant'}
+                        <strong>Tenant/Lessee:</strong> ${primaryTenant}<br>
+                        ${additionalMembers.map((member, index) => 
+                            `<strong>Additional Occupant ${index + 1}:</strong> ${member}<br>`
+                        ).join('')}
                     </p>
-                    
-                    <p>This landlady hereby agrees to lessee the unit <strong>${lease.roomNumber || 'N/A'}</strong> of her house located at <strong>${lease.rentalAddress || 'N/A'}</strong>. 
-                    The lesse period shall be for 1 year beginning <strong>${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}</strong>.</p>
-                    
-                    <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</strong> 
-                    but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
-                    
-                    <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Key Terms and Conditions:</h4>
-                    
-                    <ol style="margin-left: 20px; padding-left: 0;">
-                        <li><strong>Garbage/Trash</strong> - Tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
-                        
-                        <li><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke within the leased area.</li>
-                        
-                        <li><strong>Noise</strong> - All radios, television sets, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
-                        
-                        <li><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
-                        
-                        <li><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
-                        
-                        <li><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
-                        
-                        <li><strong>Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
-                        
-                        <li><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
-                        
-                        <li><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
-                        
-                        <li><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
-                        
-                        <li><strong>Cleaning Upon Termination</strong> - Upon termination of the lease, tenant shall be responsible for cleaning the premises. Additional charge of Php 2,000 if failed to do so.</li>
-                        
-                        <li><strong>Occupancy Limit</strong> - Limit of occupants be four (4) persons regardless of age, additional pay for excess of two thousand pesos (2,000) per person.</li>
-                        
-                        <li><strong>Rent Increase</strong> - Increase of monthly rental may occur at any time of the year as determined by the landlady.</li>
-                    </ol>
-
-                    <p style="margin-top: 20px; padding: 15px; background: rgba(26, 115, 232, 0.1); border-radius: 8px;">
-                        <strong>12. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
-                        <strong>${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}</strong>
+                `;
+            } else {
+                tenantLesseeSection = `
+                    <p style="margin-left: 20px;">
+                        <strong>Landlady/Lessor:</strong> Nelly Virtucio<br>
+                        <strong>Tenant/Lessee:</strong> ${primaryTenant}
                     </p>
+                `;
+            }
 
-                    <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
-                        <div>
-                            <p><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</p>
+            // Format lease start date
+            const leaseStart = lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            }) : 'N/A';
+
+            // Format additional occupants display
+            let additionalOccupantsHTML = '';
+            if (additionalMembers.length > 0) {
+                additionalOccupantsHTML = `
+                    <p style="margin: 5px 0;"><strong>Additional Occupants:</strong></p>
+                    <ul style="margin: 5px 0 0 20px;">
+                        ${additionalMembers.map(member => `<li>${member}</li>`).join('')}
+                    </ul>
+                `;
+            } else {
+                additionalOccupantsHTML = '<p style="margin: 0;"><em>No additional occupants registered.</em></p>';
+            }
+
+            const modalContent = `
+                <div class="lease-verification-modal" style="max-height: 80vh; overflow-y: auto;">
+                    <div style="text-align: center; margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+                        <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
+                        <h3 style="color: var(--primary-blue); margin-bottom: 10px;">Lease Agreement Verification</h3>
+                        <p style="color: var(--dark-gray);">Please review and agree to your lease agreement</p>
+                    </div>
+                    
+                    <div style="line-height: 1.6; font-size: 0.95rem; margin-bottom: 25px; max-height: 400px; overflow-y: auto; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
+                        <p><strong>This agreement is made by and between:</strong></p>
+                        ${tenantLesseeSection}
+                        
+                        <p>This landlady hereby agrees to lessee the unit <strong>${lease.roomNumber || 'N/A'}</strong> of her house located at <strong>${lease.rentalAddress || 'N/A'}</strong>. 
+                        The lesse period shall be for 1 year beginning <strong>${leaseStart}</strong>.</p>
+                        
+                        <p>In case of failure to stay for the period of one (1) year the landlady won't refund the security deposit of <strong>₱${lease.securityDeposit ? lease.securityDeposit.toLocaleString() : '0'}</strong> 
+                        but if tenant stayed for a year or more the security deposit is refundable or consumable.</p>
+                        
+                        <p><strong>Limit of occupants be ${maxMembers} ${maxMembers === 1 ? 'person' : 'persons'} regardless of age</strong>, additional pay for excess of two thousand pesos (${additionalFee.toLocaleString()}) per person.</p>
+                        
+                        <p><strong>Increase of monthly rental may occur at any time of the year as determined by the landlady.</strong></p>
+
+                        <!-- Occupants Summary Box -->
+                        <div style="background: rgba(26, 115, 232, 0.1); padding: 15px; border-radius: 8px; margin: 15px 0;">
+                            <h5 style="margin: 0 0 10px 0; color: var(--primary-blue);"><i class="fas fa-users"></i> Registered Occupants</h5>
+                            <p style="margin: 0 0 5px 0;"><strong>Primary Tenant:</strong> ${primaryTenant}</p>
+                            ${additionalOccupantsHTML}
+                            <p style="margin: 10px 0 0 0; font-size: 0.9rem;"><strong>Total Occupants:</strong> ${occupants.length} of ${maxMembers} allowed</p>
                         </div>
-                        <div>
-                            <p><strong>${this.currentUser.name || 'Tenant'}</strong><br>Tenant/Lessee</p>
+                        
+                        <h4 style="margin: 20px 0 10px 0; color: var(--primary-blue);">Key Terms and Conditions:</h4>
+                        
+                        <ol style="margin-left: 20px; padding-left: 0;">
+                            <li><strong>Garbage/Trash</strong> - Tenant is responsible for disposing his/her trash and garbage on proper place. Dispose every Thursday afternoon at Purok 6 or Jeepney Terminal near Barangay Hall.</li>
+                            
+                            <li><strong>Smoking</strong> - No tenant shall smoke, nor permit anyone to smoke within the leased area.</li>
+                            
+                            <li><strong>Noise</strong> - All radios, television sets, speakers or any appliances or items which may cause noise, etc. must be turned down to a level of sound that does not annoy or interfere with other lessee.</li>
+                            
+                            <li><strong>Visitor & Guest</strong> - Maximum of 10 visitors allowed to enter the unit and should leave before 10pm.</li>
+                            
+                            <li><strong>Locks</strong> - Tenants are to provide their own padlock for their unit. Upon termination of contract tenant must remove their own padlock.</li>
+                            
+                            <li><strong>Interior and Exterior</strong> - No nails or any kind (thumbtacks, pin, etc). If in case there are some make use of it but don't add still. Never hand, leave valuable things on hallways. Shoes/slippers are exceptions, always keep clear and clean.</li>
+                            
+                            <li><strong>Payment Schedule</strong> - Monthly rental payment of <strong>₱${lease.monthlyRent ? lease.monthlyRent.toLocaleString() : '0'}</strong> is due on the <strong>${lease.paymentDueDay || 'N/A'}${lease.paymentDueDay ? this.getOrdinalSuffix(parseInt(lease.paymentDueDay)) : ''}</strong> day of each month. Late payments will incur penalties as specified in this agreement.</li>
+                            
+                            <li><strong>Utilities Payment</strong> - Electric and water bills must be paid on or before due date to avoid cut offs or penalties.</li>
+                            
+                            <li><strong>Light Bulbs</strong> - Tenant at tenant expense shall be responsible for replacement of all interior light bulbs. All light bulbs must be operational all the time until the tenant vacate the unit.</li>
+                            
+                            <li><strong>Damage</strong> - Tenants will be held responsible for any damage to their units or to the common areas caused by themselves or their guest, especially damaged pipe, clogging of bowl, sink, electrical plug/switches and bulb.</li>
+                            
+                            <li><strong>Security</strong> - The safety and welfare of the tenant's property is responsibility of the tenants. Use good common sense and think about safety.</li>
+                            
+                            <li><strong>Cleaning Upon Termination</strong> - Upon termination of the lease, tenant shall be responsible for cleaning the premises. Additional charge of Php 2,000 if failed to do so.</li>
+                        </ol>
+
+                        <p style="margin-top: 20px; padding: 15px; background: rgba(26, 115, 232, 0.1); border-radius: 8px;">
+                            <strong>13. Acknowledgement</strong> - The parties hereby acknowledge & understand the terms herein set forth in the agreement signed on this day of 
+                            <strong>${leaseStart}</strong>
+                        </p>
+
+                        <div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
+                            <div>
+                                <p><strong>Nelly D. Virtucio</strong><br>Landlady/Lessor</p>
+                            </div>
+                            <div>
+                                <p><strong>${primaryTenant}</strong><br>Tenant/Lessee</p>
+                                ${additionalMembers.length > 0 ? additionalMembers.map(member => 
+                                    `<p><strong>${member}</strong><br>Additional Occupant</p>`
+                                ).join('') : ''}
+                            </div>
                         </div>
                     </div>
+
+                    <!-- Rest of your existing form fields -->
+                    <div class="form-group">
+                        <label class="form-label">Upload Scanned ID *</label>
+                        <input type="file" id="idUpload" class="form-input" accept=".jpg,.jpeg,.png,.pdf" required>
+                        <small style="color: var(--dark-gray);">Upload a scanned copy of your valid ID (Driver's License, Passport, National ID, etc.)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
+                            <input type="checkbox" id="agreeTerms" style="margin-top: 3px;">
+                            <span>I have read, understood, and agree to all the terms and conditions of this lease agreement. I acknowledge that violating any of these terms may result in termination of my lease and forfeiture of my security deposit.</span>
+                        </label>
+                    </div>
+
+                    <div id="verificationError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
+                    
+                    <div class="security-info">
+                        <i class="fas fa-info-circle"></i>
+                        <small>Your account will be verified and you'll gain full access to the tenant dashboard after completing this step. Your ID will be kept confidential and used for verification purposes only.</small>
+                    </div>
                 </div>
+            `;
 
-                <div class="form-group">
-                    <label class="form-label">Upload Scanned ID *</label>
-                    <input type="file" id="idUpload" class="form-input" accept=".jpg,.jpeg,.png,.pdf" required>
-                    <small style="color: var(--dark-gray);">Upload a scanned copy of your valid ID (Driver's License, Passport, National ID, etc.)</small>
-                </div>
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Lease Agreement & Verification - Final Step',
+                submitText: 'Agree & Submit Verification',
+                onSubmit: () => this.submitLeaseVerification(lease.id)
+            });
 
-                <div class="form-group">
-                    <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
-                        <input type="checkbox" id="agreeTerms" style="margin-top: 3px;">
-                        <span>I have read, understood, and agree to all the terms and conditions of this lease agreement. I acknowledge that violating any of these terms may result in termination of my lease and forfeiture of my security deposit.</span>
-                    </label>
-                </div>
+            this.leaseVerificationModal = modal;
 
-                <div id="verificationError" style="color: var(--danger); margin-bottom: 15px; display: none;"></div>
-                
-                <div class="security-info">
-                    <i class="fas fa-info-circle"></i>
-                    <small>Your account will be verified and you'll gain full access to the tenant dashboard after completing this step. Your ID will be kept confidential and used for verification purposes only.</small>
-                </div>
-            </div>
-        `;
-
-        const modal = ModalManager.openModal(modalContent, {
-            title: 'Lease Agreement & Verification - Final Step',
-            submitText: 'Agree & Submit Verification',
-            onSubmit: () => this.submitLeaseVerification(lease.id)
-        });
-
-        this.leaseVerificationModal = modal;
+        } catch (error) {
+            console.error('❌ Error loading lease agreement verification:', error);
+            this.showNotification('Error loading lease agreement. Please try again.', 'error');
+        }
     }
 
     async submitLeaseVerification(leaseId) {

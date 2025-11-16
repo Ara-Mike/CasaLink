@@ -592,6 +592,7 @@ class DataManager {
             
             const leaseData = querySnapshot.docs[0].data();
             
+            // RETURN ALL FIELDS including occupants and totalOccupants
             return {
                 id: querySnapshot.docs[0].id,
                 // Basic lease info
@@ -613,6 +614,11 @@ class DataManager {
                 leaseStart: leaseData.leaseStart,
                 leaseEnd: leaseData.leaseEnd,
                 leaseDuration: leaseData.leaseDuration,
+                
+                // Occupancy information - MAKE SURE THESE ARE INCLUDED
+                maxOccupants: leaseData.maxOccupants,
+                occupants: leaseData.occupants, // THIS WAS MISSING
+                totalOccupants: leaseData.totalOccupants, // THIS WAS MISSING
                 
                 // Status
                 status: leaseData.status,
