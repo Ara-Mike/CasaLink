@@ -248,10 +248,10 @@ class CasaLink {
             // Render the complete app layout
             appElement.innerHTML = this.getDashboardHTML();
             
-            // Small delay to ensure DOM is updated
+            // Delay to ensure DOM updates
             await new Promise(resolve => setTimeout(resolve, 100));
             
-            // Now try to get content area again
+            // Try again
             const newContentArea = document.getElementById('contentArea');
             if (!newContentArea) {
                 console.error('❌ Content area still not found after rendering layout');
@@ -272,49 +272,62 @@ class CasaLink {
 
         try {
             let pageContent;
-            
             console.log('📝 Getting page content for:', page);
-            
+
+            // PAGE SWITCH
             switch (page) {
                 case 'dashboard':
                     pageContent = this.getDashboardContentHTML();
                     break;
+
                 case 'billing':
                     pageContent = this.currentRole === 'landlord'
                         ? await this.getBillingPage()
                         : await this.getTenantBillingPage();
                     break;
+
                 case 'maintenance':
                     pageContent = this.currentRole === 'landlord'
                         ? await this.getMaintenancePage()
                         : await this.getTenantMaintenancePage();
                     break;
+
                 case 'tenants':
                     pageContent = await this.getTenantsPage();
                     break;
+
                 case 'reports':
                     pageContent = await this.getReportsPage();
                     break;
+
                 case 'tenantBilling':
                     pageContent = await this.getTenantBillingPage();
                     break;
+
                 case 'tenantMaintenance':
                     pageContent = await this.getTenantMaintenancePage();
                     break;
+
                 case 'tenantProfile':
                     pageContent = await this.getTenantProfilePage();
                     break;
+
                 default:
-                    pageContent = `<div class="page-content"><h1>${page} Page</h1><p>This page is under construction.</p></div>`;
+                    pageContent = `
+                        <div class="page-content">
+                            <h1>${page} Page</h1>
+                            <p>This page is under construction.</p>
+                        </div>
+                    `;
             }
 
-            // Handle Promise if returned
+            // If Promise returned
             if (pageContent instanceof Promise) {
                 console.log('⚠️ Page content is a Promise, awaiting...');
                 pageContent = await pageContent;
             }
-            
-            // Ensure we have a string
+
+            // Ensure content is a string
             if (typeof pageContent === 'string') {
                 finalContentArea.innerHTML = pageContent;
                 console.log('✅ Page content loaded successfully');
@@ -322,22 +335,23 @@ class CasaLink {
                 console.error('❌ Page content is not a string:', typeof pageContent, pageContent);
                 throw new Error('Invalid page content');
             }
-            
+
             // Setup page-specific events
             this.setupPageEvents(page);
-            
-            // Update active navigation state
+
+            // Update nav state
             this.updateActiveNavState(page);
-            
-            // SPECIAL CASE: If dashboard, load fresh data immediately and setup listeners
+
+            // SPECIAL CASE: DASHBOARD — refresh + setup listeners
             if (page === 'dashboard') {
                 console.log('📊 Force refreshing dashboard data and setting up listeners...');
                 setTimeout(() => {
                     this.loadDashboardData();
-                    this.setupRealTimeStats(); // Start real-time listeners
+                    this.setupRealTimeStats();  // existing line
+                    this.setupDashboardCardEvents(); // ✅ NEW LINE YOU REQUESTED
                 }, 100);
             }
-            
+
         } catch (error) {
             console.error('❌ Error loading page:', error);
             finalContentArea.innerHTML = `
@@ -349,6 +363,7 @@ class CasaLink {
             `;
         }
     }
+
 
 
     async getReportsPage() {
@@ -406,7 +421,8 @@ class CasaLink {
                 <!-- PROPERTY OVERVIEW SECTION -->
                 <div class="card-group-title">Property Overview</div>
                 <div class="card-group">
-                    <div class="card">
+                    <div class="card" data-clickable="occupancy" style="cursor: pointer;" 
+                        title="Click to view unit occupancy">
                         <div class="card-header">
                             <div class="card-title">Occupancy Rate</div>
                             <div class="card-icon occupied"><i class="fas fa-home"></i></div>
@@ -415,6 +431,7 @@ class CasaLink {
                         <div class="card-subtitle" id="occupancyDetails">0/22 units</div>
                     </div>
 
+                    <!-- Unchanged cards -->
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Vacant Units</div>
@@ -446,6 +463,7 @@ class CasaLink {
                 <!-- FINANCIAL OVERVIEW SECTION -->
                 <div class="card-group-title">Financial Overview</div>
                 <div class="card-group">
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Rent Collection</div>
@@ -486,6 +504,7 @@ class CasaLink {
                 <!-- OPERATIONS SECTION -->
                 <div class="card-group-title">Operations</div>
                 <div class="card-group">
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Lease Renewals</div>
@@ -517,6 +536,7 @@ class CasaLink {
                 <!-- QUICK ACTIONS SECTION -->
                 <div class="card-group-title">Quick Actions</div>
                 <div class="card-group">
+
                     <div class="card quick-action-card" onclick="casaLink.showPage('tenants')">
                         <div class="card-header">
                             <div class="card-title">Manage Tenants</div>
@@ -527,7 +547,7 @@ class CasaLink {
                             Go to Tenants <i class="fas fa-arrow-right"></i>
                         </div>
                     </div>
-                    
+
                     <div class="card quick-action-card" onclick="casaLink.showPage('billing')">
                         <div class="card-header">
                             <div class="card-title">Billing & Payments</div>
@@ -538,7 +558,7 @@ class CasaLink {
                             Go to Billing <i class="fas fa-arrow-right"></i>
                         </div>
                     </div>
-                    
+
                     <div class="card quick-action-card" onclick="casaLink.showPage('maintenance')">
                         <div class="card-header">
                             <div class="card-title">Maintenance</div>
@@ -564,6 +584,7 @@ class CasaLink {
             </div>
         `;
     }
+
 
     async showLeaseAgreement() {
         try {
@@ -1217,6 +1238,195 @@ class CasaLink {
         }
     }
 
+    generateOccupancyTable(tenants, leases, rooms) {
+        console.log('📊 Generating occupancy table...');
+        
+        // Create a map for quick lookup: roomNumber -> tenant info
+        const roomOccupancyMap = new Map();
+        
+        // Process leases to find occupied rooms
+        leases.forEach(lease => {
+            if (lease.isActive && lease.roomNumber) {
+                // Find tenant info for this lease
+                const tenant = tenants.find(t => t.id === lease.tenantId);
+                roomOccupancyMap.set(lease.roomNumber, {
+                    tenantName: tenant?.name || lease.tenantName || 'Unknown Tenant',
+                    tenantEmail: tenant?.email || lease.tenantEmail || 'No email',
+                    leaseStart: lease.leaseStart,
+                    status: tenant?.status || 'unknown'
+                });
+            }
+        });
+
+        // Sort rooms by floor and room number
+        const sortedRooms = rooms.sort((a, b) => {
+            const floorA = parseInt(a.roomNumber.charAt(0));
+            const floorB = parseInt(b.roomNumber.charAt(0));
+            if (floorA !== floorB) return floorA - floorB;
+            return a.roomNumber.localeCompare(b.roomNumber);
+        });
+
+        let tableHTML = `
+            <div style="max-height: 400px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="background-color: #f8f9fa; position: sticky; top: 0;">
+                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Unit</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Occupant</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Email</th>
+                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Move-in Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        sortedRooms.forEach(room => {
+            const occupancy = roomOccupancyMap.get(room.roomNumber);
+            const isOccupied = !!occupancy;
+            const isAvailable = room.isAvailable !== false;
+            
+            let status = 'Vacant';
+            let statusColor = 'var(--danger)';
+            let occupantName = '-';
+            let occupantEmail = '-';
+            let moveInDate = '-';
+            
+            if (isOccupied) {
+                status = 'Occupied';
+                statusColor = 'var(--success)';
+                occupantName = occupancy.tenantName;
+                occupantEmail = occupancy.tenantEmail;
+                moveInDate = occupancy.leaseStart ? new Date(occupancy.leaseStart).toLocaleDateString() : 'Unknown';
+            } else if (!isAvailable) {
+                status = 'Unavailable';
+                statusColor = 'var(--warning)';
+            }
+
+            tableHTML += `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 12px; font-weight: 500;">${room.roomNumber}</td>
+                    <td style="padding: 12px;">
+                        <span style="color: ${statusColor}; font-weight: 500;">${status}</span>
+                    </td>
+                    <td style="padding: 12px;">${occupantName}</td>
+                    <td style="padding: 12px; font-size: 0.8rem; color: var(--dark-gray);">${occupantEmail}</td>
+                    <td style="padding: 12px; font-size: 0.8rem;">${moveInDate}</td>
+                </tr>
+            `;
+        });
+
+        tableHTML += `
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 12px; height: 12px; background: var(--success); border-radius: 2px;"></div>
+                        <span>Occupied</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 12px; height: 12px; background: var(--danger); border-radius: 2px;"></div>
+                        <span>Vacant</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div style="width: 12px; height: 12px; background: var(--warning); border-radius: 2px;"></div>
+                        <span>Unavailable</span>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <strong>Summary:</strong>
+                        <span>${roomOccupancyMap.size} occupied / ${sortedRooms.length} total units</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        return tableHTML;
+    }
+
+    async getAllRooms() {
+        try {
+            console.log('🔄 Fetching all rooms...');
+            
+            const roomsSnapshot = await firebaseDb.collection('rooms').get();
+            
+            if (roomsSnapshot.empty) {
+                console.log('📦 No rooms found, creating default rooms...');
+                return await this.createDefaultRooms();
+            }
+            
+            const rooms = roomsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                roomNumber: doc.id,
+                ...doc.data()
+            }));
+            
+            console.log(`✅ Found ${rooms.length} rooms`);
+            return rooms;
+            
+        } catch (error) {
+            console.error('❌ Error fetching rooms:', error);
+            return await this.createDefaultRooms();
+        }
+    }
+
+    async showUnitOccupancyModal() {
+        try {
+            console.log('🏠 Loading unit occupancy data...');
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary-blue);"></i>
+                    <p>Loading unit occupancy data...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Unit Occupancy Overview',
+                showFooter: false
+            });
+
+            // Fetch all necessary data
+            const [tenants, leases, rooms] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid),
+                this.getAllRooms()
+            ]);
+
+            // Generate the occupancy table
+            const occupancyTable = this.generateOccupancyTable(tenants, leases, rooms);
+            
+            // Update modal content with the table
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = occupancyTable;
+            }
+
+            // Add footer with close button
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading unit occupancy data:', error);
+            this.showNotification('Failed to load unit occupancy data', 'error');
+        }
+    }
+
     setupBillingPage() {
         // Generate bill button
         document.getElementById('generateBillBtn')?.addEventListener('click', () => {
@@ -1232,6 +1442,39 @@ class CasaLink {
         this.setupBillsListener();
     }
 
+
+    debugEventPropagation() {
+        const contentArea = document.getElementById('contentArea');
+        if (contentArea) {
+            contentArea.addEventListener('click', (e) => {
+                console.log('🔍 Click event path:', e.composedPath());
+                console.log('🔍 Click target:', e.target);
+                console.log('🔍 Current page:', this.currentPage);
+            }, true); // Use capture phase to see all events
+        }
+    }
+
+    setupDashboardCardEvents() {
+        console.log('🔄 Setting up dashboard card events...');
+        
+        // Use event delegation on the content area
+        const contentArea = document.getElementById('contentArea');
+        if (contentArea) {
+            contentArea.addEventListener('click', (e) => {
+                // Check if the click is on any clickable card
+                const clickableCard = e.target.closest('[data-clickable="occupancy"]');
+                if (clickableCard) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+                    console.log('🏠 Occupancy rate card clicked via data attribute');
+                    this.showUnitOccupancyModal();
+                    return false;
+                }
+            });
+        }
+    }
+
     setupDashboardEvents() {
         console.log('🔄 Setting up dashboard events with fresh data...');
         
@@ -1240,14 +1483,19 @@ class CasaLink {
             this.showAddPropertyForm();
         });
 
+        // Occupancy Rate Card Click Event - FIXED VERSION
+        const occupancyRateCard = document.querySelector('.card[style*="cursor: pointer"]');
+        if (occupancyRateCard) {
+            occupancyRateCard.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🏠 Occupancy rate card clicked');
+                this.showUnitOccupancyModal();
+            });
+        }
+
         // Setup real-time stats when dashboard is shown
-        // Note: setupRealTimeStats is now called from showPage for dashboard
-        
-        // Update navigation to show dashboard as active
         this.updateActiveNavState('dashboard');
-        
-        // Force load dashboard data immediately
-        // Note: loadDashboardData is now called from showPage for dashboard
     }
 
     setupNavigationEvents() {

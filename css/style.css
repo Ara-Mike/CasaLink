@@ -37,6 +37,50 @@ body {
     display: none !important;
 }
 
+.card[style*="cursor: pointer"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--primary-blue);
+}
+
+.card[style*="cursor: pointer"]:active {
+    transform: translateY(0);
+}
+
+/* Add to css/style.css - Better clickable card styles */
+.card[style*="cursor: pointer"] {
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.card[style*="cursor: pointer"]:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    border: 2px solid var(--primary-blue);
+}
+
+.card[style*="cursor: pointer"]:active {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+}
+
+.card[style*="cursor: pointer"]::after {
+    content: '';
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 8px;
+    height: 8px;
+    background: var(--primary-blue);
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.card[style*="cursor: pointer"]:hover::after {
+    opacity: 1;
+}
+
 /* ===== TYPOGRAPHY & UTILITIES ===== */
 .text-center { text-align: center; }
 .text-left { text-align: left; }
