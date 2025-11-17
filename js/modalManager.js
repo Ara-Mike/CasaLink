@@ -3,7 +3,7 @@ class ModalManager {
         const modal = document.createElement('div');
         modal.className = 'modal-overlay';
         
-        // Build footer with extra buttons if provided
+        // Build footer
         let footerContent = '';
         if (options.showFooter !== false) {
             let extraButtonsHTML = '';
@@ -22,8 +22,9 @@ class ModalManager {
             `;
         }
         
+        // ⬇️ Updated modal-content with width & maxWidth
         modal.innerHTML = `
-            <div class="modal-content">
+            <div class="modal-content" style="${options.width ? `width: ${options.width};` : ''} ${options.maxWidth ? `max-width: ${options.maxWidth};` : ''}">
                 <div class="modal-header">
                     <h3>${options.title || 'Form'}</h3>
                     <button class="modal-close">&times;</button>
@@ -37,20 +38,16 @@ class ModalManager {
 
         document.body.appendChild(modal);
 
-        // Close events
+        // Keep all your existing event handlers
         modal.querySelector('.modal-close').addEventListener('click', () => this.closeModal(modal));
         modal.querySelector('#modalCancel')?.addEventListener('click', () => this.closeModal(modal));
-        
-        // Submit event
+
         modal.querySelector('#modalSubmit')?.addEventListener('click', () => {
-            if (options.onSubmit) {
-                options.onSubmit();
-            } else {
-                this.closeModal(modal);
-            }
+            if (options.onSubmit) options.onSubmit();
+            else this.closeModal(modal);
         });
 
-        // Handle extra buttons - FIXED: Use proper event listeners instead of onclick
+        // Extra buttons
         if (options.extraButtons && options.extraButtons.length > 0) {
             options.extraButtons.forEach((btn, index) => {
                 const extraBtn = modal.querySelector(`#modalExtraBtn_${index}`);
@@ -63,7 +60,7 @@ class ModalManager {
             });
         }
 
-        // Close on backdrop click
+        // Close on outside click
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
                 this.closeModal(modal);
@@ -72,6 +69,7 @@ class ModalManager {
 
         return modal;
     }
+
 
     static closeModal(modal) {
         if (modal && modal.parentNode) {

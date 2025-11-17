@@ -280,24 +280,6 @@
             loadScripts();
         })();
     </script>
-
-    <!-- PWA Testing Button (Temporary - Remove for production) -->
-    <div style="position: fixed; top: 10px; right: 10px; z-index: 10000; background: #ff4444; color: white; padding: 10px; border-radius: 5px;">
-        <div style="font-size: 12px; font-weight: bold;">PWA TEST</div>
-        <button onclick="forcePWAInstall()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
-            Force Install
-        </button>
-        <button onclick="diagnosePWA()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
-            Diagnose
-        </button>
-        <button onclick="location.reload()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
-            Reload
-        </button>
-        <button onclick="forceSWControl()" style="background: white; color: #ff4444; border: none; padding: 5px; margin: 2px; border-radius: 3px; cursor: pointer;">
-            Nuclear SW Fix
-        </button>
-    </div>
-
     <script>
         // Check PWA requirements
         function checkPWARequirements() {

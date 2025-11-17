@@ -226,6 +226,7 @@ class CasaLink {
         // Clean up previous page listeners
         if (this.currentPage === 'dashboard') {
             this.cleanupDashboardListeners();
+            this.cleanupDashboardCardEvents();
         }
         
         // Store the page before showing it
@@ -407,7 +408,10 @@ class CasaLink {
         }
     }
 
+
     getLandlordDashboardHTML() {
+        const isLandlord = this.currentRole === 'landlord';
+        
         return `
             <div class="page-content">
                 <div class="page-header">
@@ -421,8 +425,7 @@ class CasaLink {
                 <!-- PROPERTY OVERVIEW SECTION -->
                 <div class="card-group-title">Property Overview</div>
                 <div class="card-group">
-                    <div class="card" data-clickable="occupancy" style="cursor: pointer;" 
-                        title="Click to view unit occupancy">
+                    <div class="card" data-clickable="occupancy" style="cursor: pointer;" title="Click to view unit occupancy">
                         <div class="card-header">
                             <div class="card-title">Occupancy Rate</div>
                             <div class="card-icon occupied"><i class="fas fa-home"></i></div>
@@ -431,8 +434,7 @@ class CasaLink {
                         <div class="card-subtitle" id="occupancyDetails">0/22 units</div>
                     </div>
 
-                    <!-- Unchanged cards -->
-                    <div class="card">
+                    <div class="card" data-clickable="vacant" style="cursor: pointer;" title="Click to view vacant units">
                         <div class="card-header">
                             <div class="card-title">Vacant Units</div>
                             <div class="card-icon vacant"><i class="fas fa-door-open"></i></div>
@@ -441,29 +443,22 @@ class CasaLink {
                         <div class="card-subtitle">22 total capacity</div>
                     </div>
 
-                    <div class="card">
+                    <!-- UPDATED TOTAL OCCUPANTS CARD -->
+                    <div class="card" data-clickable="tenants" style="cursor: pointer;" title="Click to view occupant details">
                         <div class="card-header">
-                            <div class="card-title">Total Tenants</div>
+                            <div class="card-title">Total Occupants</div>
                             <div class="card-icon tenants"><i class="fas fa-users"></i></div>
                         </div>
                         <div class="card-value" id="totalTenants">0</div>
-                        <div class="card-subtitle">Active & verified</div>
+                        <div class="card-subtitle">All registered occupants</div>
                     </div>
 
-                    <div class="card">
-                        <div class="card-header">
-                            <div class="card-title">Avg Monthly Rent</div>
-                            <div class="card-icon revenue"><i class="fas fa-money-bill-wave"></i></div>
-                        </div>
-                        <div class="card-value" id="averageRent">₱0</div>
-                        <div class="card-subtitle">Per unit</div>
-                    </div>
+                    <!-- REMOVED: Average Monthly Rent Card -->
                 </div>
 
                 <!-- FINANCIAL OVERVIEW SECTION -->
                 <div class="card-group-title">Financial Overview</div>
                 <div class="card-group">
-
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Rent Collection</div>
@@ -504,7 +499,6 @@ class CasaLink {
                 <!-- OPERATIONS SECTION -->
                 <div class="card-group-title">Operations</div>
                 <div class="card-group">
-
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Lease Renewals</div>
@@ -536,7 +530,6 @@ class CasaLink {
                 <!-- QUICK ACTIONS SECTION -->
                 <div class="card-group-title">Quick Actions</div>
                 <div class="card-group">
-
                     <div class="card quick-action-card" onclick="casaLink.showPage('tenants')">
                         <div class="card-header">
                             <div class="card-title">Manage Tenants</div>
@@ -547,7 +540,7 @@ class CasaLink {
                             Go to Tenants <i class="fas fa-arrow-right"></i>
                         </div>
                     </div>
-
+                    
                     <div class="card quick-action-card" onclick="casaLink.showPage('billing')">
                         <div class="card-header">
                             <div class="card-title">Billing & Payments</div>
@@ -558,7 +551,7 @@ class CasaLink {
                             Go to Billing <i class="fas fa-arrow-right"></i>
                         </div>
                     </div>
-
+                    
                     <div class="card quick-action-card" onclick="casaLink.showPage('maintenance')">
                         <div class="card-header">
                             <div class="card-title">Maintenance</div>
@@ -584,6 +577,8 @@ class CasaLink {
             </div>
         `;
     }
+
+
 
 
     async showLeaseAgreement() {
@@ -1238,22 +1233,65 @@ class CasaLink {
         }
     }
 
+    exportOccupancyReport() {
+        this.showNotification('Export feature coming soon!', 'info');
+    }
+
+    getExpiringLeasesCount(roomLeaseMap) {
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(today.getDate() + 30);
+        
+        let expiringCount = 0;
+        
+        roomLeaseMap.forEach(lease => {
+            if (lease.leaseEnd) {
+                const leaseEnd = new Date(lease.leaseEnd);
+                if (leaseEnd >= today && leaseEnd <= thirtyDaysFromNow) {
+                    expiringCount++;
+                }
+            }
+        });
+        
+        return expiringCount;
+    }
+
+    getNewLeasesCount(roomLeaseMap) {
+        const today = new Date();
+        const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        
+        let newLeasesCount = 0;
+        
+        roomLeaseMap.forEach(lease => {
+            if (lease.leaseStart) {
+                const leaseStart = new Date(lease.leaseStart);
+                if (leaseStart >= firstDayOfMonth) {
+                    newLeasesCount++;
+                }
+            }
+        });
+        
+        return newLeasesCount;
+    }
+
     generateOccupancyTable(tenants, leases, rooms) {
         console.log('📊 Generating occupancy table...');
         
-        // Create a map for quick lookup: roomNumber -> tenant info
-        const roomOccupancyMap = new Map();
+        // Create a map for quick lookup: roomNumber -> lease info
+        const roomLeaseMap = new Map();
         
         // Process leases to find occupied rooms
         leases.forEach(lease => {
             if (lease.isActive && lease.roomNumber) {
                 // Find tenant info for this lease
                 const tenant = tenants.find(t => t.id === lease.tenantId);
-                roomOccupancyMap.set(lease.roomNumber, {
+                roomLeaseMap.set(lease.roomNumber, {
                     tenantName: tenant?.name || lease.tenantName || 'Unknown Tenant',
                     tenantEmail: tenant?.email || lease.tenantEmail || 'No email',
                     leaseStart: lease.leaseStart,
-                    status: tenant?.status || 'unknown'
+                    leaseEnd: lease.leaseEnd,
+                    status: tenant?.status || 'unknown',
+                    leaseId: lease.id
                 });
             }
         });
@@ -1266,38 +1304,144 @@ class CasaLink {
             return a.roomNumber.localeCompare(b.roomNumber);
         });
 
+        // Calculate stats for the header
+        const expiringLeases = this.getExpiringLeasesCount(roomLeaseMap);
+        const newLeases = this.getNewLeasesCount(roomLeaseMap);
+        const occupancyRate = Math.round((roomLeaseMap.size / sortedRooms.length) * 100);
+
         let tableHTML = `
-            <div style="max-height: 400px; overflow-y: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <!-- HEADER STATS SECTION -->
+            <div style="margin-bottom: 25px;">
+                <!-- Quick Stats and Export Row -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 20px;">
+                    <div style="flex: 1;">
+                        <h4 style="margin: 0 0 12px 0; color: var(--royal-blue); font-size: 1.1rem;">
+                            <i class="fas fa-chart-line"></i> Quick Stats
+                        </h4>
+                        <div style="display: flex; gap: 25px; font-size: 0.95rem; color: var(--dark-gray);">
+                            <div>
+                                <span style="font-weight: 600; color: var(--royal-blue);">${expiringLeases}</span> leases expiring soon
+                            </div>
+                            <div>
+                                <span style="font-weight: 600; color: var(--royal-blue);">${newLeases}</span> new leases this month
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-primary" onclick="casaLink.exportOccupancyReport()" style="padding: 10px 20px; white-space: nowrap;">
+                            <i class="fas fa-download"></i> Export Report
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status Legend -->
+                <div style="padding: 15px; background: white; border-radius: 8px; border: 1px solid #e9ecef; margin-bottom: 15px;">
+                    <h5 style="margin: 0 0 12px 0; color: var(--royal-blue); font-size: 0.9rem;">
+                        <i class="fas fa-info-circle"></i> Status Legend
+                    </h5>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 12px; height: 12px; background: var(--success); border-radius: 2px;"></div>
+                            <span style="font-size: 0.85rem;">Occupied - Currently rented</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 12px; height: 12px; background: var(--danger); border-radius: 2px;"></div>
+                            <span style="font-size: 0.85rem;">Vacant - Available for rent</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 12px; height: 12px; background: var(--warning); border-radius: 2px;"></div>
+                            <span style="font-size: 0.85rem;">Unavailable - Under maintenance</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--success); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--success);">${roomLeaseMap.size}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Occupied Units</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--danger); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--danger);">${sortedRooms.length - roomLeaseMap.size}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Vacant Units</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--royal-blue); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--royal-blue);">${sortedRooms.length}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Total Units</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--warning); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Occupancy Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN TABLE -->
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 1000px;">
                     <thead>
                         <tr style="background-color: #f8f9fa; position: sticky; top: 0;">
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Unit</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Occupant</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Email</th>
-                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Move-in Date</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 80px;">Unit</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 100px;">Status</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 150px;">Occupant</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 200px;">Email</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 120px;">Lease Start</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 120px;">Lease End</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 100px;">Days Remaining</th>
                         </tr>
                     </thead>
                     <tbody>
         `;
 
         sortedRooms.forEach(room => {
-            const occupancy = roomOccupancyMap.get(room.roomNumber);
-            const isOccupied = !!occupancy;
+            const leaseInfo = roomLeaseMap.get(room.roomNumber);
+            const isOccupied = !!leaseInfo;
             const isAvailable = room.isAvailable !== false;
             
             let status = 'Vacant';
             let statusColor = 'var(--danger)';
             let occupantName = '-';
             let occupantEmail = '-';
-            let moveInDate = '-';
+            let leaseStart = '-';
+            let leaseEnd = '-';
+            let daysRemaining = '-';
             
             if (isOccupied) {
                 status = 'Occupied';
                 statusColor = 'var(--success)';
-                occupantName = occupancy.tenantName;
-                occupantEmail = occupancy.tenantEmail;
-                moveInDate = occupancy.leaseStart ? new Date(occupancy.leaseStart).toLocaleDateString() : 'Unknown';
+                occupantName = leaseInfo.tenantName;
+                occupantEmail = leaseInfo.tenantEmail;
+                
+                // Format lease dates
+                if (leaseInfo.leaseStart) {
+                    leaseStart = new Date(leaseInfo.leaseStart).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                }
+                
+                if (leaseInfo.leaseEnd) {
+                    leaseEnd = new Date(leaseInfo.leaseEnd).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                    
+                    // Calculate days remaining
+                    const today = new Date();
+                    const endDate = new Date(leaseInfo.leaseEnd);
+                    const timeDiff = endDate - today;
+                    const daysRemainingCount = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+                    
+                    if (daysRemainingCount > 0) {
+                        daysRemaining = `<span style="color: var(--success); font-weight: 600;">${daysRemainingCount} days</span>`;
+                    } else if (daysRemainingCount === 0) {
+                        daysRemaining = `<span style="color: var(--warning); font-weight: 600;">Ends today</span>`;
+                    } else {
+                        daysRemaining = `<span style="color: var(--danger); font-weight: 600;">${Math.abs(daysRemainingCount)} days overdue</span>`;
+                    }
+                }
             } else if (!isAvailable) {
                 status = 'Unavailable';
                 statusColor = 'var(--warning)';
@@ -1305,13 +1449,30 @@ class CasaLink {
 
             tableHTML += `
                 <tr style="border-bottom: 1px solid #e9ecef;">
-                    <td style="padding: 12px; font-weight: 500;">${room.roomNumber}</td>
-                    <td style="padding: 12px;">
-                        <span style="color: ${statusColor}; font-weight: 500;">${status}</span>
+                    <td style="padding: 15px; font-weight: 600;">
+                        <span style="font-size: 1.1rem;">${room.roomNumber}</span>
                     </td>
-                    <td style="padding: 12px;">${occupantName}</td>
-                    <td style="padding: 12px; font-size: 0.8rem; color: var(--dark-gray);">${occupantEmail}</td>
-                    <td style="padding: 12px; font-size: 0.8rem;">${moveInDate}</td>
+                    <td style="padding: 15px;">
+                        <span style="color: ${statusColor}; font-weight: 600; padding: 6px 12px; border-radius: 20px; background: ${statusColor}15; border: 1px solid ${statusColor}30;">
+                            ${status}
+                        </span>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="font-weight: 500;">${occupantName}</div>
+                        ${isOccupied ? `<small style="color: var(--dark-gray); font-size: 0.8rem;">${leaseInfo.status || 'No status'}</small>` : ''}
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="color: var(--dark-gray); font-size: 0.85rem; word-break: break-word;">${occupantEmail}</div>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="font-size: 0.85rem; color: var(--royal-blue); font-weight: 500;">${leaseStart}</div>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="font-size: 0.85rem; color: var(--royal-blue); font-weight: 500;">${leaseEnd}</div>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="font-size: 0.85rem; font-weight: 500;">${daysRemaining}</div>
+                    </td>
                 </tr>
             `;
         });
@@ -1319,30 +1480,6 @@ class CasaLink {
         tableHTML += `
                     </tbody>
                 </table>
-            </div>
-            
-            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: var(--success); border-radius: 2px;"></div>
-                        <span>Occupied</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: var(--danger); border-radius: 2px;"></div>
-                        <span>Vacant</span>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <div style="width: 12px; height: 12px; background: var(--warning); border-radius: 2px;"></div>
-                        <span>Unavailable</span>
-                    </div>
-                </div>
-                
-                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
-                    <div style="display: flex; justify-content: space-between;">
-                        <strong>Summary:</strong>
-                        <span>${roomOccupancyMap.size} occupied / ${sortedRooms.length} total units</span>
-                    </div>
-                </div>
             </div>
         `;
 
@@ -1376,21 +1513,32 @@ class CasaLink {
     }
 
     async showUnitOccupancyModal() {
+        if (!this.debounceModalOpen(() => this.showUnitOccupancyModal())) return;
+        
         try {
             console.log('🏠 Loading unit occupancy data...');
             
             // Show loading state
             const modalContent = `
                 <div style="text-align: center; padding: 40px;">
-                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary-blue);"></i>
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
                     <p>Loading unit occupancy data...</p>
                 </div>
             `;
 
             const modal = ModalManager.openModal(modalContent, {
                 title: 'Unit Occupancy Overview',
-                showFooter: false
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1400px'
             });
+
+            // Apply custom width to the modal content
+            const modalContentElement = modal.querySelector('.modal-content');
+            if (modalContentElement) {
+                modalContentElement.style.maxWidth = '1400px';
+                modalContentElement.style.width = '95%';
+            }
 
             // Fetch all necessary data
             const [tenants, leases, rooms] = await Promise.all([
@@ -1398,6 +1546,12 @@ class CasaLink {
                 DataManager.getLandlordLeases(this.currentUser.uid),
                 this.getAllRooms()
             ]);
+
+            console.log('📊 Occupancy data loaded:', {
+                tenants: tenants.length,
+                leases: leases.length,
+                rooms: rooms.length
+            });
 
             // Generate the occupancy table
             const occupancyTable = this.generateOccupancyTable(tenants, leases, rooms);
@@ -1427,6 +1581,7 @@ class CasaLink {
         }
     }
 
+
     setupBillingPage() {
         // Generate bill button
         document.getElementById('generateBillBtn')?.addEventListener('click', () => {
@@ -1454,24 +1609,553 @@ class CasaLink {
         }
     }
 
+    getDefaultBedrooms(roomNumber) {
+        if (!roomNumber) return 1;
+        
+        if (roomNumber.startsWith('1')) return 1;
+        if (roomNumber.startsWith('2')) return roomNumber.includes('A') || roomNumber.includes('B') ? 1 : 2;
+        if (roomNumber.startsWith('3') || roomNumber.startsWith('4')) return roomNumber.includes('A') || roomNumber.includes('B') ? 2 : 3;
+        if (roomNumber.startsWith('5')) return 3;
+        
+        return 1; // Default fallback
+    }
+
+    getDefaultBathrooms(roomNumber) {
+        if (!roomNumber) return 1;
+        
+        if (roomNumber.startsWith('1')) return 1;
+        if (roomNumber.startsWith('2')) return 1;
+        if (roomNumber.startsWith('3') || roomNumber.startsWith('4')) return roomNumber.includes('A') || roomNumber.includes('B') ? 1 : 2;
+        if (roomNumber.startsWith('5')) return 2;
+        
+        return 1; // Default fallback
+    }
+
+    generateVacantUnitsTable(tenants, leases, rooms) {
+        console.log('📊 Generating vacant units table...');
+        
+        // Create a map for quick lookup: roomNumber -> isOccupied
+        const occupiedRooms = new Set();
+        
+        // Process leases to find occupied rooms
+        leases.forEach(lease => {
+            if (lease.isActive && lease.roomNumber) {
+                occupiedRooms.add(lease.roomNumber);
+            }
+        });
+
+        // Filter vacant and available rooms
+        const vacantRooms = rooms.filter(room => 
+            !occupiedRooms.has(room.roomNumber) && 
+            room.isAvailable !== false
+        );
+
+        // Sort vacant rooms by floor and room number
+        const sortedVacantRooms = vacantRooms.sort((a, b) => {
+            const floorA = parseInt(a.roomNumber.charAt(0));
+            const floorB = parseInt(b.roomNumber.charAt(0));
+            if (floorA !== floorB) return floorA - floorB;
+            return a.roomNumber.localeCompare(b.roomNumber);
+        });
+
+        if (sortedVacantRooms.length === 0) {
+            return `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-door-closed" style="font-size: 3rem; color: var(--dark-gray); margin-bottom: 20px;"></i>
+                    <h3>No Vacant Units</h3>
+                    <p>All units are currently occupied. Great job!</p>
+                </div>
+            `;
+        }
+
+        let tableHTML = `
+            <!-- HEADER INFO SECTION AT THE TOP -->
+            <div style="margin-bottom: 25px;">
+                <!-- Vacant Units Info -->
+                <div style="padding: 20px; background: rgba(52, 168, 83, 0.1); border-radius: 12px; border-left: 4px solid var(--success); margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h4 style="margin: 0 0 8px 0; color: var(--success); font-size: 1.2rem;">
+                                <i class="fas fa-home"></i> ${sortedVacantRooms.length} Vacant Units Available
+                            </h4>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.95rem;">
+                                Ready for new tenants - Click below to add a tenant to any available unit
+                            </p>
+                        </div>
+                        <button class="btn btn-primary" onclick="casaLink.showAddTenantForm()" style="padding: 12px 20px; font-weight: 600;">
+                            <i class="fas fa-user-plus"></i> Add New Tenant
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Security Deposit Note -->
+                <div style="padding: 15px; background: #f8f9fa; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e9ecef;">
+                    <div style="display: flex; align-items: flex-start; gap: 10px;">
+                        <i class="fas fa-info-circle" style="color: var(--royal-blue); margin-top: 2px;"></i>
+                        <div style="font-size: 0.9rem; color: var(--dark-gray);">
+                            <strong>Note:</strong> Security deposit is typically equal to one month's rent and is refundable after the lease term, provided the unit is returned in good condition.
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Room Type Guide -->
+                <div style="padding: 20px; background: linear-gradient(135deg, var(--powder-blue) 0%, #e3f2fd 100%); border-radius: 12px; border: 2px solid var(--royal-blue);">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue); font-size: 1rem; display: flex; align-items: center; gap: 10px;">
+                        <i class="fas fa-home"></i> Room Type Guide
+                    </h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; font-size: 0.9rem;">
+                        <div><strong>1-Bedroom:</strong> Compact units, ideal for singles</div>
+                        <div><strong>2-Bedroom:</strong> Perfect for couples or roommates</div>
+                        <div><strong>3-Bedroom:</strong> Family-sized units</div>
+                        <div><strong>1-Bathroom:</strong> Standard configuration</div>
+                        <div><strong>2-Bathroom:</strong> Master bedroom with ensuite</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN TABLE -->
+            <div style="max-height: 500px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 800px;">
+                    <thead>
+                        <tr style="background-color: #f8f9fa; position: sticky; top: 0;">
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 80px;">Unit</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 80px;">Floor</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 120px;">Monthly Rent</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 130px;">Security Deposit</th>
+                            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #e9ecef; min-width: 100px;">Bedrooms</th>
+                            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #e9ecef; min-width: 100px;">Bathrooms</th>
+                            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #e9ecef; min-width: 120px;">Max Members</th>
+                            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #e9ecef; min-width: 100px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        sortedVacantRooms.forEach(room => {
+            const monthlyRent = room.monthlyRent || 0;
+            const securityDeposit = room.securityDeposit || monthlyRent;
+            const maxMembers = room.maxMembers || 1;
+            const floor = room.floor || room.roomNumber.charAt(0);
+            
+            // Get bedroom and bathroom counts with fallbacks
+            const bedrooms = room.numberOfBedrooms || this.getDefaultBedrooms(room.roomNumber);
+            const bathrooms = room.numberOfBathrooms || this.getDefaultBathrooms(room.roomNumber);
+            
+            tableHTML += `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 15px; font-weight: 500;">
+                        <strong style="font-size: 1.1rem;">${room.roomNumber}</strong>
+                    </td>
+                    <td style="padding: 15px;">
+                        <span style="background: var(--light-gray); padding: 6px 12px; border-radius: 6px; font-weight: 500;">
+                            Floor ${floor}
+                        </span>
+                    </td>
+                    <td style="padding: 15px; font-weight: 600; color: var(--success);">
+                        ₱${monthlyRent.toLocaleString()}
+                    </td>
+                    <td style="padding: 15px; color: var(--warning); font-weight: 500;">
+                        ₱${securityDeposit.toLocaleString()}
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <span style="background: var(--powder-blue); color: var(--royal-blue); padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 2px solid var(--royal-blue); display: inline-block; min-width: 80px;">
+                            <i class="fas fa-bed" style="margin-right: 5px;"></i>
+                            ${bedrooms} ${bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}
+                        </span>
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <span style="background: var(--warm-beige); color: #8B4513; padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 2px solid #8B4513; display: inline-block; min-width: 80px;">
+                            <i class="fas fa-bath" style="margin-right: 5px;"></i>
+                            ${bathrooms} ${bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}
+                        </span>
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <span style="background: rgba(52, 168, 83, 0.1); color: var(--success); padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 2px solid var(--success); display: inline-block; min-width: 90px;">
+                            <i class="fas fa-users" style="margin-right: 5px;"></i>
+                            ${maxMembers} ${maxMembers === 1 ? 'person' : 'people'}
+                        </span>
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <span style="color: var(--success); font-weight: 600; font-size: 0.9rem;">
+                            <i class="fas fa-check-circle" style="margin-right: 5px;"></i> Available
+                        </span>
+                    </td>
+                </tr>
+            `;
+        });
+
+        tableHTML += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        return tableHTML;
+    }
+
+    async showVacantUnitsModal() {
+        if (!this.debounceModalOpen(() => this.showVacantUnitsModal())) return;
+        
+        try {
+            console.log('🚪 Loading vacant units data...');
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading vacant units...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Vacant Units Available',
+                showFooter: false,
+                width: '90%',
+                maxWidth: '1200px'
+            });
+
+            // Apply custom width to the modal content
+            const modalContentElement = modal.querySelector('.modal-content');
+            if (modalContentElement) {
+                modalContentElement.style.maxWidth = '1200px';
+                modalContentElement.style.width = '90%';
+            }
+
+            // Fetch all necessary data
+            const [tenants, leases, rooms] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid),
+                this.getAllRooms()
+            ]);
+
+            // Generate the vacant units table
+            const vacantUnitsTable = this.generateVacantUnitsTable(tenants, leases, rooms);
+            
+            // Update modal content with the table
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = vacantUnitsTable;
+            }
+
+            // Add footer with close button
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading vacant units data:', error);
+            this.showNotification('Failed to load vacant units data', 'error');
+        }
+    }
+
+
+    cleanupDashboardCardEvents() {
+        const contentArea = document.getElementById('contentArea');
+        if (contentArea && this.handleDashboardCardClick) {
+            contentArea.removeEventListener('click', this.handleDashboardCardClick);
+            console.log('🧹 Cleaned up dashboard card events');
+        }
+    }
+
+    generateTenantDetailsTable(tenants, leases, rooms) {
+        console.log('📊 Generating tenant details table...');
+        
+        // Create a map of roomNumber to lease info with occupants
+        const roomLeaseMap = new Map();
+        
+        // Process leases to group by room and get occupant information
+        leases.forEach(lease => {
+            if (lease.isActive && lease.roomNumber && lease.occupants && lease.occupants.length > 0) {
+                const primaryTenant = lease.occupants[0];
+                const otherOccupants = lease.occupants.slice(1);
+                const totalOccupants = lease.totalOccupants || lease.occupants.length;
+                
+                // Find tenant info for email
+                const tenant = tenants.find(t => t.id === lease.tenantId);
+                
+                roomLeaseMap.set(lease.roomNumber, {
+                    roomNumber: lease.roomNumber,
+                    primaryTenant: primaryTenant,
+                    email: tenant?.email || lease.tenantEmail || 'No email',
+                    otherOccupants: otherOccupants,
+                    totalOccupants: totalOccupants,
+                    leaseId: lease.id
+                });
+            }
+        });
+
+        // Convert map to array and sort by room number
+        const occupiedRooms = Array.from(roomLeaseMap.values()).sort((a, b) => {
+            const roomA = a.roomNumber;
+            const roomB = b.roomNumber;
+            const floorA = parseInt(roomA.charAt(0));
+            const floorB = parseInt(roomB.charAt(0));
+            if (floorA !== floorB) return floorA - floorB;
+            return roomA.localeCompare(roomB);
+        });
+
+        if (occupiedRooms.length === 0) {
+            return `
+                <div style="text-align: center; padding: 60px;">
+                    <i class="fas fa-users" style="font-size: 4rem; color: var(--dark-gray); margin-bottom: 20px; opacity: 0.5;"></i>
+                    <h3 style="color: var(--dark-gray); margin-bottom: 15px;">No Occupants Found</h3>
+                    <p style="color: var(--dark-gray); margin-bottom: 25px;">There are currently no occupied units with registered occupants.</p>
+                    <button class="btn btn-primary" onclick="casaLink.showAddTenantForm()">
+                        <i class="fas fa-user-plus"></i> Add Your First Tenant
+                    </button>
+                </div>
+            `;
+        }
+
+        // Calculate total statistics
+        const totalOccupants = occupiedRooms.reduce((sum, room) => sum + room.totalOccupants, 0);
+        const totalRooms = occupiedRooms.length;
+
+        let tableHTML = `
+            <!-- NOTES SECTION AT THE TOP -->
+            <div style="margin-bottom: 25px; padding: 20px; background: #f8f9fa; border-radius: 12px; border: 1px solid #e9ecef;">
+                <h4 style="margin: 0 0 15px 0; color: var(--royal-blue); font-size: 1rem; display: flex; align-items: center; gap: 10px;">
+                    <i class="fas fa-info-circle"></i> Note:
+                </h4>
+                <div style="font-size: 0.9rem; color: var(--dark-gray); line-height: 1.6;">
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Primary Tenant</strong> is the main registered tenant for the unit</li>
+                        <li><strong>Other Occupants</strong> are additional people living in the unit</li>
+                        <li><strong>Total Occupants</strong> includes all people living in the unit</li>
+                        <li>Only active leases with registered occupants are shown in this table</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- HEADER STATS SECTION -->
+            <div style="margin-bottom: 25px;">
+                <!-- Summary Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--royal-blue); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--royal-blue);">${totalRooms}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Occupied Units</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--warning); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--warning);">${totalOccupants}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Total Occupants</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--info); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--info);">${(totalOccupants / totalRooms).toFixed(1)}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Avg. per Unit</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MAIN TABLE -->
+            <div style="max-height: 600px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem; min-width: 1000px;">
+                    <thead>
+                        <tr style="background-color: #f8f9fa; position: sticky; top: 0;">
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 100px;">Room Number</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 150px;">Primary Tenant</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 200px;">Email</th>
+                            <th style="padding: 15px; text-align: left; border-bottom: 2px solid #e9ecef; min-width: 200px;">Other Occupants</th>
+                            <th style="padding: 15px; text-align: center; border-bottom: 2px solid #e9ecef; min-width: 120px;">Total Occupants</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+
+        occupiedRooms.forEach(room => {
+            const otherOccupantsText = room.otherOccupants.length > 0 
+                ? room.otherOccupants.map(occupant => `• ${occupant}`).join('<br>')
+                : '<em style="color: var(--dark-gray);">No other occupants</em>';
+
+            tableHTML += `
+                <tr style="border-bottom: 1px solid #e9ecef;">
+                    <td style="padding: 15px; font-weight: 600;">
+                        <span style="font-size: 1.1rem; background: var(--royal-blue); color: white; padding: 8px 12px; border-radius: 6px; display: inline-block;">
+                            ${room.roomNumber}
+                        </span>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="font-weight: 600; color: var(--royal-blue);">${room.primaryTenant}</div>
+                        <small style="color: var(--dark-gray); font-size: 0.8rem;">Primary Tenant</small>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="color: var(--dark-gray); font-size: 0.85rem; word-break: break-word;">
+                            <i class="fas fa-envelope" style="margin-right: 5px; color: var(--royal-blue);"></i>
+                            ${room.email}
+                        </div>
+                    </td>
+                    <td style="padding: 15px;">
+                        <div style="font-size: 0.85rem; line-height: 1.4;">${otherOccupantsText}</div>
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <span style="background: rgba(251, 188, 4, 0.1); color: var(--warning); padding: 8px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 2px solid var(--warning); display: inline-block; min-width: 60px;">
+                            ${room.totalOccupants}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        });
+
+        tableHTML += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        return tableHTML;
+    }
+
+    async showTenantDetailsModal() {
+        if (!this.debounceModalOpen(() => this.showTenantDetailsModal())) return;
+
+        try {
+            console.log('👥 Loading tenant details data...');
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading tenant details...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Occupant Details - All Units',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1400px'
+            });
+
+            // Apply custom width to the modal content
+            const modalContentElement = modal.querySelector('.modal-content');
+            if (modalContentElement) {
+                modalContentElement.style.maxWidth = '1400px';
+                modalContentElement.style.width = '95%';
+            }
+
+            // Fetch all necessary data
+            const [tenants, leases, rooms] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid),
+                this.getAllRooms()
+            ]);
+
+            console.log('📊 Tenant details data loaded:', {
+                tenants: tenants.length,
+                leases: leases.length,
+                rooms: rooms.length
+            });
+
+            // Generate the tenant details table
+            const tenantDetailsTable = this.generateTenantDetailsTable(tenants, leases, rooms);
+            
+            // Update modal content with the table
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = tenantDetailsTable;
+            }
+
+            // Add footer with close button
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading tenant details:', error);
+            this.showNotification('Failed to load tenant details', 'error');
+        }
+    }
+
+
     setupDashboardCardEvents() {
         console.log('🔄 Setting up dashboard card events...');
         
-        // Use event delegation on the content area
+        // Clean up any existing event listeners first
+        this.cleanupDashboardCardEvents();
+        
         const contentArea = document.getElementById('contentArea');
         if (contentArea) {
-            contentArea.addEventListener('click', (e) => {
+            // Create a single event handler function
+            const handleDashboardCardClick = (e) => {
                 // Check if the click is on any clickable card
-                const clickableCard = e.target.closest('[data-clickable="occupancy"]');
+                const clickableCard = e.target.closest('[data-clickable]');
                 if (clickableCard) {
                     e.preventDefault();
                     e.stopPropagation();
-                    e.stopImmediatePropagation();
-                    console.log('🏠 Occupancy rate card clicked via data attribute');
-                    this.showUnitOccupancyModal();
+                    e.stopImmediatePropagation(); // Prevent other listeners
+                    
+                    const cardType = clickableCard.getAttribute('data-clickable');
+                    console.log(`🏠 ${cardType} card clicked`);
+                    
+                    // Add a small delay to prevent rapid multiple clicks
+                    if (this.lastCardClick && Date.now() - this.lastCardClick < 1000) {
+                        console.log('⏳ Ignoring rapid click');
+                        return false;
+                    }
+                    this.lastCardClick = Date.now();
+                    
+                    if (cardType === 'occupancy') {
+                        this.showUnitOccupancyModal();
+                    } else if (cardType === 'vacant') {
+                        this.showVacantUnitsModal();
+                    } else if (cardType === 'tenants') {
+                        this.showTenantDetailsModal();
+                    }
+                    
                     return false;
                 }
+            };
+            
+            // Add the event listener with proper options
+            contentArea.addEventListener('click', handleDashboardCardClick, { 
+                capture: true, // Use capture phase to catch events early
+                passive: false 
             });
+            
+            // Store the handler reference for cleanup
+            this.currentDashboardCardHandler = handleDashboardCardClick;
+            
+            console.log('✅ Dashboard card events setup complete');
+        } else {
+            console.warn('⚠️ Content area not found for dashboard card events');
+        }
+    }
+
+    debounceModalOpen(modalFunction) {
+        const now = Date.now();
+        if (this.lastModalOpen && now - this.lastModalOpen < 500) {
+            console.log('⏳ Modal opening debounced');
+            return false;
+        }
+        this.lastModalOpen = now;
+        modalFunction.call(this);
+        return true;
+    }
+
+
+    cleanupDashboardCardEvents() {
+        const contentArea = document.getElementById('contentArea');
+        if (contentArea && this.currentDashboardCardHandler) {
+            contentArea.removeEventListener('click', this.currentDashboardCardHandler, { 
+                capture: true 
+            });
+            this.currentDashboardCardHandler = null;
+            console.log('🧹 Cleaned up dashboard card events');
         }
     }
 
@@ -1483,19 +2167,15 @@ class CasaLink {
             this.showAddPropertyForm();
         });
 
-        // Occupancy Rate Card Click Event - FIXED VERSION
-        const occupancyRateCard = document.querySelector('.card[style*="cursor: pointer"]');
-        if (occupancyRateCard) {
-            occupancyRateCard.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🏠 Occupancy rate card clicked');
-                this.showUnitOccupancyModal();
-            });
-        }
-
+        // Setup card click events with a small delay to ensure DOM is ready
+        setTimeout(() => {
+            this.setupDashboardCardEvents();
+        }, 100);
+        
         // Setup real-time stats when dashboard is shown
         this.updateActiveNavState('dashboard');
+        
+        console.log('✅ All dashboard events setup complete');
     }
 
     setupNavigationEvents() {
@@ -2594,7 +3274,7 @@ class CasaLink {
         this.updateLoadingStates();
     }
 
-    updateLandlordDashboard(stats) {
+   updateLandlordDashboard(stats) {
         if (!stats) {
             console.log('❌ No stats data available for dashboard');
             this.showDashboardErrorState();
@@ -2608,7 +3288,7 @@ class CasaLink {
             this.updateCard('occupancyRate', `${stats.occupancyRate}%`);
             this.updateCard('vacantUnits', stats.vacantUnits);
             this.updateCard('occupancyDetails', `${stats.occupiedUnits}/${stats.totalUnits} units`);
-            this.updateCard('totalTenants', stats.totalTenants);
+            this.updateCard('totalTenants', stats.totalOccupants || stats.totalTenants); // UPDATED LINE
             this.updateCard('averageRent', `₱${stats.averageRent.toLocaleString()}`);
             
             // FINANCIAL OVERVIEW
@@ -2630,6 +3310,7 @@ class CasaLink {
             this.showDashboardErrorState();
         }
     }
+
 
     setupRealTimeStats() {
         console.log('🔄 Setting up real-time dashboard stats...');
