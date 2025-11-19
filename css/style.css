@@ -1340,6 +1340,96 @@ header {
     color: white;
 }
 
+/* ===== BILL TABLE ROW STYLES ===== */
+.table-container .tenants-table tbody tr.bill-row {
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+.table-container .tenants-table tbody tr.bill-row:hover {
+    background-color: rgba(22, 38, 96, 0.08) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 8px rgba(22, 38, 96, 0.15) !important;
+}
+
+.table-container .tenants-table tbody tr.bill-row:active {
+    background-color: rgba(22, 38, 96, 0.12) !important;
+    transform: translateY(0) !important;
+}
+
+/* Ensure all cells in the row are clickable */
+.table-container .tenants-table tbody tr.bill-row td {
+    cursor: pointer !important;
+    transition: all 0.3s ease !important;
+}
+
+/* But keep action buttons with default cursor */
+.table-container .tenants-table tbody tr.bill-row .action-buttons,
+.table-container .tenants-table tbody tr.bill-row .action-buttons button {
+    cursor: default !important;
+}
+
+.table-container .tenants-table tbody tr.bill-row .action-buttons button {
+    cursor: pointer !important;
+}
+
+/* Bill Row Hover Effects */
+.bill-row {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.bill-row:hover {
+    background-color: rgba(22, 38, 96, 0.05) !important;
+    transform: translateX(2px);
+}
+
+.bill-row:active {
+    background-color: rgba(22, 38, 96, 0.1) !important;
+}
+
+/* Ensure the entire row is clickable */
+.bill-row td {
+    cursor: pointer;
+}
+
+/* Remove pointer from action buttons so they don't conflict */
+.bill-row .action-buttons,
+.bill-row .action-buttons button {
+    cursor: default;
+}
+
+.bill-row .action-buttons button {
+    cursor: pointer;
+}
+
+.status-badge-large {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.bill-row {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.bill-row:hover {
+    background-color: rgba(22, 38, 96, 0.05) !important;
+    transform: translateX(2px);
+}
+
+.bill-row:active {
+    background-color: rgba(22, 38, 96, 0.1) !important;
+}
+
+.bill-details-modal .modal-content {
+    max-width: 800px;
+    width: 90%;
+}
+
 .card[data-clickable="pending-bills"],
 .card[data-clickable="overdue-bills"], 
 .card[data-clickable="revenue"],

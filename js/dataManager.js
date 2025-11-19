@@ -273,45 +273,40 @@ class DataManager {
             
             let generatedCount = 0;
             let skippedCount = 0;
-            let errorCount = 0;
             
             const billPromises = leases.map(async (lease) => {
-                try {
-                    // Enhanced validation
-                    if (!lease.isActive) {
-                        skippedCount++;
-                        return;
-                    }
+                // Enhanced validation
+                if (!lease.isActive) {
+                    skippedCount++;
+                    return;
+                }
+                
+                if (!lease.monthlyRent || lease.monthlyRent <= 0) {
+                    console.warn(`⚠️ Skipping ${lease.tenantName}: Invalid rent amount`);
+                    skippedCount++;
+                    return;
+                }
+                
+                // Check for existing bill this month
+                const existingBill = await firebaseDb.collection('bills')
+                    .where('tenantId', '==', lease.tenantId)
+                    .where('dueDate', '>=', new Date(currentYear, currentMonth, 1).toISOString())
+                    .where('dueDate', '<=', new Date(currentYear, currentMonth + 1, 0).toISOString())
+                    .limit(1)
+                    .get();
                     
-                    if (!lease.monthlyRent || lease.monthlyRent <= 0) {
-                        console.warn(`⚠️ Skipping ${lease.tenantName}: Invalid rent amount`);
-                        skippedCount++;
-                        return;
-                    }
-                    
-                    // Check for existing bill this month
-                    const existingBill = await firebaseDb.collection('bills')
-                        .where('tenantId', '==', lease.tenantId)
-                        .where('dueDate', '>=', new Date(currentYear, currentMonth, 1).toISOString())
-                        .where('dueDate', '<=', new Date(currentYear, currentMonth + 1, 0).toISOString())
-                        .limit(1)
-                        .get();
-                        
-                    if (!existingBill.empty) {
-                        skippedCount++;
-                        return;
-                    }
-
+                if (existingBill.empty) {
                     const paymentDay = lease.paymentDueDay || settings?.defaultPaymentDay || 5;
                     const dueDate = new Date(currentYear, currentMonth, paymentDay);
                     
+                    // FIXED: Use consistent description format
                     const billData = {
                         tenantId: lease.tenantId,
                         landlordId: lease.landlordId,
                         tenantName: lease.tenantName,
                         roomNumber: lease.roomNumber,
                         type: 'rent',
-                        description: `Monthly Rent - ${today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+                        description: `Rent - ${today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
                         totalAmount: lease.monthlyRent,
                         dueDate: dueDate.toISOString(),
                         status: 'pending',
@@ -329,24 +324,19 @@ class DataManager {
                     await firebaseDb.collection('bills').add(billData);
                     generatedCount++;
                     console.log(`✅ Generated bill for ${lease.tenantName} (Due: ${paymentDay}${this.getOrdinalSuffix(paymentDay)})`);
-                    
-                } catch (error) {
-                    console.error(`❌ Error generating bill for ${lease.tenantName}:`, error);
-                    errorCount++;
+                } else {
+                    skippedCount++;
                 }
             });
             
             await Promise.all(billPromises);
             
-            const result = {
+            console.log(`✅ Monthly bills generation completed: ${generatedCount} generated, ${skippedCount} skipped`);
+            return {
                 generated: generatedCount,
                 skipped: skippedCount,
-                errors: errorCount,
                 total: leases.length
             };
-            
-            console.log(`✅ Monthly bills generation completed:`, result);
-            return result;
             
         } catch (error) {
             console.error('❌ Error generating monthly bills:', error);

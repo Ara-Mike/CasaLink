@@ -262,24 +262,43 @@ class CasaLink {
 
     cleanupPageListeners(page) {
         console.log('🧹 Cleaning up listeners for page:', page);
-        
+
+        // Clean up bill row observers
+        if (this.billRowObserver) {
+            this.billRowObserver.disconnect();
+            this.billRowObserver = null;
+        }
+
+        // Remove event listeners from all bill rows
+        const billRows = document.querySelectorAll('.bill-row');
+        billRows.forEach(row => {
+            if (row._mouseEnterHandler) {
+                row.removeEventListener('mouseenter', row._mouseEnterHandler);
+                row._mouseEnterHandler = null;
+            }
+            if (row._mouseLeaveHandler) {
+                row.removeEventListener('mouseleave', row._mouseLeaveHandler);
+                row._mouseLeaveHandler = null;
+            }
+        });
+
         // Always clean up dashboard listeners when leaving dashboard
         if (this.currentPage === 'dashboard') {
             this.cleanupDashboardListeners();
         }
-        
+
         // Clean up tenant management listeners
         if (this.currentPage === 'tenants') {
             this.removeTenantRowClickHandlers();
         }
-        
+
         // Add cleanup for other pages as needed
         switch (this.currentPage) {
             case 'billing':
-                // Clean up billing listeners if any
+                // Any additional billing cleanup can go here
                 break;
             case 'maintenance':
-                // Clean up maintenance listeners if any
+                // Any additional maintenance cleanup can go here
                 break;
         }
     }
@@ -2243,6 +2262,8 @@ class CasaLink {
             this.showNotification('Failed to load unit occupancy data', 'error');
         }
     }
+
+    
 
 
     async setupBillingPage() {
@@ -4312,6 +4333,13 @@ class CasaLink {
                 </option>
             `).join('');
 
+            // NEW: Smart autofill for description (Rent - Month Year)
+            const today = new Date();
+            const defaultDescription = `Rent - ${today.toLocaleDateString('en-US', { 
+                month: 'long', 
+                year: 'numeric' 
+            })}`;
+
             const modalContent = `
                 <div class="create-bill-modal">
                     <div style="text-align: center; margin-bottom: 20px;">
@@ -4342,7 +4370,8 @@ class CasaLink {
                     <div class="form-group">
                         <label class="form-label">Description *</label>
                         <input type="text" id="billDescription" class="form-input" 
-                            placeholder="e.g., Monthly Rent - November 2024" required>
+                            value="${defaultDescription}" 
+                            placeholder="e.g., Rent - November 2024" required>
                     </div>
 
                     <div class="form-group">
@@ -4392,7 +4421,6 @@ class CasaLink {
             });
 
             // Set default due date (payment day of current month)
-            const today = new Date();
             const dueDate = new Date(today.getFullYear(), today.getMonth(), settings.defaultPaymentDay);
             document.getElementById('billDueDate').value = dueDate.toISOString().split('T')[0];
 
@@ -4403,6 +4431,7 @@ class CasaLink {
             this.showNotification('Failed to load bill creation form', 'error');
         }
     }
+
 
     async autoApplyLateFees() {
         try {
@@ -5133,9 +5162,6 @@ class CasaLink {
     }
 
     // ===== STUB METHODS FOR UNIMPLEMENTED FEATURES =====
-    viewBillDetails(billId) {
-        this.showNotification('Bill details feature coming soon!', 'info');
-    }
 
     viewTenantMaintenanceRequest(requestId) {
         this.showNotification('Maintenance request details feature coming soon!', 'info');
@@ -5724,6 +5750,253 @@ class CasaLink {
         }
     }
 
+    async showBillDetailsModal(billId) {
+        try {
+            console.log('📄 Loading bill details for:', billId);
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading bill details...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Bill Details',
+                showFooter: false
+            });
+
+            // Fetch bill data
+            const billDoc = await firebaseDb.collection('bills').doc(billId).get();
+            
+            if (!billDoc.exists) {
+                ModalManager.closeModal(modal);
+                this.showNotification('Bill not found', 'error');
+                return;
+            }
+
+            const bill = { id: billDoc.id, ...billDoc.data() };
+            
+            // Generate bill details content
+            const billDetailsContent = this.generateBillDetailsContent(bill);
+            
+            // Update modal content
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = billDetailsContent;
+            }
+
+            // Add footer with close button
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                    ${bill.status !== 'paid' ? `
+                        <button class="btn btn-success" onclick="casaLink.recordPaymentModal('${bill.id}')">
+                            <i class="fas fa-credit-card"></i> Record Payment
+                        </button>
+                    ` : ''}
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading bill details:', error);
+            this.showNotification('Failed to load bill details', 'error');
+        }
+    }
+
+    generateBillDetailsContent(bill) {
+        const dueDate = new Date(bill.dueDate);
+        const createdDate = new Date(bill.createdAt);
+        const paidDate = bill.paidDate ? new Date(bill.paidDate) : null;
+        
+        // Fix bill type display
+        const billType = bill.type || 'rent';
+        const typeDisplay = billType.charAt(0).toUpperCase() + billType.slice(1).replace('_', ' ');
+        
+        // Calculate days status
+        const today = new Date();
+        const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+        const daysUntilDue = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
+        
+        let dueStatus = '';
+        if (bill.status === 'paid') {
+            dueStatus = `<span style="color: var(--success);">Paid on ${paidDate.toLocaleDateString()}</span>`;
+        } else if (daysOverdue > 0) {
+            dueStatus = `<span style="color: var(--danger);">Overdue by ${daysOverdue} days</span>`;
+        } else if (daysUntilDue === 0) {
+            dueStatus = `<span style="color: var(--warning);">Due today</span>`;
+        } else {
+            dueStatus = `<span style="color: var(--royal-blue);">Due in ${daysUntilDue} days</span>`;
+        }
+
+        // Generate bill items HTML
+        const billItemsHTML = bill.items && bill.items.length > 0 ? 
+            bill.items.map(item => `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                    <div>${item.description}</div>
+                    <div style="font-weight: 600;">₱${(item.amount || 0).toLocaleString()}</div>
+                </div>
+            `).join('') : `
+                <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                    <div>${bill.description || 'Monthly Rent'}</div>
+                    <div style="font-weight: 600;">₱${(bill.totalAmount || 0).toLocaleString()}</div>
+                </div>
+            `;
+
+        return `
+            <div class="bill-details-modal" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Bill Header -->
+                <div style="background: linear-gradient(135deg, var(--royal-blue), #101b4a); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin: 0 0 5px 0;">${bill.description || 'Monthly Rent'}</h3>
+                            <p style="margin: 0; opacity: 0.9;">Bill #${bill.id.substring(0, 8)}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 1.8rem; font-weight: 700;">₱${(bill.totalAmount || 0).toLocaleString()}</div>
+                            <div style="opacity: 0.9;">Total Amount</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bill Information Grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--royal-blue);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Status</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--royal-blue);">
+                            ${this.getBillStatusBadge(bill).replace('status-badge', 'status-badge-large')}
+                        </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Due Date</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--warning);">
+                            ${dueDate.toLocaleDateString()}
+                        </div>
+                        <div style="font-size: 0.8rem; margin-top: 5px;">${dueStatus}</div>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--info);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Bill Type</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--info);">
+                            ${typeDisplay}
+                        </div>
+                        <div style="font-size: 0.8rem; margin-top: 5px;">
+                            ${bill.isAutoGenerated ? 'Auto-generated' : 'Manual'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tenant Information -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-user"></i> Tenant Information
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Tenant Name:</strong><br>
+                            ${bill.tenantName || 'N/A'}
+                        </div>
+                        <div>
+                            <strong>Room Number:</strong><br>
+                            ${bill.roomNumber || 'N/A'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bill Items -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-receipt"></i> Bill Items
+                    </h4>
+                    ${billItemsHTML}
+                    <div style="display: flex; justify-content: space-between; padding: 12px 0; border-top: 2px solid var(--royal-blue); margin-top: 10px; font-weight: 700; font-size: 1.1rem;">
+                        <div>Total Amount:</div>
+                        <div>₱${(bill.totalAmount || 0).toLocaleString()}</div>
+                    </div>
+                </div>
+
+                <!-- Payment Information (if paid) -->
+                ${bill.status === 'paid' ? `
+                    <div style="background: rgba(52, 168, 83, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--success);">
+                        <h4 style="color: var(--success); margin-bottom: 15px;">
+                            <i class="fas fa-check-circle"></i> Payment Information
+                        </h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <strong>Paid Date:</strong><br>
+                                ${paidDate.toLocaleDateString()}
+                            </div>
+                            <div>
+                                <strong>Payment Method:</strong><br>
+                                ${bill.paymentMethod || 'Not specified'}
+                            </div>
+                            ${bill.paymentReference ? `
+                                <div>
+                                    <strong>Reference Number:</strong><br>
+                                    ${bill.paymentReference}
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Bill Metadata -->
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-size: 0.9rem; color: var(--dark-gray);">
+                    <strong>Bill Metadata:</strong><br>
+                    • Created: ${createdDate.toLocaleDateString()} at ${createdDate.toLocaleTimeString()}<br>
+                    • Bill ID: ${bill.id}<br>
+                    • ${bill.isAutoGenerated ? 'Automatically generated by system' : 'Manually created by landlord'}
+                </div>
+            </div>
+        `;
+    }
+
+    // Helper method for larger status badges
+    getBillStatusBadge(bill) {
+        const today = new Date();
+        const dueDate = new Date(bill.dueDate);
+        
+        if (bill.status === 'paid') {
+            return '<span class="status-badge active">Paid</span>';
+        } else if (dueDate < today) {
+            return '<span class="status-badge warning">Overdue</span>';
+        } else {
+            return '<span class="status-badge inactive">Pending</span>';
+        }
+    }
+
+    setupBillRowClickHandlers() {
+        // Remove existing handlers first
+        this.removeBillRowClickHandlers();
+        
+        this.billRowClickHandler = (e) => {
+            const billRow = e.target.closest('.bill-row');
+            if (billRow) {
+                const billId = billRow.getAttribute('data-bill-id');
+                if (billId) {
+                    this.showBillDetailsModal(billId);
+                }
+            }
+        };
+        
+        document.addEventListener('click', this.billRowClickHandler);
+    }
+
+    removeBillRowClickHandlers() {
+        if (this.billRowClickHandler) {
+            document.removeEventListener('click', this.billRowClickHandler);
+            this.billRowClickHandler = null;
+        }
+    }
+
     renderBillsTable(bills) {
         return `
             <div class="table-container">
@@ -5740,47 +6013,69 @@ class CasaLink {
                         </tr>
                     </thead>
                     <tbody>
-                        ${bills.map(bill => `
-                            <tr class="bill-row" data-bill-id="${bill.id}">
-                                <td>
-                                    <div class="tenant-info">
-                                        <div class="tenant-avatar">${bill.tenantName?.charAt(0)?.toUpperCase() || 'T'}</div>
-                                        <div class="tenant-name">${bill.tenantName || 'N/A'}</div>
-                                    </div>
-                                </td>
-                                <td>${bill.roomNumber || 'N/A'}</td>
-                                <td>
-                                    <div>${bill.description || 'Monthly Rent'}</div>
-                                    <small style="color: var(--dark-gray);">${bill.type || 'rent'}</small>
-                                </td>
-                                <td style="font-weight: 600; color: var(--royal-blue);">
-                                    ₱${(bill.totalAmount || 0).toLocaleString()}
-                                </td>
-                                <td>
-                                    ${new Date(bill.dueDate).toLocaleDateString()}
-                                    ${new Date(bill.dueDate) < new Date() && bill.status !== 'paid' ? 
-                                        '<br><small style="color: var(--danger);">Overdue</small>' : ''}
-                                </td>
-                                <td>
-                                    ${this.getBillStatusBadge(bill)}
-                                </td>
-                                <td>
-                                    <div class="action-buttons">
-                                        ${bill.status !== 'paid' ? `
-                                            <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); casaLink.recordPaymentModal('${bill.id}')">
-                                                <i class="fas fa-credit-card"></i> Pay
-                                            </button>
+                        ${bills.map(bill => {
+                            const isOverdue = bill.status === 'pending' && new Date(bill.dueDate) < new Date();
+                            const statusBadge = this.getBillStatusBadge(bill);
+                            
+                            // Fix the description display
+                            const billType = bill.type || 'rent';
+                            const typeDisplay = billType.charAt(0).toUpperCase() + billType.slice(1).replace('_', ' ');
+                            const isAutoGenerated = bill.isAutoGenerated;
+                            
+                            return `
+                                <tr class="bill-row" data-bill-id="${bill.id}" style="cursor: pointer;">
+                                    <td>
+                                        <div class="tenant-info">
+                                            <div class="tenant-avatar">${bill.tenantName?.charAt(0)?.toUpperCase() || 'T'}</div>
+                                            <div class="tenant-details">
+                                                <div class="tenant-name">${bill.tenantName || 'N/A'}</div>
+                                                <small style="color: var(--dark-gray); font-size: 0.8rem;">
+                                                    ${bill.roomNumber || 'No room assigned'}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>${bill.roomNumber || 'N/A'}</td>
+                                    <td>
+                                        <div style="font-weight: 500;">${bill.description || 'Monthly Rent'}</div>
+                                        <small style="color: var(--dark-gray);">
+                                            ${typeDisplay} ${isAutoGenerated ? '(Auto-generated)' : '(Manual)'}
+                                        </small>
+                                    </td>
+                                    <td style="font-weight: 600; color: var(--royal-blue);">
+                                        ₱${(bill.totalAmount || 0).toLocaleString()}
+                                    </td>
+                                    <td>
+                                        <div>${new Date(bill.dueDate).toLocaleDateString()}</div>
+                                        ${isOverdue ? `
+                                            <small style="color: var(--danger); font-weight: 500;">
+                                                ${this.getDaysOverdue(bill.dueDate)} days overdue
+                                            </small>
                                         ` : ''}
-                                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewBillDetails('${bill.id}')">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); casaLink.deleteBill('${bill.id}')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        `).join('')}
+                                    </td>
+                                    <td>
+                                        ${statusBadge}
+                                    </td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            ${bill.status !== 'paid' ? `
+                                                <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); casaLink.recordPaymentModal('${bill.id}')">
+                                                    <i class="fas fa-credit-card"></i> Pay
+                                                </button>
+                                            ` : ''}
+                                            ${bill.status !== 'paid' ? `
+                                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); casaLink.editBill('${bill.id}')">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); casaLink.deleteBill('${bill.id}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>
@@ -6064,17 +6359,94 @@ class CasaLink {
         }
     }
 
-    async setupBillingPage() {
-        // Load initial data
-        await this.loadBillsData();
-        
-        // Setup search functionality
-        document.getElementById('billSearch')?.addEventListener('input', (e) => {
-            this.searchBills(e.target.value);
+    setupBillRowStyles() {
+        // Use MutationObserver to watch for bill rows being added to the DOM
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.addedNodes.length) {
+                    mutation.addedNodes.forEach((node) => {
+                        if (node.nodeType === 1) { // Element node
+                            const billRows = node.querySelectorAll ? node.querySelectorAll('.bill-row') : [];
+                            billRows.forEach(row => this.applyBillRowStyles(row));
+                            
+                            // Also check if the node itself is a bill row
+                            if (node.classList && node.classList.contains('bill-row')) {
+                                this.applyBillRowStyles(node);
+                            }
+                        }
+                    });
+                }
+            });
         });
+
+        // Start observing
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Apply to existing bill rows
+        const existingBillRows = document.querySelectorAll('.bill-row');
+        existingBillRows.forEach(row => this.applyBillRowStyles(row));
+    }
+
+    applyBillRowStyles(row) {
+        // Apply inline styles that will definitely work
+        row.style.cursor = 'pointer';
+        row.style.transition = 'all 0.3s ease';
         
-        // Setup real-time listener
-        this.setupBillsListener();
+        // Remove any existing event listeners to avoid duplicates
+        row.removeEventListener('mouseenter', row._mouseEnterHandler);
+        row.removeEventListener('mouseleave', row._mouseLeaveHandler);
+        
+        // Add hover effects
+        row._mouseEnterHandler = () => {
+            row.style.backgroundColor = 'rgba(22, 38, 96, 0.08)';
+            row.style.transform = 'translateY(-1px)';
+            row.style.boxShadow = '0 2px 8px rgba(22, 38, 96, 0.15)';
+        };
+        
+        row._mouseLeaveHandler = () => {
+            row.style.backgroundColor = '';
+            row.style.transform = '';
+            row.style.boxShadow = '';
+        };
+        
+        row.addEventListener('mouseenter', row._mouseEnterHandler);
+        row.addEventListener('mouseleave', row._mouseLeaveHandler);
+    }
+
+
+
+    async setupBillingPage() {
+        try {
+            // Load initial data
+            await this.loadBillsData();
+            await this.loadBillingStatus();
+            
+            // Setup search functionality
+            document.getElementById('billSearch')?.addEventListener('input', (e) => {
+                this.filterBills(e.target.value);
+            });
+            
+            // Setup filter functionality
+            document.getElementById('billStatusFilter')?.addEventListener('change', (e) => {
+                this.filterBills(e.target.value);
+            });
+            
+            // Setup bill row click handlers
+            this.setupBillRowClickHandlers();
+            
+            // Setup bill row styles with visual feedback
+            this.setupBillRowStyles();
+            
+            // Setup real-time listener
+            this.setupBillsListener();
+            
+        } catch (error) {
+            console.error('Error setting up billing page:', error);
+            this.showNotification('Failed to load billing data', 'error');
+        }
     }
 
     getDaysOverdue(dueDate) {
@@ -6158,9 +6530,6 @@ class CasaLink {
                                                     <i class="fas fa-credit-card"></i> Pay
                                                 </button>
                                             ` : ''}
-                                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewBillDetails('${bill.id}')">
-                                                <i class="fas fa-eye"></i>
-                                            </button>
                                             ${bill.status !== 'paid' ? `
                                                 <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); casaLink.editBill('${bill.id}')">
                                                     <i class="fas fa-edit"></i>
