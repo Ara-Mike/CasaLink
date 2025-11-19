@@ -1155,6 +1155,53 @@ header {
         padding-bottom: 10px;
     }
 
+    /* Tenant row hover effects */
+.tenant-row {
+    transition: all 0.2s ease;
+}
+
+.tenant-row:hover {
+    background-color: rgba(22, 38, 96, 0.05) !important;
+    transform: translateX(2px);
+}
+
+.tenant-row:active {
+    background-color: rgba(22, 38, 96, 0.1) !important;
+}
+
+/* Lease information modal styles */
+.lease-information-modal {
+    font-family: 'Inter', sans-serif;
+}
+
+.lease-information-modal h4 {
+    color: var(--royal-blue);
+    font-size: 1.1rem;
+}
+
+.lease-information-modal .status-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    display: inline-block;
+}
+
+.lease-information-modal .status-badge.active {
+    background-color: var(--success);
+    color: white;
+}
+
+.lease-information-modal .status-badge.warning {
+    background-color: var(--warning);
+    color: white;
+}
+
+.lease-information-modal .status-badge.inactive {
+    background-color: var(--dark-gray);
+    color: white;
+}
+
     .vacant-units-table .max-members-badge {
         background: var(--powder-blue); 
         color: black; 
@@ -1191,6 +1238,53 @@ header {
 
 .lease-agreement-view-modal strong {
     color: var(--text-dark);
+}
+
+/* Operations card hover effects */
+.card[data-clickable="renewals"]:hover,
+.card[data-clickable="open-maintenance"]:hover,
+.card[data-clickable="backlog"]:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    border: 2px solid var(--royal-blue);
+}
+
+.card[data-clickable="renewals"]:hover {
+    border-color: var(--warning);
+}
+
+.card[data-clickable="open-maintenance"]:hover {
+    border-color: var(--info);
+}
+
+.card[data-clickable="backlog"]:hover {
+    border-color: #5C6BC0;
+}
+
+/* Financial card hover effects */
+.card[data-clickable="collection"]:hover,
+.card[data-clickable="revenue"]:hover,
+.card[data-clickable="late"]:hover,
+.card[data-clickable="unpaid"]:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    border: 2px solid var(--royal-blue);
+}
+
+.card[data-clickable="collection"]:hover {
+    border-color: var(--success);
+}
+
+.card[data-clickable="revenue"]:hover {
+    border-color: #9334E6;
+}
+
+.card[data-clickable="late"]:hover {
+    border-color: var(--danger);
+}
+
+.card[data-clickable="unpaid"]:hover {
+    border-color: var(--warning);
 }
 
 /* Print styles for lease agreement */

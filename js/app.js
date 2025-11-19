@@ -7,17 +7,20 @@ class CasaLink {
         this.isOnline = navigator.onLine;
         this.pendingActions = [];
         this.loginInProgress = false;
-        this.authListenerEnabled = false; // Start with auth listener disabled
+        this.authListenerEnabled = false;
         this.showingLogin = false;
         this.showingDashboard = false;
         this.creatingTenant = false;
         this.currentPage = this.getStoredPage() || 'dashboard';
-        this.appInitialized = false; // Track if app is fully initialized
+        this.appInitialized = false;
         
         // Bind methods
         this.boundLoginClickHandler = this.loginClickHandler.bind(this);
         this.boundLoginKeypressHandler = this.loginKeypressHandler.bind(this);
         this.boundHandleLogin = this.handleLogin.bind(this);
+        
+        // Set up global event listeners
+        this.setupGlobalEventListeners();
         
         console.log('🔄 Initializing CasaLink...');
         this.init();
@@ -220,14 +223,35 @@ class CasaLink {
         });
     }
 
+    cleanupPageListeners(page) {
+        console.log('🧹 Cleaning up listeners for page:', page);
+        
+        // Always clean up dashboard listeners when leaving dashboard
+        if (this.currentPage === 'dashboard') {
+            this.cleanupDashboardListeners();
+        }
+        
+        // Clean up tenant management listeners
+        if (this.currentPage === 'tenants') {
+            this.removeTenantRowClickHandlers();
+        }
+        
+        // Add cleanup for other pages as needed
+        switch (this.currentPage) {
+            case 'billing':
+                // Clean up billing listeners if any
+                break;
+            case 'maintenance':
+                // Clean up maintenance listeners if any
+                break;
+        }
+    }
+
     async showPage(page) {
         console.log('🔄 Attempting to show page:', page);
         
-        // Clean up previous page listeners
-        if (this.currentPage === 'dashboard') {
-            this.cleanupDashboardListeners();
-            this.cleanupDashboardCardEvents();
-        }
+        // Clean up previous page listeners (UPDATED)
+        this.cleanupPageListeners(page);
         
         // Store the page before showing it
         this.storeCurrentPage(page);
@@ -348,8 +372,7 @@ class CasaLink {
                 console.log('📊 Force refreshing dashboard data and setting up listeners...');
                 setTimeout(() => {
                     this.loadDashboardData();
-                    this.setupRealTimeStats();  // existing line
-                    this.setupDashboardCardEvents(); // ✅ NEW LINE YOU REQUESTED
+                    this.setupRealTimeStats();
                 }, 100);
             }
 
@@ -364,6 +387,7 @@ class CasaLink {
             `;
         }
     }
+
 
 
 
@@ -408,6 +432,75 @@ class CasaLink {
         }
     }
 
+    setupGlobalEventListeners() {
+        // Tenant row clicks
+        document.addEventListener('click', (e) => {
+            // Only handle if we're on the tenants page
+            if (this.currentPage !== 'tenants') return;
+            
+            const tenantRow = e.target.closest('.tenant-row');
+            if (tenantRow) {
+                const tenantId = tenantRow.getAttribute('data-tenant-id');
+                if (tenantId) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showTenantLeaseModal(tenantId);
+                }
+            }
+        });
+
+        // Dashboard card clicks (all sections - Property, Financial, Operations)
+        document.addEventListener('click', (e) => {
+            // Only handle if we're on the dashboard
+            if (this.currentPage !== 'dashboard') return;
+            
+            const clickableCard = e.target.closest('[data-clickable]');
+            if (clickableCard) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const cardType = clickableCard.getAttribute('data-clickable');
+                console.log(`🏠 ${cardType} card clicked`);
+                
+                // Add a small delay to prevent rapid multiple clicks
+                if (this.lastCardClick && Date.now() - this.lastCardClick < 1000) {
+                    console.log('⏳ Ignoring rapid click');
+                    return false;
+                }
+                this.lastCardClick = Date.now();
+                
+                // Property Overview Cards
+                if (cardType === 'occupancy') {
+                    this.showUnitOccupancyModal();
+                } else if (cardType === 'vacant') {
+                    this.showVacantUnitsModal();
+                } else if (cardType === 'tenants') {
+                    this.showTenantDetailsModal();
+                }
+                // Financial Overview Cards
+                else if (cardType === 'collection') {
+                    this.showRentCollectionModal();
+                } else if (cardType === 'revenue') {
+                    this.showRevenueDetailsModal();
+                } else if (cardType === 'late') {
+                    this.showLatePaymentsModal();
+                } else if (cardType === 'unpaid') {
+                    this.showUnpaidBillsModal();
+                }
+                // Operations Cards
+                else if (cardType === 'renewals') {
+                    this.showLeaseRenewalsModal();
+                } else if (cardType === 'open-maintenance') {
+                    this.showOpenMaintenanceModal();
+                } else if (cardType === 'backlog') {
+                    this.showMaintenanceBacklogModal();
+                }
+                
+                return false;
+            }
+        });
+    }
+
 
     getLandlordDashboardHTML() {
         const isLandlord = this.currentRole === 'landlord';
@@ -443,7 +536,6 @@ class CasaLink {
                         <div class="card-subtitle">22 total capacity</div>
                     </div>
 
-                    <!-- UPDATED TOTAL OCCUPANTS CARD -->
                     <div class="card" data-clickable="tenants" style="cursor: pointer;" title="Click to view occupant details">
                         <div class="card-header">
                             <div class="card-title">Total Occupants</div>
@@ -452,14 +544,12 @@ class CasaLink {
                         <div class="card-value" id="totalTenants">0</div>
                         <div class="card-subtitle">All registered occupants</div>
                     </div>
-
-                    <!-- REMOVED: Average Monthly Rent Card -->
                 </div>
 
                 <!-- FINANCIAL OVERVIEW SECTION -->
                 <div class="card-group-title">Financial Overview</div>
                 <div class="card-group">
-                    <div class="card">
+                    <div class="card" data-clickable="collection" style="cursor: pointer;" title="Click to view collection details">
                         <div class="card-header">
                             <div class="card-title">Rent Collection</div>
                             <div class="card-icon collection"><i class="fas fa-chart-line"></i></div>
@@ -468,7 +558,7 @@ class CasaLink {
                         <div class="card-subtitle">This month</div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" data-clickable="revenue" style="cursor: pointer;" title="Click to view revenue details">
                         <div class="card-header">
                             <div class="card-title">Monthly Revenue</div>
                             <div class="card-icon revenue"><i class="fas fa-cash-register"></i></div>
@@ -477,7 +567,7 @@ class CasaLink {
                         <div class="card-subtitle">Current month</div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" data-clickable="late" style="cursor: pointer;" title="Click to view late payments">
                         <div class="card-header">
                             <div class="card-title">Late Payments</div>
                             <div class="card-icon late"><i class="fas fa-clock"></i></div>
@@ -486,7 +576,7 @@ class CasaLink {
                         <div class="card-subtitle">Overdue rent</div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" data-clickable="unpaid" style="cursor: pointer;" title="Click to view unpaid bills">
                         <div class="card-header">
                             <div class="card-title">Unpaid Bills</div>
                             <div class="card-icon unpaid"><i class="fas fa-money-bill-wave"></i></div>
@@ -496,10 +586,10 @@ class CasaLink {
                     </div>
                 </div>
 
-                <!-- OPERATIONS SECTION -->
+                <!-- OPERATIONS SECTION (UPDATED) -->
                 <div class="card-group-title">Operations</div>
                 <div class="card-group">
-                    <div class="card">
+                    <div class="card" data-clickable="renewals" style="cursor: pointer;" title="Click to view lease renewals">
                         <div class="card-header">
                             <div class="card-title">Lease Renewals</div>
                             <div class="card-icon renewals"><i class="fas fa-calendar-alt"></i></div>
@@ -508,7 +598,7 @@ class CasaLink {
                         <div class="card-subtitle">Next 30 days</div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" data-clickable="open-maintenance" style="cursor: pointer;" title="Click to view open maintenance requests">
                         <div class="card-header">
                             <div class="card-title">Open Maintenance</div>
                             <div class="card-icon maintenance"><i class="fas fa-tools"></i></div>
@@ -517,7 +607,7 @@ class CasaLink {
                         <div class="card-subtitle">New requests</div>
                     </div>
 
-                    <div class="card">
+                    <div class="card" data-clickable="backlog" style="cursor: pointer;" title="Click to view maintenance backlog">
                         <div class="card-header">
                             <div class="card-title">Maintenance Backlog</div>
                             <div class="card-icon backlog"><i class="fas fa-list-alt"></i></div>
@@ -577,6 +667,8 @@ class CasaLink {
             </div>
         `;
     }
+
+
 
 
 
@@ -1115,6 +1207,280 @@ class CasaLink {
         }
     }
 
+
+    generateLeaseInformationContent(tenant, lease) {
+        if (!lease) {
+            return `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-file-contract" style="font-size: 3rem; color: var(--dark-gray); margin-bottom: 15px; opacity: 0.5;"></i>
+                    <h3 style="color: var(--dark-gray); margin-bottom: 10px;">No Active Lease Found</h3>
+                    <p style="color: var(--dark-gray);">This tenant does not have an active lease agreement.</p>
+                </div>
+            `;
+        }
+
+        // Format dates
+        const formatDate = (dateString) => {
+            if (!dateString) return 'Not specified';
+            return new Date(dateString).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        };
+
+        const leaseStart = formatDate(lease.leaseStart);
+        const leaseEnd = formatDate(lease.leaseEnd);
+        const createdAt = formatDate(lease.createdAt);
+
+        // Get occupant information
+        const occupants = lease.occupants || [tenant.name];
+        const primaryTenant = occupants[0];
+        const additionalMembers = occupants.slice(1);
+        const totalOccupants = lease.totalOccupants || occupants.length;
+        const maxOccupants = lease.maxOccupants || 1;
+
+        return `
+            <div class="lease-information-modal" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Tenant Header -->
+                <div style="background: linear-gradient(135deg, var(--royal-blue), #101b4a); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; align-items: center; gap: 15px;">
+                        <div class="tenant-avatar" style="width: 60px; height: 60px; font-size: 1.5rem;">${tenant.name.charAt(0).toUpperCase()}</div>
+                        <div>
+                            <h3 style="margin: 0 0 5px 0;">${tenant.name}</h3>
+                            <p style="margin: 0; opacity: 0.9;">${tenant.email} • ${tenant.phone || 'No phone'}</p>
+                            <p style="margin: 5px 0 0 0; opacity: 0.8;">${tenant.occupation || 'No occupation specified'}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lease Summary -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 25px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--success);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Room Number</div>
+                        <div style="font-size: 1.3rem; font-weight: 600; color: var(--success);">${lease.roomNumber || 'N/A'}</div>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--royal-blue);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Monthly Rent</div>
+                        <div style="font-size: 1.3rem; font-weight: 600; color: var(--royal-blue);">₱${(lease.monthlyRent || 0).toLocaleString()}</div>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Security Deposit</div>
+                        <div style="font-size: 1.3rem; font-weight: 600; color: var(--warning);">₱${(lease.securityDeposit || 0).toLocaleString()}</div>
+                    </div>
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--info);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Occupants</div>
+                        <div style="font-size: 1.3rem; font-weight: 600; color: var(--info);">${totalOccupants}/${maxOccupants}</div>
+                    </div>
+                </div>
+
+                <!-- Lease Details -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-file-contract"></i> Lease Details
+                    </h4>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Lease Period:</strong><br>
+                            ${leaseStart} to ${leaseEnd}
+                        </div>
+                        <div>
+                            <strong>Payment Method:</strong><br>
+                            ${lease.paymentMethod || 'Cash'}
+                        </div>
+                        <div>
+                            <strong>Payment Due Day:</strong><br>
+                            ${lease.paymentDueDay ? `${lease.paymentDueDay}${this.getOrdinalSuffix(lease.paymentDueDay)} of month` : 'Not specified'}
+                        </div>
+                        <div>
+                            <strong>Lease Status:</strong><br>
+                            <span class="status-badge ${lease.isActive ? 'active' : 'inactive'}">
+                                ${lease.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Occupant Information -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-users"></i> Occupant Information
+                    </h4>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <strong>Primary Tenant:</strong><br>
+                        ${primaryTenant}
+                    </div>
+                    
+                    ${additionalMembers.length > 0 ? `
+                        <div style="margin-bottom: 15px;">
+                            <strong>Additional Occupants (${additionalMembers.length}):</strong><br>
+                            ${additionalMembers.map(member => `• ${member}`).join('<br>')}
+                        </div>
+                    ` : `
+                        <div style="color: var(--dark-gray); font-style: italic;">
+                            No additional occupants registered.
+                        </div>
+                    `}
+                    
+                    <div style="background: rgba(52, 168, 83, 0.1); padding: 12px; border-radius: 6px; margin-top: 15px;">
+                        <strong>Occupancy:</strong> ${totalOccupants} of ${maxOccupants} maximum occupants
+                        ${totalOccupants > maxOccupants ? 
+                            '<span style="color: var(--danger); margin-left: 10px;"><i class="fas fa-exclamation-triangle"></i> Over capacity!</span>' : 
+                            '<span style="color: var(--success); margin-left: 10px;"><i class="fas fa-check-circle"></i> Within limit</span>'
+                        }
+                    </div>
+                </div>
+
+                <!-- Agreement Status -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-check-circle"></i> Agreement Status
+                    </h4>
+                    
+                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                        <div style="flex: 1;">
+                            <strong>Agreement Viewed:</strong><br>
+                            <span class="status-badge ${lease.agreementViewed ? 'active' : 'warning'}">
+                                ${lease.agreementViewed ? 'Yes' : 'No'}
+                            </span>
+                        </div>
+                        <div style="flex: 1;">
+                            <strong>Agreement Accepted:</strong><br>
+                            <span class="status-badge ${lease.agreementAccepted ? 'active' : 'warning'}">
+                                ${lease.agreementAccepted ? 'Yes' : 'No'}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    ${lease.agreementAcceptedDate ? `
+                        <div>
+                            <strong>Accepted Date:</strong><br>
+                            ${formatDate(lease.agreementAcceptedDate)}
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Additional Information -->
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; font-size: 0.9rem; color: var(--dark-gray);">
+                    <strong><i class="fas fa-info-circle"></i> Additional Information:</strong><br>
+                    • Lease Created: ${createdAt}<br>
+                    • Additional Occupant Fee: ₱${(lease.additionalOccupantFee || 2000).toLocaleString()} per person<br>
+                    • Lease ID: ${lease.id}
+                </div>
+            </div>
+        `;
+    }
+
+    async showTenantLeaseModal(tenantId) {
+        try {
+            console.log('📄 Loading lease information for tenant:', tenantId);
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading lease information...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Loading Lease Information',
+                showFooter: false
+            });
+
+            // Fetch tenant and lease data
+            const [tenantDoc, leaseQuery] = await Promise.all([
+                firebaseDb.collection('users').doc(tenantId).get(),
+                firebaseDb.collection('leases')
+                    .where('tenantId', '==', tenantId)
+                    .where('isActive', '==', true)
+                    .limit(1)
+                    .get()
+            ]);
+
+            if (!tenantDoc.exists) {
+                ModalManager.closeModal(modal);
+                this.showNotification('Tenant not found', 'error');
+                return;
+            }
+
+            const tenant = { id: tenantDoc.id, ...tenantDoc.data() };
+            
+            let lease = null;
+            if (!leaseQuery.empty) {
+                lease = { id: leaseQuery.docs[0].id, ...leaseQuery.docs[0].data() };
+            }
+
+            // Generate lease information content
+            const leaseContent = this.generateLeaseInformationContent(tenant, lease);
+            
+            // Update modal content
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = leaseContent;
+            }
+
+            // Add footer with close button
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading tenant lease information:', error);
+            this.showNotification('Failed to load lease information', 'error');
+        }
+    }
+
+    removeTenantRowClickHandlers() {
+        if (this.tenantRowClickHandler) {
+            document.removeEventListener('click', this.tenantRowClickHandler);
+            this.tenantRowClickHandler = null;
+        }
+    }
+
+    setupTenantRowClickHandlers() {
+        this.removeTenantRowClickHandlers();
+        
+        this.tenantRowClickHandler = (e) => {
+            const tenantRow = e.target.closest('.tenant-row');
+            if (tenantRow) {
+                const tenantId = tenantRow.getAttribute('data-tenant-id');
+                if (tenantId) {
+                    this.showTenantLeaseModal(tenantId);
+                }
+            }
+        };
+        document.addEventListener('click', this.tenantRowClickHandler);
+    }
+
+    async setupTenantsPage() {
+        // Add tenant button
+        document.getElementById('addTenantBtn')?.addEventListener('click', () => {
+            this.showAddTenantForm();
+        });
+
+        // Search functionality
+        document.getElementById('tenantSearch')?.addEventListener('input', (e) => {
+            this.filterTenants(e.target.value);
+        });
+
+        // Setup row click handlers
+        this.setupTenantRowClickHandlers();
+
+        // Load tenants data
+        await this.loadTenantsData();
+    }
+
     renderTenantsTable(tenants) {
         return `
             <div class="table-container">
@@ -1133,7 +1499,7 @@ class CasaLink {
                     </thead>
                     <tbody>
                         ${tenants.map(tenant => `
-                            <tr>
+                            <tr class="tenant-row" data-tenant-id="${tenant.id}" style="cursor: pointer;">
                                 <td>
                                     <div class="tenant-info">
                                         <div class="tenant-avatar">${tenant.name.charAt(0).toUpperCase()}</div>
@@ -1166,13 +1532,13 @@ class CasaLink {
                                 </td>
                                 <td>
                                     <div class="action-buttons">
-                                        <button class="btn btn-sm btn-secondary" onclick="casaLink.editTenant('${tenant.id}')">
+                                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.editTenant('${tenant.id}')">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-secondary" onclick="casaLink.sendMessage('${tenant.id}')">
+                                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.sendMessage('${tenant.id}')">
                                             <i class="fas fa-envelope"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick="casaLink.deleteTenant('${tenant.id}')">
+                                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); casaLink.deleteTenant('${tenant.id}')">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -1857,14 +2223,6 @@ class CasaLink {
     }
 
 
-    cleanupDashboardCardEvents() {
-        const contentArea = document.getElementById('contentArea');
-        if (contentArea && this.handleDashboardCardClick) {
-            contentArea.removeEventListener('click', this.handleDashboardCardClick);
-            console.log('🧹 Cleaned up dashboard card events');
-        }
-    }
-
     generateTenantDetailsTable(tenants, leases, rooms) {
         console.log('📊 Generating tenant details table...');
         
@@ -2081,60 +2439,909 @@ class CasaLink {
         }
     }
 
+    generateLatePaymentsTable(latePayments) {
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Summary -->
+                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--danger); box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--danger);">${latePayments.length}</div>
+                    <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Total Late Payments</div>
+                </div>
 
-    setupDashboardCardEvents() {
-        console.log('🔄 Setting up dashboard card events...');
-        
-        // Clean up any existing event listeners first
-        this.cleanupDashboardCardEvents();
-        
-        const contentArea = document.getElementById('contentArea');
-        if (contentArea) {
-            // Create a single event handler function
-            const handleDashboardCardClick = (e) => {
-                // Check if the click is on any clickable card
-                const clickableCard = e.target.closest('[data-clickable]');
-                if (clickableCard) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    e.stopImmediatePropagation(); // Prevent other listeners
-                    
-                    const cardType = clickableCard.getAttribute('data-clickable');
-                    console.log(`🏠 ${cardType} card clicked`);
-                    
-                    // Add a small delay to prevent rapid multiple clicks
-                    if (this.lastCardClick && Date.now() - this.lastCardClick < 1000) {
-                        console.log('⏳ Ignoring rapid click');
-                        return false;
-                    }
-                    this.lastCardClick = Date.now();
-                    
-                    if (cardType === 'occupancy') {
-                        this.showUnitOccupancyModal();
-                    } else if (cardType === 'vacant') {
-                        this.showVacantUnitsModal();
-                    } else if (cardType === 'tenants') {
-                        this.showTenantDetailsModal();
-                    }
-                    
-                    return false;
-                }
-            };
-            
-            // Add the event listener with proper options
-            contentArea.addEventListener('click', handleDashboardCardClick, { 
-                capture: true, // Use capture phase to catch events early
-                passive: false 
-            });
-            
-            // Store the handler reference for cleanup
-            this.currentDashboardCardHandler = handleDashboardCardClick;
-            
-            console.log('✅ Dashboard card events setup complete');
-        } else {
-            console.warn('⚠️ Content area not found for dashboard card events');
+                <!-- Late Payments List -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Late Payment Details</h4>
+                    ${latePayments.length > 0 ? `
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Amount</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Due Date</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Days Overdue</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${latePayments.map(bill => {
+                                        const dueDate = new Date(bill.dueDate);
+                                        const today = new Date();
+                                        const daysOverdue = Math.floor((today - dueDate) / (1000 * 60 * 60 * 24));
+                                        
+                                        return `
+                                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                                <td style="padding: 12px;">${bill.tenantName || 'N/A'}</td>
+                                                <td style="padding: 12px;">${bill.roomNumber || 'N/A'}</td>
+                                                <td style="padding: 12px; font-weight: 600; color: var(--danger);">₱${(bill.totalAmount || 0).toLocaleString()}</td>
+                                                <td style="padding: 12px;">${dueDate.toLocaleDateString()}</td>
+                                                <td style="padding: 12px;">
+                                                    <span style="color: var(--danger); font-weight: 600;">${daysOverdue} days</span>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; padding: 40px; color: var(--dark-gray);">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px; opacity: 0.5;"></i>
+                            <h3>No Late Payments</h3>
+                            <p>All payments are up to date!</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
+    generateUnpaidBillsTable(unpaidBills) {
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Summary -->
+                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--warning); box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--warning);">${unpaidBills.length}</div>
+                    <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Total Unpaid Bills</div>
+                </div>
+
+                <!-- Unpaid Bills List -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Unpaid Bills Details</h4>
+                    ${unpaidBills.length > 0 ? `
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Type</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Amount</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Due Date</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${unpaidBills.map(bill => {
+                                        const dueDate = new Date(bill.dueDate);
+                                        const today = new Date();
+                                        const isOverdue = dueDate < today;
+                                        
+                                        return `
+                                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                                <td style="padding: 12px;">${bill.tenantName || 'N/A'}</td>
+                                                <td style="padding: 12px;">${bill.roomNumber || 'N/A'}</td>
+                                                <td style="padding: 12px; text-transform: capitalize;">${bill.type || 'rent'}</td>
+                                                <td style="padding: 12px; font-weight: 600; color: var(--warning);">₱${(bill.totalAmount || 0).toLocaleString()}</td>
+                                                <td style="padding: 12px;">${dueDate.toLocaleDateString()}</td>
+                                                <td style="padding: 12px;">
+                                                    <span style="color: ${isOverdue ? 'var(--danger)' : 'var(--warning)'}; font-weight: 600;">
+                                                        ${isOverdue ? 'Overdue' : 'Pending'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; padding: 40px; color: var(--dark-gray);">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px; opacity: 0.5;"></i>
+                            <h3>No Unpaid Bills</h3>
+                            <p>All bills have been paid!</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
+    // Helper method to add modal footer
+    addModalFooter(modal) {
+        const modalFooter = modal.querySelector('.modal-footer');
+        if (!modalFooter) {
+            const footer = document.createElement('div');
+            footer.className = 'modal-footer';
+            footer.innerHTML = `
+                <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                    Close
+                </button>
+            `;
+            modal.querySelector('.modal-content').appendChild(footer);
         }
     }
+
+    generateRevenueTable(revenueData) {
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Revenue Summary -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--royal-blue); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--royal-blue);">₱${revenueData.monthlyRevenue.toLocaleString()}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Total Revenue</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--success); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--success);">${revenueData.totalTransactions}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Transactions</div>
+                    </div>
+                </div>
+
+                <!-- Revenue by Type -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Revenue by Type</h4>
+                    <div style="display: grid; gap: 10px;">
+                        ${Object.entries(revenueData.revenueByType).map(([type, amount]) => `
+                            <div style="display: flex; justify-content: between; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                                <div style="font-weight: 500; text-transform: capitalize;">${type}</div>
+                                <div style="font-weight: 600; color: var(--success);">₱${amount.toLocaleString()}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Revenue Trend -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Revenue Trend (Last 3 Months)</h4>
+                    <div style="display: grid; gap: 10px;">
+                        ${revenueData.monthlyTrend.map(month => `
+                            <div style="display: flex; justify-content: between; align-items: center; padding: 12px; background: #f8f9fa; border-radius: 6px;">
+                                <div style="font-weight: 500;">${month.month}</div>
+                                <div style="font-weight: 600; color: var(--royal-blue);">₱${month.revenue.toLocaleString()}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+
+
+    getLatePayments(bills) {
+        const today = new Date();
+        return bills.filter(bill => 
+            bill.status === 'pending' && 
+            new Date(bill.dueDate) < today
+        );
+    }
+
+    getUnpaidBills(bills) {
+        return bills.filter(bill => bill.status === 'pending');
+    }
+
+    // Table generation methods
+    generateRentCollectionTable(stats, bills) {
+        const today = new Date();
+        const currentMonth = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Summary Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--success); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--success);">${stats.collectionRate}%</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Collection Rate</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--royal-blue); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--royal-blue);">₱${stats.collectedRent.toLocaleString()}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Collected</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--warning); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--warning);">₱${stats.pendingRent.toLocaleString()}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Pending</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--info); box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                        <div style="font-size: 2.2rem; font-weight: 700; color: var(--info);">₱${stats.expectedRent.toLocaleString()}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Expected</div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Collection Progress - ${currentMonth}</h4>
+                    <div style="background: #e9ecef; border-radius: 10px; height: 20px; overflow: hidden;">
+                        <div style="background: linear-gradient(90deg, var(--success), #2ecc71); height: 100%; width: ${stats.collectionRate}%; border-radius: 10px; transition: width 0.5s ease;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.9rem; color: var(--dark-gray);">
+                        <span>₱0</span>
+                        <span>₱${stats.expectedRent.toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <!-- Recent Payments -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Recent Payments</h4>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                            <thead>
+                                <tr style="background-color: #f8f9fa;">
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Amount</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Paid Date</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${bills.filter(bill => bill.status === 'paid').slice(0, 10).map(bill => `
+                                    <tr style="border-bottom: 1px solid #e9ecef;">
+                                        <td style="padding: 12px;">${bill.tenantName || 'N/A'}</td>
+                                        <td style="padding: 12px;">${bill.roomNumber || 'N/A'}</td>
+                                        <td style="padding: 12px; font-weight: 600; color: var(--success);">₱${(bill.totalAmount || 0).toLocaleString()}</td>
+                                        <td style="padding: 12px;">${new Date(bill.paidDate).toLocaleDateString()}</td>
+                                        <td style="padding: 12px;">
+                                            <span style="color: var(--success); font-weight: 600;">Paid</span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    calculateRevenueBreakdown(bills, leases) {
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        
+        // Monthly revenue
+        const monthlyRevenue = bills
+            .filter(bill => {
+                if (bill.status !== 'paid') return false;
+                const billDate = new Date(bill.paidDate || bill.dueDate);
+                return billDate.getMonth() === currentMonth && 
+                    billDate.getFullYear() === currentYear;
+            })
+            .reduce((total, bill) => total + (bill.totalAmount || 0), 0);
+        
+        // Revenue by type
+        const revenueByType = {};
+        bills.forEach(bill => {
+            if (bill.status === 'paid') {
+                const billDate = new Date(bill.paidDate || bill.dueDate);
+                if (billDate.getMonth() === currentMonth && billDate.getFullYear() === currentYear) {
+                    const type = bill.type || 'rent';
+                    revenueByType[type] = (revenueByType[type] || 0) + (bill.totalAmount || 0);
+                }
+            }
+        });
+        
+        // Revenue trend (last 3 months)
+        const monthlyTrend = [];
+        for (let i = 2; i >= 0; i--) {
+            const date = new Date(currentYear, currentMonth - i, 1);
+            const monthBills = bills.filter(bill => {
+                if (bill.status !== 'paid') return false;
+                const billDate = new Date(bill.paidDate || bill.dueDate);
+                return billDate.getMonth() === date.getMonth() && 
+                    billDate.getFullYear() === date.getFullYear();
+            });
+            
+            const monthlyTotal = monthBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+            monthlyTrend.push({
+                month: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+                revenue: monthlyTotal
+            });
+        }
+        
+        return {
+            monthlyRevenue,
+            revenueByType,
+            monthlyTrend,
+            totalTransactions: bills.filter(bill => bill.status === 'paid').length
+        };
+    }
+
+    calculateRentCollectionStats(tenants, leases, bills) {
+        const today = new Date();
+        const currentMonth = today.getMonth();
+        const currentYear = today.getFullYear();
+        
+        // Active leases with rent
+        const activeLeases = leases.filter(lease => 
+            lease.isActive && lease.monthlyRent && lease.monthlyRent > 0
+        );
+        
+        const expectedRent = activeLeases.reduce((sum, lease) => sum + (lease.monthlyRent || 0), 0);
+        
+        // Paid bills this month
+        const paidBills = bills.filter(bill => {
+            if (bill.status !== 'paid') return false;
+            const billDate = new Date(bill.paidDate || bill.dueDate);
+            return billDate.getMonth() === currentMonth && 
+                billDate.getFullYear() === currentYear;
+        });
+        
+        const collectedRent = paidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+        
+        const collectionRate = expectedRent > 0 ? Math.round((collectedRent / expectedRent) * 100) : 0;
+        
+        return {
+            expectedRent,
+            collectedRent,
+            collectionRate,
+            pendingRent: expectedRent - collectedRent,
+            paidBillsCount: paidBills.length,
+            totalExpectedBills: activeLeases.length
+        };
+    }
+
+    async showUnpaidBillsModal() {
+        if (!this.debounceModalOpen(() => this.showUnpaidBillsModal())) return;
+        
+        try {
+            console.log('📄 Loading unpaid bills...');
+            
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading unpaid bills...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Unpaid Bills & Invoices',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            const bills = await DataManager.getBills(this.currentUser.uid);
+            const unpaidBills = this.getUnpaidBills(bills);
+            const unpaidBillsTable = this.generateUnpaidBillsTable(unpaidBills);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = unpaidBillsTable;
+            }
+
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading unpaid bills:', error);
+            this.showNotification('Failed to load unpaid bills', 'error');
+        }
+    }
+
+    async showLatePaymentsModal() {
+        if (!this.debounceModalOpen(() => this.showLatePaymentsModal())) return;
+        
+        try {
+            console.log('⏰ Loading late payments...');
+            
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading late payments...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Late Payments Overview',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            const bills = await DataManager.getBills(this.currentUser.uid);
+            const latePayments = this.getLatePayments(bills);
+            const latePaymentsTable = this.generateLatePaymentsTable(latePayments);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = latePaymentsTable;
+            }
+
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading late payments:', error);
+            this.showNotification('Failed to load late payments', 'error');
+        }
+    }
+
+
+
+    async showRevenueDetailsModal() {
+        if (!this.debounceModalOpen(() => this.showRevenueDetailsModal())) return;
+        
+        try {
+            console.log('💰 Loading revenue details...');
+            
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading revenue details...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Monthly Revenue Breakdown',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            const [bills, leases] = await Promise.all([
+                DataManager.getBills(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid)
+            ]);
+
+            const revenueData = this.calculateRevenueBreakdown(bills, leases);
+            const revenueTable = this.generateRevenueTable(revenueData);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = revenueTable;
+            }
+
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading revenue details:', error);
+            this.showNotification('Failed to load revenue details', 'error');
+        }
+    }
+
+    async showRentCollectionModal() {
+        if (!this.debounceModalOpen(() => this.showRentCollectionModal())) return;
+        
+        try {
+            console.log('💰 Loading rent collection details...');
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading rent collection details...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Rent Collection Details',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            // Fetch data
+            const [tenants, leases, bills] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getLandlordLeases(this.currentUser.uid),
+                DataManager.getBills(this.currentUser.uid)
+            ]);
+
+            // Calculate collection statistics
+            const stats = this.calculateRentCollectionStats(tenants, leases, bills);
+            const collectionTable = this.generateRentCollectionTable(stats, bills);
+            
+            // Update modal content
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = collectionTable;
+            }
+
+            // Add footer
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading rent collection details:', error);
+            this.showNotification('Failed to load rent collection details', 'error');
+        }
+    }
+
+    generateOpenMaintenanceTable(openRequests) {
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Summary -->
+                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--info); box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--info);">${openRequests.length}</div>
+                    <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">New Maintenance Requests</div>
+                </div>
+
+                <!-- Open Requests List -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Open Maintenance Requests</h4>
+                    ${openRequests.length > 0 ? `
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Type</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Title</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Priority</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${openRequests.map(request => {
+                                        const priorityColors = {
+                                            'high': 'var(--danger)',
+                                            'medium': 'var(--warning)',
+                                            'low': 'var(--success)'
+                                        };
+                                        const priorityColor = priorityColors[request.priority] || 'var(--dark-gray)';
+                                        
+                                        return `
+                                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                                <td style="padding: 12px;">${request.tenantName || 'N/A'}</td>
+                                                <td style="padding: 12px;">${request.roomNumber || 'N/A'}</td>
+                                                <td style="padding: 12px; text-transform: capitalize;">${request.type || 'General'}</td>
+                                                <td style="padding: 12px;">
+                                                    <strong>${request.title || 'No Title'}</strong>
+                                                    ${request.description ? `<br><small style="color: var(--dark-gray);">${request.description.substring(0, 50)}...</small>` : ''}
+                                                </td>
+                                                <td style="padding: 12px;">
+                                                    <span style="color: ${priorityColor}; font-weight: 600; text-transform: capitalize;">
+                                                        ${request.priority || 'medium'}
+                                                    </span>
+                                                </td>
+                                                <td style="padding: 12px;">
+                                                    ${new Date(request.createdAt).toLocaleDateString()}
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; padding: 40px; color: var(--dark-gray);">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px; opacity: 0.5;"></i>
+                            <h3>No Open Maintenance Requests</h3>
+                            <p>All maintenance requests have been addressed.</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
+    generateMaintenanceBacklogTable(backlogData) {
+        const groupedByStatus = {
+            'open': backlogData.filter(req => req.status === 'open' || !req.status),
+            'in-progress': backlogData.filter(req => req.status === 'in-progress'),
+            'pending': backlogData.filter(req => req.status === 'pending')
+        };
+
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Summary -->
+                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--primary);">${backlogData.length}</div>
+                    <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Total Pending Maintenance</div>
+                </div>
+
+                <!-- Status Breakdown -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid var(--warning);">
+                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning);">${groupedByStatus.open.length}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.8rem;">Open</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid var(--info);">
+                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--info);">${groupedByStatus['in-progress'].length}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.8rem;">In Progress</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: white; border-radius: 8px; border-left: 4px solid var(--dark-gray);">
+                        <div style="font-size: 1.8rem; font-weight: 700; color: var(--dark-gray);">${groupedByStatus.pending.length}</div>
+                        <div style="color: var(--dark-gray); font-size: 0.8rem;">Pending</div>
+                    </div>
+                </div>
+
+                <!-- Backlog List -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Maintenance Backlog Details</h4>
+                    ${backlogData.length > 0 ? `
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Issue</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Priority</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Created</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${backlogData.map(request => {
+                                        const statusColors = {
+                                            'open': 'var(--warning)',
+                                            'in-progress': 'var(--info)',
+                                            'pending': 'var(--dark-gray)'
+                                        };
+                                        const statusColor = statusColors[request.status] || 'var(--dark-gray)';
+                                        const priorityColors = {
+                                            'high': 'var(--danger)',
+                                            'medium': 'var(--warning)',
+                                            'low': 'var(--success)'
+                                        };
+                                        const priorityColor = priorityColors[request.priority] || 'var(--dark-gray)';
+                                        
+                                        return `
+                                            <tr style="border-bottom: 1px solid #e9ecef;">
+                                                <td style="padding: 12px;">${request.tenantName || 'N/A'}</td>
+                                                <td style="padding: 12px;">${request.roomNumber || 'N/A'}</td>
+                                                <td style="padding: 12px;">
+                                                    <strong>${request.title || 'No Title'}</strong>
+                                                </td>
+                                                <td style="padding: 12px;">
+                                                    <span style="color: ${priorityColor}; font-weight: 600; text-transform: capitalize;">
+                                                        ${request.priority || 'medium'}
+                                                    </span>
+                                                </td>
+                                                <td style="padding: 12px;">
+                                                    <span style="color: ${statusColor}; font-weight: 600; text-transform: capitalize;">
+                                                        ${request.status || 'open'}
+                                                    </span>
+                                                </td>
+                                                <td style="padding: 12px;">
+                                                    ${new Date(request.createdAt).toLocaleDateString()}
+                                                </td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; padding: 40px; color: var(--dark-gray);">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px; opacity: 0.5;"></i>
+                            <h3>No Maintenance Backlog</h3>
+                            <p>All maintenance work is completed!</p>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+    }
+
+    getMaintenanceBacklog(maintenanceRequests) {
+        return maintenanceRequests.filter(request => 
+            ['open', 'in-progress', 'pending'].includes(request.status) || !request.status
+        ).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    }
+
+    // Table generation methods for operations
+    generateLeaseRenewalsTable(renewals) {
+        return `
+            <div style="margin-bottom: 25px;">
+                <!-- Summary -->
+                <div style="text-align: center; padding: 20px; background: white; border-radius: 10px; border-left: 4px solid var(--warning); box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px;">
+                    <div style="font-size: 2.2rem; font-weight: 700; color: var(--warning);">${renewals.length}</div>
+                    <div style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500;">Leases Expiring in Next 30 Days</div>
+                </div>
+
+                <!-- Renewals List -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Upcoming Lease Renewals</h4>
+                    ${renewals.length > 0 ? `
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Lease End</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Days Left</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Monthly Rent</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${renewals.map(lease => `
+                                        <tr style="border-bottom: 1px solid #e9ecef;">
+                                            <td style="padding: 12px;">
+                                                <strong>${lease.tenantName || 'N/A'}</strong>
+                                            </td>
+                                            <td style="padding: 12px;">${lease.roomNumber || 'N/A'}</td>
+                                            <td style="padding: 12px;">${lease.renewalDate}</td>
+                                            <td style="padding: 12px;">
+                                                <span style="color: ${lease.daysUntilRenewal <= 7 ? 'var(--danger)' : 'var(--warning)'}; font-weight: 600;">
+                                                    ${lease.daysUntilRenewal} days
+                                                </span>
+                                            </td>
+                                            <td style="padding: 12px; font-weight: 600; color: var(--royal-blue);">
+                                                ₱${(lease.monthlyRent || 0).toLocaleString()}
+                                            </td>
+                                            <td style="padding: 12px;">
+                                                <span style="color: var(--warning); font-weight: 600;">Expiring Soon</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; padding: 40px; color: var(--dark-gray);">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px; opacity: 0.5;"></i>
+                            <h3>No Upcoming Renewals</h3>
+                            <p>No leases are expiring in the next 30 days.</p>
+                        </div>
+                    `}
+                </div>
+
+                <!-- Action Buttons -->
+                ${renewals.length > 0 ? `
+                    <div style="background: rgba(251, 188, 4, 0.1); padding: 15px; border-radius: 8px; margin-top: 20px; border-left: 4px solid var(--warning);">
+                        <h5 style="margin: 0 0 10px 0; color: var(--warning);">Recommended Actions</h5>
+                        <p style="margin: 0; font-size: 0.9rem;">
+                            • Contact tenants to discuss lease renewal options<br>
+                            • Prepare renewal documents 2 weeks before expiration<br>
+                            • Schedule property inspections if needed
+                        </p>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    getUpcomingRenewals(leases) {
+        const today = new Date();
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        
+        return leases.filter(lease => {
+            if (!lease.leaseEnd || !lease.isActive) return false;
+            
+            const leaseEnd = new Date(lease.leaseEnd);
+            return leaseEnd >= today && leaseEnd <= thirtyDaysFromNow;
+        }).map(lease => {
+            const leaseEnd = new Date(lease.leaseEnd);
+            const daysUntilRenewal = Math.ceil((leaseEnd - today) / (1000 * 60 * 60 * 24));
+            
+            return {
+                ...lease,
+                daysUntilRenewal,
+                renewalDate: leaseEnd.toLocaleDateString()
+            };
+        }).sort((a, b) => a.daysUntilRenewal - b.daysUntilRenewal);
+    }
+
+    getOpenMaintenanceRequests(maintenanceRequests) {
+        return maintenanceRequests.filter(request => 
+            request.status === 'open' || !request.status
+        ).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    async showMaintenanceBacklogModal() {
+        if (!this.debounceModalOpen(() => this.showMaintenanceBacklogModal())) return;
+        
+        try {
+            console.log('📋 Loading maintenance backlog...');
+            
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading maintenance backlog...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Maintenance Backlog',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            const maintenanceRequests = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+            const backlogData = this.getMaintenanceBacklog(maintenanceRequests);
+            const backlogTable = this.generateMaintenanceBacklogTable(backlogData);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = backlogTable;
+            }
+
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading maintenance backlog:', error);
+            this.showNotification('Failed to load maintenance backlog', 'error');
+        }
+    }
+
+    async showOpenMaintenanceModal() {
+        if (!this.debounceModalOpen(() => this.showOpenMaintenanceModal())) return;
+        
+        try {
+            console.log('🔧 Loading open maintenance requests...');
+            
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading open maintenance requests...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Open Maintenance Requests',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            const maintenanceRequests = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+            const openRequests = this.getOpenMaintenanceRequests(maintenanceRequests);
+            const openRequestsTable = this.generateOpenMaintenanceTable(openRequests);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = openRequestsTable;
+            }
+
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading open maintenance requests:', error);
+            this.showNotification('Failed to load maintenance requests', 'error');
+        }
+    }
+
+    async showLeaseRenewalsModal() {
+        if (!this.debounceModalOpen(() => this.showLeaseRenewalsModal())) return;
+        
+        try {
+            console.log('📅 Loading lease renewals...');
+            
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading lease renewals...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Lease Renewals - Next 30 Days',
+                showFooter: false,
+                width: '95%',
+                maxWidth: '1200px'
+            });
+
+            const leases = await DataManager.getLandlordLeases(this.currentUser.uid);
+            const renewalsData = this.getUpcomingRenewals(leases);
+            const renewalsTable = this.generateLeaseRenewalsTable(renewalsData);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = renewalsTable;
+            }
+
+            this.addModalFooter(modal);
+
+        } catch (error) {
+            console.error('❌ Error loading lease renewals:', error);
+            this.showNotification('Failed to load lease renewals', 'error');
+        }
+    }
+
 
     debounceModalOpen(modalFunction) {
         const now = Date.now();
@@ -2148,17 +3355,6 @@ class CasaLink {
     }
 
 
-    cleanupDashboardCardEvents() {
-        const contentArea = document.getElementById('contentArea');
-        if (contentArea && this.currentDashboardCardHandler) {
-            contentArea.removeEventListener('click', this.currentDashboardCardHandler, { 
-                capture: true 
-            });
-            this.currentDashboardCardHandler = null;
-            console.log('🧹 Cleaned up dashboard card events');
-        }
-    }
-
     setupDashboardEvents() {
         console.log('🔄 Setting up dashboard events with fresh data...');
         
@@ -2166,11 +3362,6 @@ class CasaLink {
         document.getElementById('addPropertyBtn')?.addEventListener('click', () => {
             this.showAddPropertyForm();
         });
-
-        // Setup card click events with a small delay to ensure DOM is ready
-        setTimeout(() => {
-            this.setupDashboardCardEvents();
-        }, 100);
         
         // Setup real-time stats when dashboard is shown
         this.updateActiveNavState('dashboard');
@@ -3330,6 +4521,10 @@ class CasaLink {
     cleanupDashboardListeners() {
         console.log('🧹 Cleaning up dashboard listeners...');
         
+        // Remove tenant row click handlers (if using the container-specific approach)
+        this.removeTenantRowClickHandlers();
+        
+        // Remove Firestore listeners
         if (this.tenantsListener) {
             this.tenantsListener();
             this.tenantsListener = null;
