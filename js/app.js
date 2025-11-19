@@ -13,6 +13,7 @@ class CasaLink {
         this.creatingTenant = false;
         this.currentPage = this.getStoredPage() || 'dashboard';
         this.appInitialized = false;
+        this.setupBillingAutomation();
         
         // Bind methods
         this.boundLoginClickHandler = this.loginClickHandler.bind(this);
@@ -137,6 +138,35 @@ class CasaLink {
         sessionStorage.removeItem('casalink_user');
     }
 
+    async checkBillingTasks() {
+        try {
+            // Check for auto bill generation
+            await DataManager.checkAndGenerateMonthlyBills();
+            
+            // Check for late fees (we'll implement this later)
+            // await this.applyLateFees();
+            
+        } catch (error) {
+            console.error('Error in billing tasks:', error);
+        }
+    }
+
+    async initializeBillingSystem() {
+        try {
+            console.log('💰 Initializing billing system...');
+            await DataManager.initializeBillingSystem();
+            
+            // Set up daily check for billing tasks
+            this.billingInterval = setInterval(() => {
+                this.checkBillingTasks();
+            }, 24 * 60 * 60 * 1000); // Check daily
+            
+            console.log('✅ Billing system initialized');
+        } catch (error) {
+            console.error('❌ Billing system initialization failed:', error);
+        }
+    }
+
     async init() {
         console.log('🔄 CasaLink init() called');
         
@@ -154,6 +184,13 @@ class CasaLink {
             this.setupPWAFeatures();
             this.setupOfflineHandling();
             this.setupNavigationEvents();
+            
+            // Initialize billing system
+            if (this.currentUser?.role === 'landlord') {
+                setTimeout(() => {
+                    this.initializeBillingSystem();
+                }, 3000); // Wait a bit after app loads
+            }
             
             // Mark app as initialized
             this.appInitialized = true;
@@ -433,73 +470,68 @@ class CasaLink {
     }
 
     setupGlobalEventListeners() {
-        // Tenant row clicks
-        document.addEventListener('click', (e) => {
-            // Only handle if we're on the tenants page
-            if (this.currentPage !== 'tenants') return;
-            
-            const tenantRow = e.target.closest('.tenant-row');
-            if (tenantRow) {
-                const tenantId = tenantRow.getAttribute('data-tenant-id');
-                if (tenantId) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.showTenantLeaseModal(tenantId);
-                }
-            }
-        });
 
-        // Dashboard card clicks (all sections - Property, Financial, Operations)
         document.addEventListener('click', (e) => {
-            // Only handle if we're on the dashboard
             if (this.currentPage !== 'dashboard') return;
-            
+
             const clickableCard = e.target.closest('[data-clickable]');
-            if (clickableCard) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const cardType = clickableCard.getAttribute('data-clickable');
-                console.log(`🏠 ${cardType} card clicked`);
-                
-                // Add a small delay to prevent rapid multiple clicks
-                if (this.lastCardClick && Date.now() - this.lastCardClick < 1000) {
-                    console.log('⏳ Ignoring rapid click');
-                    return false;
-                }
-                this.lastCardClick = Date.now();
-                
-                // Property Overview Cards
-                if (cardType === 'occupancy') {
-                    this.showUnitOccupancyModal();
-                } else if (cardType === 'vacant') {
-                    this.showVacantUnitsModal();
-                } else if (cardType === 'tenants') {
-                    this.showTenantDetailsModal();
-                }
-                // Financial Overview Cards
-                else if (cardType === 'collection') {
-                    this.showRentCollectionModal();
-                } else if (cardType === 'revenue') {
-                    this.showRevenueDetailsModal();
-                } else if (cardType === 'late') {
-                    this.showLatePaymentsModal();
-                } else if (cardType === 'unpaid') {
-                    this.showUnpaidBillsModal();
-                }
-                // Operations Cards
-                else if (cardType === 'renewals') {
-                    this.showLeaseRenewalsModal();
-                } else if (cardType === 'open-maintenance') {
-                    this.showOpenMaintenanceModal();
-                } else if (cardType === 'backlog') {
-                    this.showMaintenanceBacklogModal();
-                }
-                
+            if (!clickableCard) return;
+
+            e.preventDefault();
+            e.stopPropagation();
+
+            const cardType = clickableCard.getAttribute('data-clickable');
+            console.log(`🏠 ${cardType} card clicked`);
+
+            // Debounce to prevent double-trigger
+            if (this.lastCardClick && Date.now() - this.lastCardClick < 1000) {
+                console.log('⏳ Ignoring rapid click');
                 return false;
             }
+            this.lastCardClick = Date.now();
+
+            // 🌟 Dashboard > Property Overview Cards
+            if (cardType === 'occupancy') {
+                this.showUnitOccupancyModal();
+            } else if (cardType === 'vacant') {
+                this.showVacantUnitsModal();
+            } else if (cardType === 'tenants') {
+                this.showTenantDetailsModal();
+            }
+
+            // 🌟 Dashboard > Financial Overview Cards
+            else if (cardType === 'collection') {
+                this.showRentCollectionModal();
+            } else if (cardType === 'revenue') {
+                this.showRevenueDetailsModal();
+            } else if (cardType === 'late') {
+                this.showLatePaymentsModal();
+            } else if (cardType === 'unpaid') {
+                this.showUnpaidBillsModal();
+            }
+
+            // 🌟 Dashboard > Operations Cards
+            else if (cardType === 'renewals') {
+                this.showLeaseRenewalsModal();
+            } else if (cardType === 'open-maintenance') {
+                this.showOpenMaintenanceModal();
+            } else if (cardType === 'backlog') {
+                this.showMaintenanceBacklogModal();
+            }
+
+            // 🌟 Billing Page Cards
+            else if (cardType === 'pending-bills') {
+                this.filterBills('pending');
+            } else if (cardType === 'overdue-bills') {
+                this.filterBills('overdue');
+            } else if (cardType === 'all-bills') {
+                this.filterBills('all');
+            }
+
+            return false;
         });
     }
+
 
 
     getLandlordDashboardHTML() {
@@ -1063,6 +1095,271 @@ class CasaLink {
                 </div>
             </div>
         `;
+    }
+
+    static async initializeBillingSystem() {
+        console.log('💰 Initializing billing system...');
+        
+        // Create billing settings if they don't exist
+        const settings = await this.getBillingSettings();
+        if (!settings) {
+            await this.createDefaultBillingSettings();
+        }
+        
+        // Check and generate monthly bills
+        await this.checkAndGenerateMonthlyBills();
+    }
+
+    static async getBillingSettings() {
+        try {
+            const settingsDoc = await firebaseDb.collection('billingSettings').doc('default').get();
+            return settingsDoc.exists ? settingsDoc.data() : null;
+        } catch (error) {
+            console.error('Error getting billing settings:', error);
+            return null;
+        }
+    }
+
+    static async createDefaultBillingSettings() {
+        const defaultSettings = {
+            autoBillingEnabled: true,
+            defaultPaymentDay: 5,
+            lateFeeAmount: 500,
+            gracePeriodDays: 3,
+            autoLateFees: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        await firebaseDb.collection('billingSettings').doc('default').set(defaultSettings);
+        console.log('✅ Created default billing settings');
+        return defaultSettings;
+    }
+
+    static async updateBillingSettings(updates) {
+        try {
+            updates.updatedAt = new Date().toISOString();
+            await firebaseDb.collection('billingSettings').doc('default').update(updates);
+            console.log('✅ Billing settings updated');
+            return true;
+        } catch (error) {
+            console.error('Error updating billing settings:', error);
+            throw error;
+        }
+    }
+
+    static async checkAndGenerateMonthlyBills() {
+        try {
+            const settings = await this.getBillingSettings();
+            if (!settings?.autoBillingEnabled) {
+                console.log('⏸️ Auto-billing is disabled');
+                return;
+            }
+
+            const today = new Date();
+            const isFirstOfMonth = today.getDate() === 1;
+            
+            if (!isFirstOfMonth) return;
+
+            // Check if bills already generated this month
+            const billsGeneratedThisMonth = localStorage.getItem(`bills_generated_${today.getFullYear()}_${today.getMonth()}`);
+            
+            if (!billsGeneratedThisMonth) {
+                console.log('🔄 Auto-generating monthly bills...');
+                const result = await this.generateMonthlyBills();
+                
+                // Mark as generated for this month
+                localStorage.setItem(`bills_generated_${today.getFullYear()}_${today.getMonth()}`, 'true');
+                
+                console.log(`✅ Monthly bills auto-generated: ${result.generated} new, ${result.skipped} existing`);
+                
+                return result;
+            }
+        } catch (error) {
+            console.error('❌ Auto bill generation failed:', error);
+            throw error;
+        }
+    }
+
+    static async generateMonthlyBills() {
+        try {
+            console.log('💰 Generating monthly bills for all active leases...');
+            
+            const leases = await this.getActiveLeases();
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+            const settings = await this.getBillingSettings();
+            
+            let generatedCount = 0;
+            let skippedCount = 0;
+            
+            const billPromises = leases.map(async (lease) => {
+                // Enhanced validation
+                if (!lease.isActive) {
+                    skippedCount++;
+                    return;
+                }
+                
+                if (!lease.monthlyRent || lease.monthlyRent <= 0) {
+                    console.warn(`⚠️ Skipping ${lease.tenantName}: Invalid rent amount`);
+                    skippedCount++;
+                    return;
+                }
+                
+                // Check for existing bill this month
+                const existingBill = await firebaseDb.collection('bills')
+                    .where('tenantId', '==', lease.tenantId)
+                    .where('dueDate', '>=', new Date(currentYear, currentMonth, 1).toISOString())
+                    .where('dueDate', '<=', new Date(currentYear, currentMonth + 1, 0).toISOString())
+                    .limit(1)
+                    .get();
+                    
+                if (existingBill.empty) {
+                    const paymentDay = lease.paymentDueDay || settings?.defaultPaymentDay || 5;
+                    const dueDate = new Date(currentYear, currentMonth, paymentDay);
+                    
+                    const billData = {
+                        tenantId: lease.tenantId,
+                        landlordId: lease.landlordId,
+                        tenantName: lease.tenantName,
+                        roomNumber: lease.roomNumber,
+                        type: 'rent',
+                        description: `Monthly Rent - ${today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+                        totalAmount: lease.monthlyRent,
+                        dueDate: dueDate.toISOString(),
+                        status: 'pending',
+                        createdAt: new Date().toISOString(),
+                        isAutoGenerated: true,
+                        items: [
+                            {
+                                description: 'Monthly Rent',
+                                amount: lease.monthlyRent,
+                                type: 'rent'
+                            }
+                        ]
+                    };
+                    
+                    await firebaseDb.collection('bills').add(billData);
+                    generatedCount++;
+                    console.log(`✅ Generated bill for ${lease.tenantName} (Due: ${paymentDay}${this.getOrdinalSuffix(paymentDay)})`);
+                } else {
+                    skippedCount++;
+                }
+            });
+            
+            await Promise.all(billPromises);
+            
+            console.log(`✅ Monthly bills generation completed: ${generatedCount} generated, ${skippedCount} skipped`);
+            return {
+                generated: generatedCount,
+                skipped: skippedCount,
+                total: leases.length
+            };
+            
+        } catch (error) {
+            console.error('❌ Error generating monthly bills:', error);
+            throw error;
+        }
+    }
+
+    static getOrdinalSuffix(day) {
+        if (day >= 11 && day <= 13) return 'th';
+        const lastDigit = day % 10;
+        switch (lastDigit) {
+            case 1: return 'st';
+            case 2: return 'nd';
+            case 3: return 'rd';
+            default: return 'th';
+        }
+    }
+
+    static async getActiveLeases() {
+        try {
+            const querySnapshot = await firebaseDb.collection('leases')
+                .where('isActive', '==', true)
+                .get();
+                
+            return querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting active leases:', error);
+            return [];
+        }
+    }
+
+    static async recordPayment(paymentData) {
+        try {
+            console.log('💳 Recording payment:', paymentData);
+            
+            const paymentRef = await firebaseDb.collection('payments').add({
+                ...paymentData,
+                processedAt: new Date().toISOString(),
+                status: 'completed'
+            });
+
+            // Update bill status
+            if (paymentData.billId) {
+                await firebaseDb.collection('bills').doc(paymentData.billId).update({
+                    status: 'paid',
+                    paidDate: new Date().toISOString(),
+                    paymentMethod: paymentData.paymentMethod,
+                    paymentReference: paymentData.referenceNumber
+                });
+            }
+
+            console.log('✅ Payment recorded successfully');
+            return paymentRef.id;
+            
+        } catch (error) {
+            console.error('❌ Error recording payment:', error);
+            throw error;
+        }
+    }
+
+    static async getPaymentMethods() {
+        return [
+            { id: 'cash', name: 'Cash', icon: 'fas fa-money-bill' },
+            { id: 'gcash', name: 'GCash', icon: 'fas fa-mobile-alt' },
+            { id: 'maya', name: 'Maya', icon: 'fas fa-wallet' },
+            { id: 'bank_transfer', name: 'Bank Transfer', icon: 'fas fa-university' },
+            { id: 'check', name: 'Check', icon: 'fas fa-money-check' }
+        ];
+    }
+
+    static async getBillsWithTenants(landlordId) {
+        try {
+            const billsSnapshot = await firebaseDb.collection('bills')
+                .where('landlordId', '==', landlordId)
+                .orderBy('dueDate', 'desc')
+                .get();
+                
+            return billsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting bills:', error);
+            return [];
+        }
+    }
+
+    async generateMonthlyBills() {
+        try {
+            const result = await DataManager.generateMonthlyBills();
+            this.showNotification('Monthly bills generated successfully!', 'success');
+            
+            // Refresh bills data
+            setTimeout(() => {
+                this.loadBillsData();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Error generating bills:', error);
+            this.showNotification('Failed to generate bills: ' + error.message, 'error');
+        }
     }
 
     setupPageEvents(page) {
@@ -1948,19 +2245,29 @@ class CasaLink {
     }
 
 
-    setupBillingPage() {
-        // Generate bill button
-        document.getElementById('generateBillBtn')?.addEventListener('click', () => {
-            this.showGenerateBillForm();
-        });
-
-        // Search functionality
-        document.getElementById('billSearch')?.addEventListener('input', (e) => {
-            this.filterBills(e.target.value);
-        });
-
-        // Real-time bills listener
-        this.setupBillsListener();
+    async setupBillingPage() {
+        try {
+            // Load initial data
+            await this.loadBillsData();
+            await this.loadBillingStatus();
+            
+            // Setup search functionality
+            document.getElementById('billSearch')?.addEventListener('input', (e) => {
+                this.filterBills(e.target.value);
+            });
+            
+            // Setup filter functionality
+            document.getElementById('billStatusFilter')?.addEventListener('change', (e) => {
+                this.filterBills(e.target.value);
+            });
+            
+            // Setup real-time listener
+            this.setupBillsListener();
+            
+        } catch (error) {
+            console.error('Error setting up billing page:', error);
+            this.showNotification('Failed to load billing data', 'error');
+        }
     }
 
 
@@ -3825,19 +4132,556 @@ class CasaLink {
         }
     }
 
-    setupBillingPage() {
-        // Generate bill button
-        document.getElementById('generateBillBtn')?.addEventListener('click', () => {
-            this.showGenerateBillForm();
+    searchBills(searchTerm) {
+        const rows = document.querySelectorAll('#billsList tbody tr');
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
         });
+    }
 
-        // Search functionality
-        document.getElementById('billSearch')?.addEventListener('input', (e) => {
-            this.filterBills(e.target.value);
+    filterBills(status) {
+        const rows = document.querySelectorAll('#billsList tbody tr');
+        rows.forEach(row => {
+            if (status === 'all') {
+                row.style.display = '';
+                return;
+            }
+            
+            const statusBadge = row.querySelector('.status-badge');
+            if (statusBadge) {
+                const billStatus = statusBadge.textContent.toLowerCase();
+                const isOverdue = row.textContent.includes('overdue');
+                
+                if (status === 'overdue' && isOverdue) {
+                    row.style.display = '';
+                } else if (status === 'pending' && billStatus.includes('pending') && !isOverdue) {
+                    row.style.display = '';
+                } else if (status === 'paid' && billStatus.includes('paid')) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
         });
+    }
 
-        // Real-time bills listener
-        this.setupBillsListener();
+    async showBillingSettings() {
+        try {
+            const settings = await DataManager.getBillingSettings();
+            
+            const modalContent = `
+                <div class="billing-settings-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-cog" style="font-size: 3rem; color: var(--royal-blue); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Billing Settings</h3>
+                        <p>Configure automatic billing and payment preferences</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="autoBillingEnabled" ${settings.autoBillingEnabled ? 'checked' : ''}>
+                            <span>Enable Automatic Monthly Billing</span>
+                        </label>
+                        <small style="color: var(--dark-gray);">
+                            Bills will be automatically generated on the 1st of each month
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Default Payment Due Day</label>
+                        <select id="defaultPaymentDay" class="form-input">
+                            ${Array.from({length: 28}, (_, i) => i + 1).map(day => `
+                                <option value="${day}" ${day === settings.defaultPaymentDay ? 'selected' : ''}>
+                                    ${day}${DataManager.getOrdinalSuffix(day)} of the month
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" style="display: flex; align-items: center; gap: 10px;">
+                            <input type="checkbox" id="autoLateFees" ${settings.autoLateFees ? 'checked' : ''}>
+                            <span>Enable Automatic Late Fees</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Late Fee Amount (₱)</label>
+                        <input type="number" id="lateFeeAmount" class="form-input" 
+                            value="${settings.lateFeeAmount}" min="0" step="50">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Apply Late Fee After (Days)</label>
+                        <input type="number" id="lateFeeAfterDays" class="form-input" 
+                            value="${settings.lateFeeAfterDays || 5}" min="1" max="30">
+                        <small style="color: var(--dark-gray);">
+                            Number of days after due date before applying late fee
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Grace Period (Days)</label>
+                        <input type="number" id="gracePeriodDays" class="form-input" 
+                            value="${settings.gracePeriodDays}" min="0" max="15">
+                        <small style="color: var(--dark-gray);">
+                            Days after due date before marking as overdue
+                        </small>
+                    </div>
+
+                    <div id="billingSettingsError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+
+                    <div class="security-info">
+                        <i class="fas fa-info-circle"></i>
+                        <small>Changes will take effect immediately for new bills</small>
+                    </div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Billing Settings',
+                submitText: 'Save Settings',
+                onSubmit: () => this.saveBillingSettings()
+            });
+
+            this.billingSettingsModal = modal;
+
+        } catch (error) {
+            console.error('Error loading billing settings:', error);
+            this.showNotification('Failed to load billing settings', 'error');
+        }
+    }
+
+    async saveBillingSettings() {
+        try {
+            const settings = {
+                autoBillingEnabled: document.getElementById('autoBillingEnabled').checked,
+                defaultPaymentDay: parseInt(document.getElementById('defaultPaymentDay').value),
+                autoLateFees: document.getElementById('autoLateFees').checked,
+                lateFeeAmount: parseFloat(document.getElementById('lateFeeAmount').value),
+                lateFeeAfterDays: parseInt(document.getElementById('lateFeeAfterDays').value),
+                gracePeriodDays: parseInt(document.getElementById('gracePeriodDays').value)
+            };
+
+            // Validation
+            if (settings.lateFeeAmount < 0) {
+                this.showSettingsError('Late fee amount cannot be negative');
+                return;
+            }
+
+            if (settings.lateFeeAfterDays < 1) {
+                this.showSettingsError('Late fee days must be at least 1');
+                return;
+            }
+
+            await DataManager.updateBillingSettings(settings);
+            ModalManager.closeModal(this.billingSettingsModal);
+            this.showNotification('Billing settings saved successfully!', 'success');
+
+            // Reload billing status
+            setTimeout(() => {
+                this.loadBillingStatus();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error saving billing settings:', error);
+            this.showSettingsError('Failed to save settings: ' + error.message);
+        }
+    }
+
+    showSettingsError(message) {
+        const errorElement = document.getElementById('billingSettingsError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async showCreateBillForm() {
+        try {
+            // Get tenants and available rooms
+            const [tenants, settings] = await Promise.all([
+                DataManager.getTenants(this.currentUser.uid),
+                DataManager.getBillingSettings()
+            ]);
+
+            const tenantOptions = tenants.map(tenant => `
+                <option value="${tenant.id}" data-room="${tenant.roomNumber}">
+                    ${tenant.name} - ${tenant.roomNumber}
+                </option>
+            `).join('');
+
+            const modalContent = `
+                <div class="create-bill-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-file-invoice-dollar" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Create Custom Bill</h3>
+                        <p>Generate a one-time bill for a tenant</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Tenant *</label>
+                        <select id="billTenant" class="form-input" required>
+                            <option value="">Select a tenant</option>
+                            ${tenantOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Bill Type *</label>
+                        <select id="billType" class="form-input" required>
+                            <option value="rent">Monthly Rent</option>
+                            <option value="utility">Utility Bill</option>
+                            <option value="maintenance">Maintenance Fee</option>
+                            <option value="penalty">Penalty Fee</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Description *</label>
+                        <input type="text" id="billDescription" class="form-input" 
+                            placeholder="e.g., Monthly Rent - November 2024" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Amount (₱) *</label>
+                        <input type="number" id="billAmount" class="form-input" 
+                            placeholder="0.00" min="0" step="0.01" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Due Date *</label>
+                        <input type="date" id="billDueDate" class="form-input" required>
+                    </div>
+
+                    <!-- Bill Items Section -->
+                    <div class="form-group">
+                        <label class="form-label">Bill Items</label>
+                        <div id="billItemsContainer">
+                            <div class="bill-item" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                <input type="text" class="form-input item-description" placeholder="Item description" style="flex: 2;">
+                                <input type="number" class="form-input item-amount" placeholder="Amount" min="0" step="0.01" style="flex: 1;">
+                                <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); casaLink.calculateBillTotal();">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="casaLink.addBillItem()">
+                            <i class="fas fa-plus"></i> Add Item
+                        </button>
+                        <div style="margin-top: 10px;">
+                            <strong>Total: ₱<span id="billTotal">0.00</span></strong>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Notes (Optional)</label>
+                        <textarea id="billNotes" class="form-input" placeholder="Additional notes about this bill" rows="3"></textarea>
+                    </div>
+
+                    <div id="createBillError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Create Custom Bill',
+                submitText: 'Create Bill',
+                onSubmit: () => this.createCustomBill()
+            });
+
+            // Set default due date (payment day of current month)
+            const today = new Date();
+            const dueDate = new Date(today.getFullYear(), today.getMonth(), settings.defaultPaymentDay);
+            document.getElementById('billDueDate').value = dueDate.toISOString().split('T')[0];
+
+            this.createBillModal = modal;
+
+        } catch (error) {
+            console.error('Error showing create bill form:', error);
+            this.showNotification('Failed to load bill creation form', 'error');
+        }
+    }
+
+    async autoApplyLateFees() {
+        try {
+            const settings = await DataManager.getBillingSettings();
+            if (settings.autoLateFees) {
+                const result = await DataManager.applyLateFees();
+                if (result.applied > 0) {
+                    console.log(`🤖 Auto-applied late fees to ${result.applied} bills`);
+                }
+            }
+        } catch (error) {
+            console.error('Error in auto late fee application:', error);
+        }
+    }
+
+    setupBillingAutomation() {
+        // Check for due bills daily
+        setInterval(() => {
+            this.checkDueBills();
+        }, 24 * 60 * 60 * 1000);
+
+        // Apply late fees weekly
+        setInterval(() => {
+            this.autoApplyLateFees();
+        }, 7 * 24 * 60 * 60 * 1000);
+    }
+
+    async applyLateFeesManually() {
+        try {
+            const confirmed = confirm('Apply late fees to all overdue bills? This will add late fees to bills that are past their due date.');
+            
+            if (!confirmed) return;
+
+            const result = await DataManager.applyLateFees();
+            
+            if (result.applied > 0) {
+                this.showNotification(`Applied late fees to ${result.applied} bills`, 'success');
+                // Refresh bills data
+                setTimeout(() => {
+                    this.loadBillsData();
+                }, 1000);
+            } else {
+                this.showNotification('No bills eligible for late fees', 'info');
+            }
+
+        } catch (error) {
+            console.error('Error applying late fees:', error);
+            this.showNotification('Failed to apply late fees', 'error');
+        }
+    }
+
+    showCreateBillError(message) {
+        const errorElement = document.getElementById('createBillError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async createCustomBill() {
+        try {
+            const tenantSelect = document.getElementById('billTenant');
+            const selectedOption = tenantSelect.options[tenantSelect.selectedIndex];
+            
+            const billData = {
+                tenantId: tenantSelect.value,
+                tenantName: selectedOption.text.split(' - ')[0],
+                roomNumber: selectedOption.getAttribute('data-room'),
+                landlordId: this.currentUser.uid,
+                type: document.getElementById('billType').value,
+                description: document.getElementById('billDescription').value,
+                totalAmount: parseFloat(document.getElementById('billTotal').textContent),
+                dueDate: document.getElementById('billDueDate').value,
+                notes: document.getElementById('billNotes').value,
+                status: 'pending',
+                isAutoGenerated: false
+            };
+
+            // Collect bill items
+            const items = [];
+            const mainAmount = parseFloat(document.getElementById('billAmount').value) || 0;
+            if (mainAmount > 0) {
+                items.push({
+                    description: billData.description,
+                    amount: mainAmount,
+                    type: billData.type
+                });
+            }
+
+            // Add additional items
+            const itemElements = document.querySelectorAll('.bill-item');
+            itemElements.forEach(item => {
+                const description = item.querySelector('.item-description').value;
+                const amount = parseFloat(item.querySelector('.item-amount').value) || 0;
+                if (description && amount > 0) {
+                    items.push({
+                        description: description,
+                        amount: amount,
+                        type: 'additional'
+                    });
+                }
+            });
+
+            billData.items = items;
+
+            // Validation
+            if (!billData.tenantId) {
+                this.showCreateBillError('Please select a tenant');
+                return;
+            }
+
+            if (billData.totalAmount <= 0) {
+                this.showCreateBillError('Bill amount must be greater than 0');
+                return;
+            }
+
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.disabled = true;
+            }
+
+            await DataManager.createCustomBill(billData);
+            
+            ModalManager.closeModal(this.createBillModal);
+            this.showNotification('Custom bill created successfully!', 'success');
+
+            // Refresh bills list
+            setTimeout(() => {
+                this.loadBillsData();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error creating custom bill:', error);
+            this.showCreateBillError('Failed to create bill: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Create Bill';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+
+    calculateBillTotal() {
+        const amountInputs = document.querySelectorAll('.item-amount');
+        let total = parseFloat(document.getElementById('billAmount').value) || 0;
+        
+        amountInputs.forEach(input => {
+            total += parseFloat(input.value) || 0;
+        });
+        
+        document.getElementById('billTotal').textContent = total.toFixed(2);
+    }
+
+    addBillItem() {
+        const container = document.getElementById('billItemsContainer');
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'bill-item';
+        itemDiv.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px;';
+        itemDiv.innerHTML = `
+            <input type="text" class="form-input item-description" placeholder="Item description" style="flex: 2;">
+            <input type="number" class="form-input item-amount" placeholder="Amount" min="0" step="0.01" style="flex: 1;">
+            <button type="button" class="btn btn-danger btn-sm" onclick="this.parentElement.remove(); casaLink.calculateBillTotal();">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(itemDiv);
+
+        // Add event listeners to new amount inputs
+        itemDiv.querySelector('.item-amount').addEventListener('input', () => this.calculateBillTotal());
+    }
+
+    async exportBills() {
+        this.showNotification('Export bills feature coming soon!', 'info');
+    }
+
+    editBill(billId) {
+        this.showNotification('Edit bill feature coming soon!', 'info');
+    }
+
+    deleteBill(billId) {
+        this.showNotification('Delete bill feature coming soon!', 'info');
+    }
+
+    async loadBillingStatus() {
+        try {
+            console.log('🔄 Loading billing status...');
+            const settings = await DataManager.getBillingSettings();
+            const statusElement = document.getElementById('autoBillingStatus');
+            
+            if (!statusElement) {
+                console.warn('⚠️ Billing status element not found');
+                return;
+            }
+
+            console.log('📊 Billing settings loaded:', settings);
+            
+            if (settings?.autoBillingEnabled) {
+                statusElement.innerHTML = `
+                    <div class="card" style="background: rgba(52, 168, 83, 0.1); border-left: 4px solid var(--success); margin-bottom: 20px;">
+                        <div class="card-header">
+                            <h4 style="color: var(--success); margin: 0;">
+                                <i class="fas fa-robot"></i> Automatic Billing Active
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <p style="margin: 0; color: var(--dark-gray);">
+                                Bills are automatically generated on the 1st of each month. 
+                                Default payment due day: <strong>${settings.defaultPaymentDay}${DataManager.getOrdinalSuffix(settings.defaultPaymentDay)}</strong>
+                                ${settings.autoLateFees ? `<br>Auto late fees: ₱${settings.lateFeeAmount} after ${settings.lateFeeAfterDays} days` : ''}
+                            </p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                statusElement.innerHTML = `
+                    <div class="card" style="background: rgba(251, 188, 4, 0.1); border-left: 4px solid var(--warning); margin-bottom: 20px;">
+                        <div class="card-header">
+                            <h4 style="color: var(--warning); margin: 0;">
+                                <i class="fas fa-robot"></i> Automatic Billing Disabled
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <p style="margin: 0; color: var(--dark-gray);">
+                                Automatic bill generation is turned off. Bills must be generated manually.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            console.log('✅ Billing status loaded successfully');
+        } catch (error) {
+            console.error('❌ Error loading billing status:', error);
+            const statusElement = document.getElementById('autoBillingStatus');
+            if (statusElement) {
+                statusElement.innerHTML = `
+                    <div class="card" style="background: rgba(234, 67, 53, 0.1); border-left: 4px solid var(--danger); margin-bottom: 20px;">
+                        <div class="card-header">
+                            <h4 style="color: var(--danger); margin: 0;">
+                                <i class="fas fa-exclamation-triangle"></i> Billing Settings Error
+                            </h4>
+                        </div>
+                        <div class="card-body">
+                            <p style="margin: 0; color: var(--dark-gray);">
+                                Failed to load billing settings. Please check your connection.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+    }
+
+    async setupBillingPage() {
+        try {
+            // Load initial data
+            await this.loadBillsData();
+            await this.loadBillingStatus();
+            
+            // Setup search functionality
+            document.getElementById('billSearch')?.addEventListener('input', (e) => {
+                this.searchBills(e.target.value);
+            });
+            
+            // Setup filter functionality
+            document.getElementById('billStatusFilter')?.addEventListener('change', (e) => {
+                this.filterBills(e.target.value);
+            });
+            
+            // Setup real-time listener
+            this.setupBillsListener();
+            
+        } catch (error) {
+            console.error('Error setting up billing page:', error);
+            this.showNotification('Failed to load billing data', 'error');
+        }
     }
 
     async setupBillsListener() {
@@ -4402,12 +5246,25 @@ class CasaLink {
         return detailsMap[status] || 'Status unknown';
     }
 
+    debugBillingCards() {
+        const cardIds = ['pendingBillsCount', 'overdueBillsCount', 'monthlyRevenue', 'totalBillsCount'];
+        cardIds.forEach(id => {
+            const element = document.getElementById(id);
+            console.log(`🔍 ${id}:`, element ? 'FOUND' : 'NOT FOUND');
+        });
+    }
+
     updateCard(elementId, value) {
-        const element = document.getElementById(elementId);
-        if (element) {
-            element.textContent = value;
-        } else {
-            console.warn(`Element not found: ${elementId}`);
+        try {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.textContent = value;
+                console.log(`✅ Updated ${elementId}: ${value}`);
+            } else {
+                console.warn(`⚠️ Element not found: ${elementId}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error updating card ${elementId}:`, error);
         }
     }
 
@@ -4625,6 +5482,324 @@ class CasaLink {
         }
     }
 
+    showPaymentError(message) {
+        const errorElement = document.getElementById('paymentError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async processPayment(billId, bill) {
+        const paymentMethod = document.querySelector('.payment-method-option.selected')?.getAttribute('data-method');
+        const referenceNumber = document.getElementById('paymentReference')?.value;
+        const paymentDate = document.getElementById('paymentDate')?.value;
+        const paymentAmount = parseFloat(document.getElementById('paymentAmount')?.value);
+        const notes = document.getElementById('paymentNotes')?.value;
+        const errorElement = document.getElementById('paymentError');
+        
+        // Reset error
+        if (errorElement) {
+            errorElement.style.display = 'none';
+            errorElement.textContent = '';
+        }
+        
+        // Validation
+        if (!paymentMethod) {
+            this.showPaymentError('Please select a payment method');
+            return;
+        }
+        
+        if (!paymentDate) {
+            this.showPaymentError('Please select payment date');
+            return;
+        }
+        
+        if (!paymentAmount || paymentAmount <= 0) {
+            this.showPaymentError('Please enter a valid payment amount');
+            return;
+        }
+        
+        try {
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                submitBtn.disabled = true;
+            }
+            
+            const paymentData = {
+                billId: billId,
+                tenantId: bill.tenantId,
+                landlordId: this.currentUser.uid,
+                tenantName: bill.tenantName,
+                roomNumber: bill.roomNumber,
+                amount: paymentAmount,
+                paymentMethod: paymentMethod,
+                referenceNumber: referenceNumber,
+                paymentDate: paymentDate,
+                notes: notes,
+                billAmount: bill.totalAmount,
+                createdAt: new Date().toISOString()
+            };
+            
+            await DataManager.recordPayment(paymentData);
+            
+            ModalManager.closeModal(document.querySelector('.modal-overlay'));
+            this.showNotification('Payment recorded successfully!', 'success');
+            
+            // Refresh bills data
+            setTimeout(() => {
+                this.loadBillsData();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Error processing payment:', error);
+            this.showPaymentError('Failed to record payment: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Record Payment';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    setupPaymentMethodSelection() {
+        const methodOptions = document.querySelectorAll('.payment-method-option');
+        let selectedMethod = null;
+        
+        methodOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                methodOptions.forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+                selectedMethod = option.getAttribute('data-method');
+            });
+        });
+    }
+
+    async recordPaymentModal(billId) {
+        try {
+            const billDoc = await firebaseDb.collection('bills').doc(billId).get();
+            if (!billDoc.exists) {
+                this.showNotification('Bill not found', 'error');
+                return;
+            }
+            
+            const bill = { id: billDoc.id, ...billDoc.data() };
+            const paymentMethods = await DataManager.getPaymentMethods();
+            
+            const paymentMethodsHTML = paymentMethods.map(method => `
+                <div class="payment-method-option" data-method="${method.id}">
+                    <i class="${method.icon}"></i>
+                    <span>${method.name}</span>
+                </div>
+            `).join('');
+            
+            const modalContent = `
+                <div class="payment-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-credit-card" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Record Payment</h3>
+                        <p>Record payment for <strong>${bill.tenantName}</strong></p>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 10px 0; color: var(--royal-blue);">Bill Details</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div><strong>Amount:</strong> ₱${(bill.totalAmount || 0).toLocaleString()}</div>
+                            <div><strong>Due Date:</strong> ${new Date(bill.dueDate).toLocaleDateString()}</div>
+                            <div><strong>Room:</strong> ${bill.roomNumber || 'N/A'}</div>
+                            <div><strong>Description:</strong> ${bill.description || 'Monthly Rent'}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Payment Method *</label>
+                        <div class="payment-methods-grid">
+                            ${paymentMethodsHTML}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Reference Number</label>
+                        <input type="text" id="paymentReference" class="form-input" placeholder="Transaction ID, receipt number, etc.">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Payment Date *</label>
+                        <input type="date" id="paymentDate" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Amount Paid *</label>
+                        <input type="number" id="paymentAmount" class="form-input" value="${bill.totalAmount || 0}" step="0.01" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Notes (Optional)</label>
+                        <textarea id="paymentNotes" class="form-input" placeholder="Additional notes about this payment" rows="3"></textarea>
+                    </div>
+                    
+                    <div id="paymentError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Record Payment',
+                submitText: 'Record Payment',
+                onSubmit: () => this.processPayment(billId, bill)
+            });
+            
+            this.setupPaymentMethodSelection();
+            
+        } catch (error) {
+            console.error('Error showing payment modal:', error);
+            this.showNotification('Failed to load payment form', 'error');
+        }
+    }
+
+    async updateBillsTable(bills) {
+        const billsList = document.getElementById('billsList');
+        if (!billsList) return;
+        
+        if (bills.length === 0) {
+            billsList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <h3>No Bills Found</h3>
+                    <p>No bills have been created yet. Generate monthly bills or create a custom bill.</p>
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="casaLink.forceGenerateBills()">
+                            Generate Monthly Bills
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.showCreateBillForm()">
+                            Create Custom Bill
+                        </button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        // Fetch tenant occupations for all bills
+        const billsWithOccupations = await this.enrichBillsWithOccupations(bills);
+        billsList.innerHTML = this.renderBillsTable(billsWithOccupations);
+    }
+
+    async enrichBillsWithOccupations(bills) {
+        try {
+            const enrichedBills = await Promise.all(
+                bills.map(async (bill) => {
+                    try {
+                        // Try to get tenant data to fetch occupation
+                        if (bill.tenantId) {
+                            const tenantDoc = await firebaseDb.collection('users').doc(bill.tenantId).get();
+                            if (tenantDoc.exists) {
+                                const tenantData = tenantDoc.data();
+                                return {
+                                    ...bill,
+                                    tenantOccupation: tenantData.occupation || 'No occupation specified'
+                                };
+                            }
+                        }
+                    } catch (error) {
+                        console.warn(`Could not fetch occupation for tenant ${bill.tenantId}:`, error);
+                    }
+                    
+                    // Fallback: use existing data or placeholder
+                    return {
+                        ...bill,
+                        tenantOccupation: bill.tenantOccupation || bill.occupation || 'No occupation specified'
+                    };
+                })
+            );
+            
+            return enrichedBills;
+        } catch (error) {
+            console.error('Error enriching bills with occupations:', error);
+            return bills.map(bill => ({
+                ...bill,
+                tenantOccupation: bill.tenantOccupation || bill.occupation || 'No occupation specified'
+            }));
+        }
+    }
+
+    renderBillsTable(bills) {
+        return `
+            <div class="table-container">
+                <table class="tenants-table">
+                    <thead>
+                        <tr>
+                            <th>Tenant</th>
+                            <th>Room</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${bills.map(bill => `
+                            <tr class="bill-row" data-bill-id="${bill.id}">
+                                <td>
+                                    <div class="tenant-info">
+                                        <div class="tenant-avatar">${bill.tenantName?.charAt(0)?.toUpperCase() || 'T'}</div>
+                                        <div class="tenant-name">${bill.tenantName || 'N/A'}</div>
+                                    </div>
+                                </td>
+                                <td>${bill.roomNumber || 'N/A'}</td>
+                                <td>
+                                    <div>${bill.description || 'Monthly Rent'}</div>
+                                    <small style="color: var(--dark-gray);">${bill.type || 'rent'}</small>
+                                </td>
+                                <td style="font-weight: 600; color: var(--royal-blue);">
+                                    ₱${(bill.totalAmount || 0).toLocaleString()}
+                                </td>
+                                <td>
+                                    ${new Date(bill.dueDate).toLocaleDateString()}
+                                    ${new Date(bill.dueDate) < new Date() && bill.status !== 'paid' ? 
+                                        '<br><small style="color: var(--danger);">Overdue</small>' : ''}
+                                </td>
+                                <td>
+                                    ${this.getBillStatusBadge(bill)}
+                                </td>
+                                <td>
+                                    <div class="action-buttons">
+                                        ${bill.status !== 'paid' ? `
+                                            <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); casaLink.recordPaymentModal('${bill.id}')">
+                                                <i class="fas fa-credit-card"></i> Pay
+                                            </button>
+                                        ` : ''}
+                                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewBillDetails('${bill.id}')">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); casaLink.deleteBill('${bill.id}')">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    getBillStatusBadge(bill) {
+        const today = new Date();
+        const dueDate = new Date(bill.dueDate);
+        
+        if (bill.status === 'paid') {
+            return '<span class="status-badge active">Paid</span>';
+        } else if (dueDate < today) {
+            return '<span class="status-badge warning">Overdue</span>';
+        } else {
+            return '<span class="status-badge inactive">Pending</span>';
+        }
+    }
+
     updateLoadingStates() {
         // Remove loading states from all cards
         const loadingElements = document.querySelectorAll('.card-change.loading');
@@ -4644,26 +5819,660 @@ class CasaLink {
         if (element) element.textContent = value;
     }
 
+    showPaymentError(message) {
+        const errorElement = document.getElementById('paymentError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async forceGenerateBills() {
+        try {
+            console.log('🔄 Force generating monthly bills...');
+            
+            // Clear the generation flag to force creation
+            const today = new Date();
+            localStorage.removeItem(`bills_generated_${today.getFullYear()}_${today.getMonth()}`);
+            
+            const result = await DataManager.generateMonthlyBills();
+            
+            if (!result) {
+                throw new Error('Bill generation returned no result');
+            }
+            
+            console.log('📊 Bill generation result:', result);
+            
+            if (result.generated === 0 && result.skipped > 0) {
+                this.showNotification(
+                    `All bills already generated for this month (${result.skipped} bills)`, 
+                    'info'
+                );
+            } else if (result.generated > 0) {
+                this.showNotification(
+                    `Generated ${result.generated} new bills, ${result.skipped} already existed`, 
+                    'success'
+                );
+            } else {
+                this.showNotification(
+                    `No bills generated. ${result.skipped} existing, ${result.errors} errors`,
+                    'warning'
+                );
+            }
+            
+            // Refresh bills data
+            setTimeout(() => {
+                this.loadBillsData();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('❌ Failed to generate bills:', error);
+            this.showNotification('Failed to generate bills: ' + error.message, 'error');
+        }
+    }
+
+    async processPayment(billId, bill) {
+        const paymentMethod = document.querySelector('.payment-method-option.selected')?.getAttribute('data-method');
+        const referenceNumber = document.getElementById('paymentReference')?.value;
+        const paymentDate = document.getElementById('paymentDate')?.value;
+        const paymentAmount = parseFloat(document.getElementById('paymentAmount')?.value);
+        const notes = document.getElementById('paymentNotes')?.value;
+        const errorElement = document.getElementById('paymentError');
+        
+        // Reset error
+        if (errorElement) {
+            errorElement.style.display = 'none';
+            errorElement.textContent = '';
+        }
+        
+        // Validation
+        if (!paymentMethod) {
+            this.showPaymentError('Please select a payment method');
+            return;
+        }
+        
+        if (!paymentDate) {
+            this.showPaymentError('Please select payment date');
+            return;
+        }
+        
+        if (!paymentAmount || paymentAmount <= 0) {
+            this.showPaymentError('Please enter a valid payment amount');
+            return;
+        }
+        
+        // Validate reference number for electronic payments
+        if (['gcash', 'maya', 'bank_transfer'].includes(paymentMethod) && !referenceNumber) {
+            this.showPaymentError('Reference number is required for this payment method');
+            return;
+        }
+        
+        try {
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+                submitBtn.disabled = true;
+            }
+            
+            const paymentData = {
+                billId: billId,
+                tenantId: bill.tenantId,
+                landlordId: this.currentUser.uid,
+                tenantName: bill.tenantName,
+                roomNumber: bill.roomNumber,
+                amount: paymentAmount,
+                paymentMethod: paymentMethod,
+                referenceNumber: referenceNumber,
+                paymentDate: paymentDate,
+                notes: notes,
+                billAmount: bill.totalAmount,
+                createdAt: new Date().toISOString()
+            };
+            
+            await DataManager.recordPayment(paymentData);
+            
+            ModalManager.closeModal(document.querySelector('.modal-overlay'));
+            this.showNotification('Payment recorded successfully!', 'success');
+            
+            // Refresh bills data
+            setTimeout(() => {
+                this.loadBillsData();
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Error processing payment:', error);
+            this.showPaymentError('Failed to record payment: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Record Payment';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    setupPaymentMethodSelection() {
+        const methodOptions = document.querySelectorAll('.payment-method-option');
+        let selectedMethod = null;
+        
+        methodOptions.forEach(option => {
+            option.addEventListener('click', () => {
+                methodOptions.forEach(opt => opt.classList.remove('selected'));
+                option.classList.add('selected');
+                selectedMethod = option.getAttribute('data-method');
+                
+                // Show/hide reference number requirement
+                const referenceInput = document.getElementById('paymentReference');
+                if (referenceInput) {
+                    if (['gcash', 'maya', 'bank_transfer'].includes(selectedMethod)) {
+                        referenceInput.required = true;
+                        referenceInput.parentElement.querySelector('small').style.color = 'var(--danger)';
+                    } else {
+                        referenceInput.required = false;
+                        referenceInput.parentElement.querySelector('small').style.color = 'var(--dark-gray)';
+                    }
+                }
+            });
+        });
+        
+        // Auto-select first method
+        if (methodOptions.length > 0) {
+            methodOptions[0].click();
+        }
+    }
+
+    async recordPaymentModal(billId) {
+        try {
+            const billDoc = await firebaseDb.collection('bills').doc(billId).get();
+            if (!billDoc.exists) {
+                this.showNotification('Bill not found', 'error');
+                return;
+            }
+            
+            const bill = { id: billDoc.id, ...billDoc.data() };
+            const paymentMethods = await DataManager.getPaymentMethods();
+            
+            const paymentMethodsHTML = paymentMethods.map(method => `
+                <div class="payment-method-option" data-method="${method.id}">
+                    <i class="${method.icon}"></i>
+                    <span>${method.name}</span>
+                </div>
+            `).join('');
+            
+            const modalContent = `
+                <div class="payment-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-credit-card" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Record Payment</h3>
+                        <p>Record payment for <strong>${bill.tenantName}</strong></p>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 10px 0; color: var(--royal-blue);">Bill Details</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
+                            <div><strong>Amount Due:</strong> ₱${(bill.totalAmount || 0).toLocaleString()}</div>
+                            <div><strong>Due Date:</strong> ${new Date(bill.dueDate).toLocaleDateString()}</div>
+                            <div><strong>Room:</strong> ${bill.roomNumber || 'N/A'}</div>
+                            <div><strong>Description:</strong> ${bill.description || 'Monthly Rent'}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Payment Method *</label>
+                        <div class="payment-methods-grid">
+                            ${paymentMethodsHTML}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Reference Number</label>
+                        <input type="text" id="paymentReference" class="form-input" placeholder="Transaction ID, receipt number, etc.">
+                        <small style="color: var(--dark-gray);">Required for GCash, Maya, and Bank Transfer</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Payment Date *</label>
+                        <input type="date" id="paymentDate" class="form-input" value="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Amount Paid *</label>
+                        <input type="number" id="paymentAmount" class="form-input" value="${bill.totalAmount || 0}" step="0.01" min="0">
+                        <small style="color: var(--dark-gray);">Enter the actual amount received</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Notes (Optional)</label>
+                        <textarea id="paymentNotes" class="form-input" placeholder="Additional notes about this payment" rows="3"></textarea>
+                    </div>
+                    
+                    <div id="paymentError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Record Payment',
+                submitText: 'Record Payment',
+                onSubmit: () => this.processPayment(billId, bill)
+            });
+            
+            this.setupPaymentMethodSelection();
+            
+        } catch (error) {
+            console.error('Error showing payment modal:', error);
+            this.showNotification('Failed to load payment form', 'error');
+        }
+    }
+
+    async setupBillingPage() {
+        // Load initial data
+        await this.loadBillsData();
+        
+        // Setup search functionality
+        document.getElementById('billSearch')?.addEventListener('input', (e) => {
+            this.searchBills(e.target.value);
+        });
+        
+        // Setup real-time listener
+        this.setupBillsListener();
+    }
+
+    getDaysOverdue(dueDate) {
+        const today = new Date();
+        const due = new Date(dueDate);
+        const diffTime = today - due;
+        return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    getBillStatusBadge(bill) {
+        const today = new Date();
+        const dueDate = new Date(bill.dueDate);
+        
+        if (bill.status === 'paid') {
+            return '<span class="status-badge active">Paid</span>';
+        } else if (dueDate < today) {
+            return '<span class="status-badge warning">Overdue</span>';
+        } else {
+            return '<span class="status-badge inactive">Pending</span>';
+        }
+    }
+
+    renderBillsTable(bills) {
+        return `
+            <div class="table-container">
+                <table class="tenants-table">
+                    <thead>
+                        <tr>
+                            <th>Tenant</th>
+                            <th>Room</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${bills.map(bill => {
+                            const isOverdue = bill.status === 'pending' && new Date(bill.dueDate) < new Date();
+                            const statusBadge = this.getBillStatusBadge(bill);
+                            
+                            return `
+                                <tr class="bill-row" data-bill-id="${bill.id}">
+                                    <td>
+                                        <div class="tenant-info">
+                                            <div class="tenant-avatar">${bill.tenantName?.charAt(0)?.toUpperCase() || 'T'}</div>
+                                            <div class="tenant-details">
+                                                <div class="tenant-name">${bill.tenantName || 'N/A'}</div>
+                                                <small style="color: var(--dark-gray); font-size: 0.8rem;">
+                                                    ${bill.roomNumber || 'No room assigned'}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>${bill.roomNumber || 'N/A'}</td>
+                                    <td>
+                                        <div style="font-weight: 500;">${bill.description || 'Monthly Rent'}</div>
+                                        <small style="color: var(--dark-gray); text-transform: capitalize;">
+                                            ${bill.type || 'rent'} ${bill.isAutoGenerated ? '(Auto-generated)' : '(Manual)'}
+                                        </small>
+                                    </td>
+                                    <td style="font-weight: 600; color: var(--royal-blue);">
+                                        ₱${(bill.totalAmount || 0).toLocaleString()}
+                                    </td>
+                                    <td>
+                                        <div>${new Date(bill.dueDate).toLocaleDateString()}</div>
+                                        ${isOverdue ? `
+                                            <small style="color: var(--danger); font-weight: 500;">
+                                                ${this.getDaysOverdue(bill.dueDate)} days overdue
+                                            </small>
+                                        ` : ''}
+                                    </td>
+                                    <td>
+                                        ${statusBadge}
+                                    </td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            ${bill.status !== 'paid' ? `
+                                                <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); casaLink.recordPaymentModal('${bill.id}')">
+                                                    <i class="fas fa-credit-card"></i> Pay
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewBillDetails('${bill.id}')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            ${bill.status !== 'paid' ? `
+                                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); casaLink.editBill('${bill.id}')">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                            ` : ''}
+                                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); casaLink.deleteBill('${bill.id}')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    updateBillsTable(bills) {
+        const billsList = document.getElementById('billsList');
+        if (!billsList) return;
+        
+        if (bills.length === 0) {
+            billsList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <h3>No Bills Found</h3>
+                    <p>No bills have been created yet. Generate monthly bills or create a custom bill.</p>
+                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="casaLink.forceGenerateBills()">
+                            Generate Monthly Bills
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.showCreateBillForm()">
+                            Create Custom Bill
+                        </button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+        
+        billsList.innerHTML = this.renderBillsTable(bills);
+    }
+
+    async loadBillsData() {
+        try {
+            console.log('🔄 Loading bills data...');
+            const bills = await DataManager.getBillsWithTenants(this.currentUser.uid);
+            this.currentBills = bills;
+            this.updateBillsTable(bills);
+            this.updateBillingStats(bills); // This line is crucial!
+            
+            console.log('✅ Bills data loaded and stats updated');
+        } catch (error) {
+            console.error('Error loading bills:', error);
+            this.showNotification('Failed to load bills', 'error');
+        }
+    }
+
+    updateBillingStats(bills) {
+        console.log('📊 Updating billing stats with:', bills.length, 'bills');
+        
+        const pendingBills = bills.filter(bill => bill.status === 'pending');
+        const overdueBills = bills.filter(bill => 
+            bill.status === 'pending' && new Date(bill.dueDate) < new Date()
+        );
+        const paidThisMonth = bills.filter(bill => {
+            if (bill.status !== 'paid') return false;
+            const paidDate = new Date(bill.paidDate || bill.createdAt);
+            const today = new Date();
+            return paidDate.getMonth() === today.getMonth() && 
+                paidDate.getFullYear() === today.getFullYear();
+        });
+        
+        const monthlyRevenue = paidThisMonth.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+        
+        // Update all the card values
+        this.updateCard('pendingBillsCount', pendingBills.length);
+        this.updateCard('overdueBillsCount', overdueBills.length);
+        this.updateCard('monthlyRevenue', `₱${monthlyRevenue.toLocaleString()}`);
+        this.updateCard('totalBillsCount', bills.length);
+        
+        console.log('✅ Billing stats updated:', {
+            pending: pendingBills.length,
+            overdue: overdueBills.length,
+            revenue: monthlyRevenue,
+            total: bills.length
+        });
+    }
+
     // ===== PAGE CONTENT METHODS =====
-    async getBillingPage() {
+        async getBillingPage() {
+        // Schedule billing status to load after the page renders
+        setTimeout(() => {
+            if (window.casaLink) {
+                window.casaLink.loadBillingStatus();
+            }
+        }, 100);
+        
         return `
         <div class="page-content">
             <div class="page-header">
                 <h1 class="page-title">Billing & Payments</h1>
-                <button class="btn btn-primary" onclick="casaLink.showGenerateBillForm()">
-                    <i class="fas fa-plus"></i> Generate Bill
-                </button>
+                <div>
+                    <button class="btn btn-secondary" onclick="casaLink.forceGenerateBills()" 
+                            title="Manually generate bills for current month">
+                        <i class="fas fa-sync"></i> Generate Bills
+                    </button>
+                    <button class="btn btn-primary" onclick="casaLink.showCreateBillForm()">
+                        <i class="fas fa-plus"></i> Create Bill
+                    </button>
+                    <button class="btn btn-secondary" onclick="casaLink.showBillingSettings()">
+                        <i class="fas fa-cog"></i> Settings
+                    </button>
+                </div>
             </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Billing Management</h3>
-                <p>Generate bills, track payments, and manage tenant billing.</p>
-                <button class="btn btn-primary" onclick="casaLink.showGenerateBillForm()">
-                    Create Your First Bill
-                </button>
+            
+            <!-- Auto-billing status -->
+            <div id="autoBillingStatus">
+                <div class="data-loading">
+                    <i class="fas fa-spinner fa-spin"></i> Loading billing status...
+                </div>
+            </div>
+
+            <!-- Billing Statistics - ALL FOUR CARDS -->
+            <div class="card-group">
+                <!-- Pending Bills Card -->
+                    <div class="card" title="Pending bills count">
+                    
+                    <div class="card-header">
+                        <div class="card-title">Pending Bills</div>
+                        <div class="card-icon unpaid"><i class="fas fa-file-invoice"></i></div>
+                    </div>
+                    <div class="card-value" id="pendingBillsCount">0</div>
+                    <div class="card-subtitle">Unpaid invoices</div>
+                </div>
+                
+                <!-- Overdue Card -->
+                <div class="card" title="Overdue Bills">
+                    <div class="card-header">
+                        <div class="card-title">Overdue</div>
+                        <div class="card-icon late"><i class="fas fa-clock"></i></div>
+                    </div>
+                    <div class="card-value" id="overdueBillsCount">0</div>
+                    <div class="card-subtitle">Past due date</div>
+                </div>
+                
+                <!-- Monthly Revenue Card -->
+                <div class="card" title="Revenue Details">
+                    <div class="card-header">
+                        <div class="card-title">This Month</div>
+                        <div class="card-icon revenue"><i class="fas fa-cash-register"></i></div>
+                    </div>
+                    <div class="card-value" id="monthlyRevenue">₱0</div>
+                    <div class="card-subtitle">Collected revenue</div>
+                </div>
+                
+                <!-- Total Bills Card -->
+                <div class="card" title="All Bills">
+                    <div class="card-header">
+                        <div class="card-title">Total Bills</div>
+                        <div class="card-icon collection"><i class="fas fa-receipt"></i></div>
+                    </div>
+                    <div class="card-value" id="totalBillsCount">0</div>
+                    <div class="card-subtitle">All time</div>
+                </div>
+            </div>
+
+            <!-- Billing Controls -->
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header">
+                    <h3>Bills Management</h3>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <div class="search-box">
+                            <input type="text" id="billSearch" class="form-input" placeholder="Search bills...">
+                        </div>
+                        <select id="billStatusFilter" class="form-input" style="width: auto;">
+                            <option value="all">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="paid">Paid</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('all')">
+                            All Bills
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('pending')">
+                            Pending
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('overdue')">
+                            Overdue
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('paid')">
+                            Paid
+                        </button>
+                        <button class="btn btn-warning" onclick="casaLink.applyLateFeesManually()">
+                            <i class="fas fa-clock"></i> Apply Late Fees
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.exportBills()">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                    <div id="billsList">
+                        <div class="data-loading">
+                            <i class="fas fa-spinner fa-spin"></i> Loading bills...
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         `;
     }
+
+    async getBillingContent() {
+        // This ensures the billing status loads after the page renders
+        setTimeout(() => {
+            if (window.casaLink) {
+                window.casaLink.loadBillingStatus();
+            }
+        }, 100);
+        
+        return `
+            <!-- Billing Statistics -->
+            <div class="card-group">
+                <div class="card" data-clickable="pending-bills" style="cursor: pointer;" title="Click to view pending bills">
+                    <div class="card-header">
+                        <div class="card-title">Pending Bills</div>
+                        <div class="card-icon unpaid"><i class="fas fa-file-invoice"></i></div>
+                    </div>
+                    <div class="card-value" id="pendingBillsCount">0</div>
+                    <div class="card-subtitle">Unpaid invoices</div>
+                </div>
+                
+                <div class="card" data-clickable="overdue-bills" style="cursor: pointer;" title="Click to view overdue bills">
+                    <div class="card-header">
+                        <div class="card-title">Overdue</div>
+                        <div class="card-icon late"><i class="fas fa-clock"></i></div>
+                    </div>
+                    <div class="card-value" id="overdueBillsCount">0</div>
+                    <div class="card-subtitle">Past due date</div>
+                </div>
+                
+                <div class="card" data-clickable="revenue" style="cursor: pointer;" title="Click to view revenue details">
+                    <div class="card-header">
+                        <div class="card-title">This Month</div>
+                        <div class="card-icon revenue"><i class="fas fa-cash-register"></i></div>
+                    </div>
+                    <div class="card-value" id="monthlyRevenue">₱0</div>
+                    <div class="card-subtitle">Collected revenue</div>
+                </div>
+                
+                <div class="card" data-clickable="all-bills" style="cursor: pointer;" title="Click to view all bills">
+                    <div class="card-header">
+                        <div class="card-title">Total Bills</div>
+                        <div class="card-icon collection"><i class="fas fa-receipt"></i></div>
+                    </div>
+                    <div class="card-value" id="totalBillsCount">0</div>
+                    <div class="card-subtitle">All time</div>
+                </div>
+            </div>
+
+            <!-- Billing Controls -->
+            <div class="card" style="margin-top: 20px;">
+                <div class="card-header">
+                    <h3>Bills Management</h3>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <div class="search-box">
+                            <input type="text" id="billSearch" class="form-input" placeholder="Search bills...">
+                        </div>
+                        <select id="billStatusFilter" class="form-input" style="width: auto;">
+                            <option value="all">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="overdue">Overdue</option>
+                            <option value="paid">Paid</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('all')">
+                            All Bills
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('pending')">
+                            Pending
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('overdue')">
+                            Overdue
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.filterBills('paid')">
+                            Paid
+                        </button>
+                        <button class="btn btn-warning" onclick="casaLink.applyLateFeesManually()">
+                            <i class="fas fa-clock"></i> Apply Late Fees
+                        </button>
+                        <button class="btn btn-secondary" onclick="casaLink.exportBills()">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                    </div>
+                    <div id="billsList">
+                        <div class="data-loading">
+                            <i class="fas fa-spinner fa-spin"></i> Loading bills...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
 
     async getMaintenancePage() {
         return `

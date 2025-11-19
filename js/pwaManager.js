@@ -19,48 +19,55 @@ class PWAManager {
     }
 
     static setupInstallPrompt() {
-      console.log('🔧 Setting up install prompt listeners...');
-      
-      window.addEventListener('beforeinstallprompt', (e) => {
-          console.log('🎯 beforeinstallprompt EVENT FIRED!', {
-              platforms: e.platforms,
-              canInstall: true
-          });
+        console.log('🔧 Setting up install prompt listeners...');
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('🎯 beforeinstallprompt EVENT FIRED!', {
+                platforms: e.platforms,
+                canInstall: true
+            });
 
-          
-          // Stash the event so it can be triggered later
-          this.deferredPrompt = e;
-          window.deferredPrompt = e; // Global reference for testing
-          
-          console.log('✅ PWA install prompt is now available');
-          
-          // Update UI to show install button
-          this.updateInstallUI(true);
-          
-          // Store in session storage for page refreshes
-          sessionStorage.setItem('pwa_install_available', 'true');
-          
-          // Auto-show prompt after user engagement
-          setTimeout(() => {
-              if (this.deferredPrompt && !this.isInstalled && !this.userDismissedPrompt()) {
-                  console.log('🔄 Auto-showing install prompt');
-                  this.showPersistentInstallPromotion();
-              }
-          }, 3000);
-      });
+            // Prevent the mini-infobar from appearing
+            e.preventDefault();
+            
+            // Stash the event so it can be triggered later
+            this.deferredPrompt = e;
+            window.deferredPrompt = e;
+            
+            console.log('✅ PWA install prompt is now available');
+            
+            // Update UI to show install button
+            this.updateInstallUI(true);
+            
+            // Store in session storage for page refreshes
+            sessionStorage.setItem('pwa_install_available', 'true');
+            
+            // Show prompt after user engagement
+            this.showInstallPromptIfEligible();
+        });
 
-      window.addEventListener('appinstalled', (e) => {
-          console.log('🎉 PWA was installed successfully');
-          this.handleSuccessfulInstallation();
-          sessionStorage.removeItem('pwa_install_available');
-      });
-      
-      // Check if we already have install capability from previous page load
-      if (sessionStorage.getItem('pwa_install_available') === 'true') {
-          console.log('🔄 Install capability persisted from previous page load');
-          this.updateInstallUI(true);
-      }
-  }
+        window.addEventListener('appinstalled', (e) => {
+            console.log('🎉 PWA was installed successfully');
+            this.handleSuccessfulInstallation();
+            sessionStorage.removeItem('pwa_install_available');
+        });
+        
+        // Check if we already have install capability from previous page load
+        if (sessionStorage.getItem('pwa_install_available') === 'true') {
+            console.log('🔄 Install capability persisted from previous page load');
+            this.updateInstallUI(true);
+        }
+    }
+
+    static async showInstallPromptIfEligible() {
+        // Wait a bit for the service worker to be ready
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        if (this.deferredPrompt && !this.isInstalled && !this.userDismissedPrompt()) {
+            console.log('🎯 Showing install prompt automatically');
+            this.showPersistentInstallPromotion();
+        }
+    }
 
     static async showInstallPromptIfEligible() {
         if (this.deferredPrompt && !this.isInstalled && !this.userDismissedPrompt()) {
@@ -162,14 +169,21 @@ class PWAManager {
         const isInstalled = 
             window.matchMedia('(display-mode: standalone)').matches ||
             window.navigator.standalone ||
+            document.referrer.includes('android-app://') ||
             this.getInstallationStatus();
         
         this.isInstalled = isInstalled;
-        console.log('📱 PWA installation status:', this.isInstalled ? 'Installed' : 'Not installed');
+        console.log('📱 PWA installation status:', this.isInstalled ? 'Installed' : 'Not installed', {
+            displayMode: this.getDisplayMode(),
+            standalone: window.navigator.standalone,
+            referrer: document.referrer
+        });
         
         if (this.isInstalled) {
             this.hideInstallPromotion();
         }
+        
+        return this.isInstalled;
     }
 
     static setupUserEngagement() {
@@ -192,78 +206,58 @@ class PWAManager {
   }
 
     static async registerServiceWorker() {
-      if ('serviceWorker' in navigator) {
-          try {
-              console.log('🔄 Registering Service Worker...');
-              
-              // First, unregister any existing service workers
-              const registrations = await navigator.serviceWorker.getRegistrations();
-              for (let registration of registrations) {
-                  await registration.unregister();
-                  console.log('🗑️ Unregistered old service worker:', registration.scope);
-              }
-              
-              // Clear all caches
-              const cacheNames = await caches.keys();
-              for (let cacheName of cacheNames) {
-                  await caches.delete(cacheName);
-                  console.log('🗑️ Deleted cache:', cacheName);
-              }
-              
-              // Wait for cleanup
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              
-              // Register with proper scope and immediate activation
-              const registration = await navigator.serviceWorker.register('/sw.js', {
-                  scope: '/',
-                  updateViaCache: 'none'
-              });
-              
-              console.log('✅ ServiceWorker registered:', registration.scope);
-              
-              // Force immediate activation
-              if (registration.installing) {
-                  console.log('⚡ Service Worker installing...');
-                  
-                  // Wait for installation to complete
-                  await new Promise((resolve, reject) => {
-                      const worker = registration.installing;
-                      
-                      worker.addEventListener('statechange', () => {
-                          console.log('🔄 Service Worker state:', worker.state);
-                          
-                          if (worker.state === 'activated') {
-                              console.log('🎯 Service Worker activated!');
-                              resolve();
-                          } else if (worker.state === 'redundant') {
-                              reject(new Error('Service Worker became redundant'));
-                          }
-                      });
-                  });
-              }
-              
-              // Force the service worker to take control immediately
-              if (registration.active) {
-                  console.log('🚀 Forcing Service Worker to take control...');
-                  await registration.update();
-              }
-              
-              // Send a message to skip waiting and activate
-              if (registration.waiting) {
-                  registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-              }
-              
-              console.log('✅ Service Worker registration complete');
-              return registration;
-              
-          } catch (error) {
-              console.error('❌ ServiceWorker registration failed:', error);
-              return null;
-          }
-      }
-      console.warn('⚠️ Service workers not supported');
-      return null;
-  }
+        if ('serviceWorker' in navigator) {
+            try {
+                console.log('🔄 Registering Service Worker...');
+                
+                // Only unregister if there are issues
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                let shouldUnregister = false;
+                
+                for (let registration of registrations) {
+                    // Only unregister if it's not our current service worker
+                    if (!registration.active || registration.scope !== window.location.origin + '/') {
+                        await registration.unregister();
+                        console.log('🗑️ Unregistered old service worker:', registration.scope);
+                        shouldUnregister = true;
+                    }
+                }
+                
+                // Wait briefly if we unregistered anything
+                if (shouldUnregister) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+                // Register the service worker
+                const registration = await navigator.serviceWorker.register('/sw.js', {
+                    scope: '/',
+                    updateViaCache: 'none'
+                });
+                
+                console.log('✅ ServiceWorker registered:', registration.scope);
+                
+                // Wait for activation
+                if (registration.installing) {
+                    await new Promise((resolve) => {
+                        registration.installing.addEventListener('statechange', () => {
+                            if (registration.installing.state === 'activated') {
+                                console.log('🎯 Service Worker activated!');
+                                resolve();
+                            }
+                        });
+                    });
+                }
+                
+                return registration;
+                
+            } catch (error) {
+                console.error('❌ ServiceWorker registration failed:', error);
+                return null;
+            }
+        }
+        console.warn('⚠️ Service workers not supported');
+        return null;
+    }
 
     static setupOfflineDetection() {
         window.addEventListener('online', () => {
