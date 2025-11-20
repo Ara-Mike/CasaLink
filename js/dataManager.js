@@ -135,6 +135,205 @@ class DataManager {
         }
     }
 
+    static async createMaintenanceRequest(requestData) {
+        try {
+            console.log('🔧 Creating maintenance request:', requestData);
+            
+            const requestRef = await firebaseDb.collection('maintenance').add({
+                ...requestData,
+                status: 'open',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            });
+
+            console.log('✅ Maintenance request created:', requestRef.id);
+            return requestRef.id;
+        } catch (error) {
+            console.error('❌ Error creating maintenance request:', error);
+            throw error;
+        }
+    }
+
+    static async getMaintenanceRequests(landlordId, filters = {}) {
+        try {
+            let query = firebaseDb.collection('maintenance')
+                .where('landlordId', '==', landlordId)
+                .orderBy('createdAt', 'desc');
+
+            // Apply filters
+            if (filters.status) {
+                query = query.where('status', '==', filters.status);
+            }
+            if (filters.priority) {
+                query = query.where('priority', '==', filters.priority);
+            }
+            if (filters.type) {
+                query = query.where('type', '==', filters.type);
+            }
+
+            const snapshot = await query.get();
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting maintenance requests:', error);
+            return [];
+        }
+    }
+
+    static async getMaintenanceRequest(requestId) {
+        try {
+            const requestDoc = await firebaseDb.collection('maintenance').doc(requestId).get();
+            if (requestDoc.exists) {
+                return { id: requestDoc.id, ...requestDoc.data() };
+            }
+            return null;
+        } catch (error) {
+            console.error('❌ Error getting maintenance request:', error);
+            throw error;
+        }
+    }
+
+    static async updateMaintenanceRequest(requestId, updates) {
+        try {
+            updates.updatedAt = new Date().toISOString();
+            await firebaseDb.collection('maintenance').doc(requestId).update(updates);
+            console.log('✅ Maintenance request updated:', requestId);
+            return true;
+        } catch (error) {
+            console.error('❌ Error updating maintenance request:', error);
+            throw error;
+        }
+    }
+
+    static async getMaintenancePriorities() {
+        return [
+            { id: 'low', name: 'Low', color: 'var(--success)', icon: 'fas fa-arrow-down' },
+            { id: 'medium', name: 'Medium', color: 'var(--warning)', icon: 'fas fa-minus' },
+            { id: 'high', name: 'High', color: 'var(--danger)', icon: 'fas fa-arrow-up' },
+            { id: 'emergency', name: 'Emergency', color: 'var(--danger)', icon: 'fas fa-exclamation-triangle' }
+        ];
+    }
+
+    static async getMaintenanceTypes() {
+        return [
+            { id: 'general', name: 'General Maintenance', icon: 'fas fa-tools' },
+            { id: 'plumbing', name: 'Plumbing', icon: 'fas fa-faucet' },
+            { id: 'electrical', name: 'Electrical', icon: 'fas fa-bolt' },
+            { id: 'hvac', name: 'HVAC', icon: 'fas fa-wind' },
+            { id: 'appliance', name: 'Appliance', icon: 'fas fa-blender' },
+            { id: 'structural', name: 'Structural', icon: 'fas fa-home' },
+            { id: 'pest_control', name: 'Pest Control', icon: 'fas fa-bug' },
+            { id: 'other', name: 'Other', icon: 'fas fa-question-circle' }
+        ];
+    }
+
+    static async getMaintenanceStats(landlordId) {
+        try {
+            const requests = await this.getMaintenanceRequests(landlordId);
+            
+            const now = new Date();
+            const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+            
+            return {
+                total: requests.length,
+                open: requests.filter(r => r.status === 'open').length,
+                inProgress: requests.filter(r => r.status === 'in-progress').length,
+                completed: requests.filter(r => r.status === 'completed').length,
+                highPriority: requests.filter(r => r.priority === 'high' || r.priority === 'emergency').length,
+                recent: requests.filter(r => new Date(r.createdAt) > thirtyDaysAgo).length,
+                byType: this.groupBy(requests, 'type'),
+                byStatus: this.groupBy(requests, 'status')
+            };
+        } catch (error) {
+            console.error('Error getting maintenance stats:', error);
+            return {};
+        }
+    }
+
+    static async addMaintenanceStaff(staffData) {
+        try {
+            const staffWithMeta = {
+                ...staffData,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            const docRef = await firebaseDb.collection('maintenanceStaff').add(staffWithMeta);
+            console.log('✅ Maintenance staff added:', docRef.id);
+            return docRef.id;
+        } catch (error) {
+            console.error('Error adding maintenance staff:', error);
+            throw error;
+        }
+    }
+
+    static async getMaintenanceStaff(landlordId) {
+        try {
+            const snapshot = await firebaseDb.collection('maintenanceStaff')
+                .where('landlordId', '==', landlordId)
+                .where('isActive', '==', true)
+                .get();
+
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting maintenance staff:', error);
+            return [];
+        }
+    }
+
+    // Helper method
+    static groupBy(array, key) {
+        return array.reduce((groups, item) => {
+            const val = item[key];
+            groups[val] = groups[val] || [];
+            groups[val].push(item);
+            return groups;
+        }, {});
+    }
+
+    static maintenanceRequestSchema = {
+        id: '', // Firestore document ID
+        title: '',
+        description: '',
+        type: 'general', // general, plumbing, electrical, hvac, appliance, structural, pest_control, other
+        priority: 'medium', // low, medium, high, emergency
+        status: 'open', // open, in-progress, pending_parts, completed, cancelled
+        tenantId: '',
+        tenantName: '',
+        landlordId: '',
+        roomNumber: '',
+        images: [], // Array of image URLs
+        createdAt: '',
+        updatedAt: '',
+        assignedTo: '', // Staff/contractor ID
+        assignedName: '', // Staff/contractor name
+        scheduledDate: '', // For scheduled maintenance
+        completedDate: '',
+        costEstimate: 0,
+        actualCost: 0,
+        tenantNotes: '',
+        internalNotes: '',
+        resolutionNotes: ''
+    };
+
+    static maintenanceStaffSchema = {
+        id: '',
+        name: '',
+        email: '',
+        phone: '',
+        type: 'internal', // internal, external_contractor
+        specialty: 'general', // general, plumbing, electrical, etc.
+        hourlyRate: 0,
+        isActive: true,
+        createdAt: '',
+        landlordId: ''
+    };
+
     static async createDefaultBillingSettings() {
         const defaultSettings = {
             autoBillingEnabled: true,

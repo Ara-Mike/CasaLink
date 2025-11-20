@@ -839,9 +839,10 @@ header {
     color: var(--royal-blue);
 }
 
-/* Table Container */
 .table-section {
-    padding: 0 25px 25px;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Payment Method Badges */
@@ -896,11 +897,7 @@ header {
 }
 
 .table-container {
-    overflow-x: auto;
-    margin-top: 20px;
-    background: white;
-    border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
+    flex: 1;
 }
 
 .tenants-table {
@@ -1515,9 +1512,6 @@ header {
         justify-content: center;
     }
     
-    .table-section {
-        padding: 0 15px 15px;
-    }
 
     /* Mobile PWA prompt */
     .pwa-install-prompt {
@@ -1750,6 +1744,229 @@ header {
 .view-switch-button.active .view-switch-badge {
     background: var(--royal-blue);
     color: white;
+}
+
+/* Maintenance Specific Styles */
+.maintenance-details-modal {
+    line-height: 1.6;
+}
+
+.payment-methods-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.payment-method-option {
+    border: 2px solid #e9ecef;
+    border-radius: var(--border-radius);
+    padding: 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: var(--transition);
+    background: white;
+}
+
+.payment-method-option:hover {
+    border-color: var(--royal-blue);
+    transform: translateY(-2px);
+}
+
+.payment-method-option.selected {
+    border-color: var(--royal-blue);
+    background-color: rgba(22, 38, 96, 0.05);
+}
+
+.payment-method-option i {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+    color: var(--royal-blue);
+}
+
+/* Maintenance Priority Colors */
+.priority-low { color: var(--success); }
+.priority-medium { color: var(--warning); }
+.priority-high { color: var(--danger); }
+.priority-emergency { color: var(--danger); }
+
+/* Maintenance Status Colors */
+.status-open { color: var(--warning); }
+.status-in-progress { color: var(--info); }
+.status-pending_parts { color: var(--warning); }
+.status-completed { color: var(--success); }
+.status-cancelled { color: var(--dark-gray); }
+
+/* Maintenance Table Improvements */
+.maintenance-row {
+    transition: var(--transition);
+}
+
+.maintenance-row:hover {
+    background-color: rgba(22, 38, 96, 0.03);
+}
+
+/* Quick Action Buttons */
+.quick-actions-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+/* Maintenance Stats Cards */
+.maintenance-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 25px;
+}
+
+/* File Upload Improvements */
+.form-input[type="file"] {
+    padding: 10px;
+    border: 2px dashed #ddd;
+    background: #fafafa;
+    transition: var(--transition);
+}
+
+.form-input[type="file"]:hover {
+    border-color: var(--royal-blue);
+    background: white;
+}
+
+/* Maintenance Schedule Styles */
+.schedule-timeline {
+    border-left: 3px solid var(--royal-blue);
+    margin-left: 20px;
+    padding-left: 20px;
+}
+
+.schedule-item {
+    position: relative;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: var(--box-shadow);
+}
+
+.schedule-item::before {
+    content: '';
+    position: absolute;
+    left: -26px;
+    top: 20px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--royal-blue);
+    border: 2px solid white;
+}
+
+/* Pagination Styles */
+.pagination-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.pagination-info {
+    font-size: 0.9rem;
+    color: var(--dark-gray);
+    font-weight: 500;
+    flex: 1;
+    min-width: 200px;
+}
+
+.pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+.pagination-numbers {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.pagination-numbers .btn {
+    min-width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    font-weight: 500;
+}
+
+.pagination-numbers .btn.btn-primary {
+    background: var(--royal-blue);
+    border-color: var(--royal-blue);
+}
+
+/* Responsive pagination */
+@media (max-width: 768px) {
+    .pagination-container {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .pagination-info {
+        min-width: auto;
+    }
+    
+    .pagination-controls {
+        justify-content: center;
+    }
+    
+    .pagination-numbers .btn {
+        min-width: 35px;
+        height: 35px;
+        font-size: 0.8rem;
+    }
+}
+
+
+/* Responsive Maintenance Table */
+@media (max-width: 768px) {
+    .maintenance-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .quick-actions-bar {
+        flex-direction: column;
+    }
+    
+    .quick-actions-bar .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .payment-methods-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Print Styles for Maintenance Reports */
+@media print {
+    .maintenance-details-modal {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    
+    .btn, .quick-actions-bar {
+        display: none !important;
+    }
 }
 
 .billing-view-content {

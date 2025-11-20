@@ -14,6 +14,21 @@ class CasaLink {
         this.creatingTenant = false;
         this.currentPage = this.getStoredPage() || 'dashboard';
         this.appInitialized = false;
+        this.billsCurrentPage = 1;
+        this.billsItemsPerPage = 10;
+        this.billsTotalPages = 1;
+        this.billsAllData = [];
+        this.billsFilteredData = [];
+        this.paymentsCurrentPage = 1;
+        this.paymentsItemsPerPage = 10;
+        this.paymentsTotalPages = 1;
+        this.paymentsAllData = [];
+        this.paymentsFilteredData = [];
+        this.tenantsCurrentPage = 1;
+        this.tenantsItemsPerPage = 10;
+        this.tenantsTotalPages = 1;
+        this.tenantsAllData = [];
+        this.tenantsFilteredData = [];
         
         // 🔥 ADD BILLING VIEW TRACKING
         this.currentBillingView = 'bills'; // Default to Bills Management
@@ -1485,13 +1500,12 @@ class CasaLink {
                 this.setupTenantsPage();
                 break;
             case 'maintenance':
-                this.setupMaintenancePage();
+                this.setupMaintenancePage(); // ADD THIS LINE
                 break;
             case 'payments':
                 // Redirect to billing tab and switch to payments tab
                 console.log('🔄 Redirecting from payments page to billing tab...');
                 this.showPage('billing');
-                // Small delay to ensure billing page is loaded before switching tab
                 setTimeout(() => {
                     this.switchBillingTab('payments');
                 }, 300);
@@ -1499,7 +1513,7 @@ class CasaLink {
         }
     }
 
-    async setupTenantsPage() {
+    setupTenantsPage() {
         // Add tenant button
         document.getElementById('addTenantBtn')?.addEventListener('click', () => {
             this.showAddTenantForm();
@@ -1510,8 +1524,11 @@ class CasaLink {
             this.filterTenants(e.target.value);
         });
 
-        // Load tenants data
-        await this.loadTenantsData();
+        // Setup row click handlers
+        this.setupTenantRowClickHandlers();
+
+        // Load tenants data with pagination
+        this.loadTenantsData();
     }
 
     async loadTenantsData() {
@@ -1531,7 +1548,7 @@ class CasaLink {
                 </div>
             `;
 
-            // Fetch tenants from Firestore where role is 'tenant' and landlordId matches current user
+            // Fetch tenants from Firestore
             const tenants = await DataManager.getTenants(this.currentUser.uid);
             
             console.log('Raw tenants data:', tenants);
@@ -1594,19 +1611,16 @@ class CasaLink {
                 })
             );
             
-            console.log('Tenants fetched with lease data:', tenantsWithLeaseData);
+            // Set up pagination data
+            this.tenantsAllData = tenantsWithLeaseData;
+            this.tenantsFilteredData = [...tenantsWithLeaseData];
+            this.tenantsCurrentPage = 1;
+            this.tenantsTotalPages = Math.ceil(tenantsWithLeaseData.length / this.tenantsItemsPerPage);
             
-            if (tenantsWithLeaseData.length === 0) {
-                tenantsList.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fas fa-users"></i>
-                        <h3>No Tenants Found</h3>
-                        <p>You haven't added any tenants yet. Click "Add Tenant" to get started.</p>
-                    </div>
-                `;
-            } else {
-                tenantsList.innerHTML = this.renderTenantsTable(tenantsWithLeaseData);
-            }
+            this.updateTenantsTable(this.getCurrentTenantsPage());
+            this.setupTenantsPagination();
+            
+            console.log('✅ Tenants data loaded with pagination:', tenantsWithLeaseData.length, 'tenants');
 
         } catch (error) {
             console.error('Error loading tenants:', error);
@@ -1622,6 +1636,113 @@ class CasaLink {
                 `;
             }
         }
+    }
+
+    getCurrentTenantsPage() {
+        const startIndex = (this.tenantsCurrentPage - 1) * this.tenantsItemsPerPage;
+        const endIndex = startIndex + this.tenantsItemsPerPage;
+        return this.tenantsFilteredData.slice(startIndex, endIndex);
+    }
+
+    updateTenantsPaginationInfo() {
+        const infoElement = document.getElementById('tenantsPaginationInfo');
+        if (infoElement) {
+            const startItem = (this.tenantsCurrentPage - 1) * this.tenantsItemsPerPage + 1;
+            const endItem = Math.min(this.tenantsCurrentPage * this.tenantsItemsPerPage, this.tenantsFilteredData.length);
+            infoElement.textContent = `Showing ${startItem}-${endItem} of ${this.tenantsFilteredData.length} tenants`;
+        }
+    }
+
+    getEmptyTenantsState() {
+        return `
+            <div class="empty-state">
+                <i class="fas fa-users"></i>
+                <h3>No Tenants Found</h3>
+                <p>You haven't added any tenants yet. Click "Add Tenant" to get started.</p>
+            </div>
+        `;
+    }
+
+    updateTenantsTable(tenants) {
+        const tenantsList = document.getElementById('tenantsList');
+        if (!tenantsList) return;
+        
+        if (tenants.length === 0) {
+            tenantsList.innerHTML = this.getEmptyTenantsState();
+            const paginationContainer = document.getElementById('tenantsPagination');
+            if (paginationContainer) paginationContainer.style.display = 'none';
+            return;
+        }
+        
+        tenantsList.innerHTML = this.renderTenantsTable(tenants);
+        this.updateTenantsPaginationInfo();
+    }
+
+    setupTenantsPagination() {
+        const paginationContainer = document.getElementById('tenantsPagination');
+        if (!paginationContainer) return;
+        
+        // Show pagination if we have multiple pages
+        if (this.tenantsTotalPages > 1) {
+            paginationContainer.style.display = 'flex';
+            this.updateTenantsPaginationControls();
+        } else {
+            paginationContainer.style.display = 'none';
+        }
+        
+        // Event listeners for pagination buttons
+        const prevButton = document.getElementById('tenantsPrevPage');
+        const nextButton = document.getElementById('tenantsNextPage');
+        
+        if (prevButton) {
+            prevButton.onclick = () => {
+                if (this.tenantsCurrentPage > 1) {
+                    this.tenantsCurrentPage--;
+                    this.updateTenantsTable(this.getCurrentTenantsPage());
+                    this.updateTenantsPaginationControls();
+                }
+            };
+        }
+        
+        if (nextButton) {
+            nextButton.onclick = () => {
+                if (this.tenantsCurrentPage < this.tenantsTotalPages) {
+                    this.tenantsCurrentPage++;
+                    this.updateTenantsTable(this.getCurrentTenantsPage());
+                    this.updateTenantsPaginationControls();
+                }
+            };
+        }
+    }
+
+    updateTenantsPaginationControls() {
+        const pageNumbers = document.getElementById('tenantsPageNumbers');
+        if (!pageNumbers) return;
+        
+        pageNumbers.innerHTML = '';
+        
+        // Show page numbers (max 5 pages)
+        const startPage = Math.max(1, this.tenantsCurrentPage - 2);
+        const endPage = Math.min(this.tenantsTotalPages, startPage + 4);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = `btn btn-sm ${i === this.tenantsCurrentPage ? 'btn-primary' : 'btn-secondary'}`;
+            pageButton.textContent = i;
+            pageButton.onclick = () => {
+                this.tenantsCurrentPage = i;
+                this.updateTenantsTable(this.getCurrentTenantsPage());
+                this.updateTenantsPaginationControls();
+            };
+            pageNumbers.appendChild(pageButton);
+        }
+        
+        // Update button states
+        const prevButton = document.getElementById('tenantsPrevPage');
+        const nextButton = document.getElementById('tenantsNextPage');
+        
+        if (prevButton) prevButton.disabled = this.tenantsCurrentPage === 1;
+        if (nextButton) nextButton.disabled = this.tenantsCurrentPage === this.tenantsTotalPages;
     }
 
 
@@ -1968,19 +2089,1512 @@ class CasaLink {
         `;
     }
 
-    setupMaintenancePage() {
-        // Assign staff button
-        document.getElementById('assignStaffBtn')?.addEventListener('click', () => {
-            this.showAssignStaffForm();
+    async showTenantMaintenanceRequestForm() {
+        const modalContent = `
+            <div class="tenant-maintenance-form">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <i class="fas fa-tools" style="font-size: 3rem; color: var(--royal-blue); margin-bottom: 15px;"></i>
+                    <h3 style="margin-bottom: 10px;">Submit Maintenance Request</h3>
+                    <p>Let us know what needs fixing in your unit</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Issue Type *</label>
+                    <select id="tenantIssueType" class="form-input" required>
+                        <option value="">What type of issue is this?</option>
+                        <option value="plumbing">Plumbing (leaks, clogged drains)</option>
+                        <option value="electrical">Electrical (outlets, lights)</option>
+                        <option value="appliance">Appliance Repair</option>
+                        <option value="hvac">Heating/Cooling</option>
+                        <option value="general">General Repair</option>
+                        <option value="pest_control">Pest Control</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Urgency *</label>
+                    <select id="tenantUrgency" class="form-input" required>
+                        <option value="">How urgent is this?</option>
+                        <option value="low">Low - Can wait a few days</option>
+                        <option value="medium">Medium - Should be fixed soon</option>
+                        <option value="high">High - Needs attention within 24 hours</option>
+                        <option value="emergency">Emergency - Immediate attention required</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Description *</label>
+                    <textarea id="tenantIssueDescription" class="form-input" 
+                        placeholder="Please describe the issue in detail. Include location, what happens, when it started, etc."
+                        rows="4" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Best Time for Access</label>
+                    <select id="tenantAccessTime" class="form-input">
+                        <option value="">When can maintenance access your unit?</option>
+                        <option value="morning">Morning (8AM-12PM)</option>
+                        <option value="afternoon">Afternoon (12PM-5PM)</option>
+                        <option value="evening">Evening (5PM-8PM)</option>
+                        <option value="anytime">Anytime</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Upload Photos (Optional)</label>
+                    <input type="file" id="tenantIssuePhotos" class="form-input" 
+                        accept="image/*" multiple>
+                    <small style="color: var(--dark-gray);">Photos help us understand the issue better</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Contact Preference</label>
+                    <select id="tenantContactPref" class="form-input">
+                        <option value="call">Call me</option>
+                        <option value="text">Text me</option>
+                        <option value="email">Email me</option>
+                        <option value="any">Any method</option>
+                    </select>
+                </div>
+
+                <div id="tenantMaintenanceError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+            title: 'Submit Maintenance Request',
+            submitText: 'Submit Request',
+            onSubmit: () => this.submitTenantMaintenanceRequest()
         });
     }
 
-    filterTenants(searchTerm) {
-        const rows = document.querySelectorAll('.tenants-table tbody tr');
+    async submitTenantMaintenanceRequest() {
+        try {
+            const requestData = {
+                tenantId: this.currentUser.uid,
+                tenantName: this.currentUser.name,
+                roomNumber: this.currentUser.roomNumber,
+                landlordId: this.currentUser.landlordId,
+                type: document.getElementById('tenantIssueType').value,
+                priority: document.getElementById('tenantUrgency').value,
+                title: `Maintenance Request - ${this.currentUser.roomNumber}`,
+                description: document.getElementById('tenantIssueDescription').value,
+                accessInstructions: document.getElementById('tenantAccessTime').value,
+                contactPreference: document.getElementById('tenantContactPref').value,
+                status: 'open',
+                createdBy: this.currentUser.uid,
+                createdByName: this.currentUser.name
+            };
+
+            // Validation
+            if (!requestData.type || !requestData.priority || !requestData.description) {
+                this.showTenantMaintenanceError('Please fill in all required fields');
+                return;
+            }
+
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+                submitBtn.disabled = true;
+            }
+
+            await DataManager.createMaintenanceRequest(requestData);
+            
+            ModalManager.closeModal(document.querySelector('.modal-overlay'));
+            this.showNotification('Maintenance request submitted successfully!', 'success');
+
+            // Refresh tenant maintenance page if open
+            if (this.currentPage === 'tenantMaintenance') {
+                setTimeout(() => {
+                    this.showPage('tenantMaintenance');
+                }, 1000);
+            }
+
+        } catch (error) {
+            console.error('Error submitting tenant maintenance request:', error);
+            this.showTenantMaintenanceError('Failed to submit request: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Submit Request';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    setupMaintenanceRealTimeListeners() {
+        if (this.maintenanceListener) {
+            this.maintenanceListener(); // Remove existing listener
+        }
+        
+        this.maintenanceListener = firebaseDb.collection('maintenance')
+            .where('landlordId', '==', this.currentUser.uid)
+            .onSnapshot((snapshot) => {
+                console.log('🔄 Real-time maintenance update received');
+                this.loadMaintenanceData();
+                this.loadMaintenanceStats();
+            }, (error) => {
+                console.error('❌ Maintenance real-time listener error:', error);
+            });
+    }
+
+    async setupMaintenancePage() {
+        try {
+            console.log('🔄 Setting up maintenance page with enhanced features...');
+            
+            // Load initial data
+            await this.loadMaintenanceData();
+            await this.loadMaintenanceStats();
+            
+            // Setup event listeners
+            this.setupMaintenanceEventListeners();
+            
+            // Setup real-time listeners
+            this.setupMaintenanceRealTimeListeners();
+            
+            console.log('✅ Maintenance page setup complete with real-time updates');
+        } catch (error) {
+            console.error('Error setting up maintenance page:', error);
+            this.showNotification('Failed to load maintenance data', 'error');
+        }
+    }
+
+    updateMaintenanceStats(stats) {
+        this.updateCard('openMaintenanceCount', stats.open || 0);
+        this.updateCard('highPriorityCount', stats.highPriority || 0);
+        this.updateCard('inProgressCount', stats.inProgress || 0);
+        this.updateCard('completedCount', stats.completed || 0);
+    }
+
+    async loadMaintenanceStats() {
+        try {
+            console.log('📊 Loading maintenance stats...');
+            const stats = await DataManager.getMaintenanceStats(this.currentUser.uid);
+            this.updateMaintenanceStats(stats);
+            
+            console.log('✅ Maintenance stats loaded:', stats);
+        } catch (error) {
+            console.error('Error loading maintenance stats:', error);
+        }
+    }
+
+    async loadMaintenanceData() {
+        try {
+            console.log('🔄 Loading maintenance data...');
+            const requests = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+            this.currentMaintenanceRequests = requests;
+            this.updateMaintenanceTable(requests);
+            
+            console.log('✅ Maintenance data loaded:', requests.length, 'requests');
+        } catch (error) {
+            console.error('Error loading maintenance data:', error);
+            this.showNotification('Failed to load maintenance requests', 'error');
+        }
+    }
+
+    updateMaintenanceTable(requests) {
+        const maintenanceList = document.getElementById('maintenanceList');
+        if (!maintenanceList) return;
+        
+        if (requests.length === 0) {
+            maintenanceList.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-tools"></i>
+                    <h3>No Maintenance Requests</h3>
+                    <p>No maintenance requests found. Create your first request to get started.</p>
+                    <button class="btn btn-primary" onclick="casaLink.showCreateMaintenanceForm()">
+                        <i class="fas fa-plus"></i> Create First Request
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        maintenanceList.innerHTML = this.renderMaintenanceTable(requests);
+    }
+
+    getPriorityBadge(priority) {
+        const priorityConfig = {
+            low: { class: 'active', text: 'Low' },
+            medium: { class: 'warning', text: 'Medium' },
+            high: { class: 'danger', text: 'High' },
+            emergency: { class: 'danger', text: 'Emergency' }
+        };
+        
+        const config = priorityConfig[priority] || priorityConfig.medium;
+        return `<span class="status-badge ${config.class}">${config.text}</span>`;
+    }
+
+    getStatusBadge(status) {
+        const statusConfig = {
+            open: { class: 'warning', text: 'Open' },
+            'in-progress': { class: 'info', text: 'In Progress' },
+            pending_parts: { class: 'warning', text: 'Pending Parts' },
+            completed: { class: 'active', text: 'Completed' },
+            cancelled: { class: 'inactive', text: 'Cancelled' }
+        };
+        
+        const config = statusConfig[status] || statusConfig.open;
+        return `<span class="status-badge ${config.class}">${config.text}</span>`;
+    }
+
+    setupMaintenanceEventListeners() {
+        // Search functionality
+        document.getElementById('maintenanceSearch')?.addEventListener('input', (e) => {
+            this.searchMaintenance(e.target.value);
+        });
+        
+        // Filter functionality
+        document.getElementById('statusFilter')?.addEventListener('change', (e) => {
+            this.filterMaintenanceByStatus(e.target.value);
+        });
+        
+        document.getElementById('priorityFilter')?.addEventListener('change', (e) => {
+            this.filterMaintenanceByPriority(e.target.value);
+        });
+        
+        document.getElementById('typeFilter')?.addEventListener('change', (e) => {
+            this.filterMaintenanceByType(e.target.value);
+        });
+        
+        // Row click handlers
+        this.setupMaintenanceRowClickHandlers();
+    }
+
+    async showCreateMaintenanceForm() {
+        try {
+            const tenants = await DataManager.getTenants(this.currentUser.uid);
+            const maintenanceTypes = await DataManager.getMaintenanceTypes();
+            const priorities = await DataManager.getMaintenancePriorities();
+
+            const tenantOptions = tenants.map(tenant => `
+                <option value="${tenant.id}" data-room="${tenant.roomNumber}">
+                    ${tenant.name} - ${tenant.roomNumber}
+                </option>
+            `).join('');
+
+            const typeOptions = maintenanceTypes.map(type => `
+                <option value="${type.id}">${type.name}</option>
+            `).join('');
+
+            const priorityOptions = priorities.map(priority => `
+                <option value="${priority.id}">${priority.name}</option>
+            `).join('');
+
+            const modalContent = `
+                <div class="create-maintenance-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-tools" style="font-size: 3rem; color: var(--royal-blue); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Create Maintenance Request</h3>
+                        <p>Submit a new maintenance request for a tenant</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Tenant *</label>
+                        <select id="maintenanceTenant" class="form-input" required>
+                            <option value="">Select a tenant</option>
+                            ${tenantOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Request Type *</label>
+                        <select id="maintenanceType" class="form-input" required>
+                            <option value="">Select type</option>
+                            ${typeOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Priority *</label>
+                        <select id="maintenancePriority" class="form-input" required>
+                            <option value="">Select priority</option>
+                            ${priorityOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Title *</label>
+                        <input type="text" id="maintenanceTitle" class="form-input" 
+                            placeholder="Brief description of the issue" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Detailed Description *</label>
+                        <textarea id="maintenanceDescription" class="form-input" 
+                            placeholder="Please provide detailed information about the maintenance issue..."
+                            rows="4" required></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Estimated Cost (₱)</label>
+                        <input type="number" id="maintenanceCost" class="form-input" 
+                            placeholder="0" min="0" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Preferred Date</label>
+                        <input type="date" id="maintenancePreferredDate" class="form-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Upload Photos (Optional)</label>
+                        <input type="file" id="maintenancePhotos" class="form-input" 
+                            accept="image/*" multiple>
+                        <small style="color: var(--dark-gray);">You can upload multiple photos</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Special Instructions</label>
+                        <textarea id="maintenanceInstructions" class="form-input" 
+                            placeholder="Any special instructions for maintenance staff..."
+                            rows="3"></textarea>
+                    </div>
+
+                    <div id="maintenanceCreateError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Create Maintenance Request',
+                submitText: 'Create Request',
+                onSubmit: () => this.createMaintenanceRequest()
+            });
+
+            this.createMaintenanceModal = modal;
+
+        } catch (error) {
+            console.error('Error showing maintenance form:', error);
+            this.showNotification('Failed to load maintenance form', 'error');
+        }
+    }
+
+    async updateMaintenanceRequest(requestId) {
+        try {
+            const request = await DataManager.getMaintenanceRequest(requestId);
+            if (!request) {
+                this.showNotification('Maintenance request not found', 'error');
+                return;
+            }
+
+            const statuses = [
+                { id: 'open', name: 'Open' },
+                { id: 'in-progress', name: 'In Progress' },
+                { id: 'pending_parts', name: 'Pending Parts' },
+                { id: 'completed', name: 'Completed' },
+                { id: 'cancelled', name: 'Cancelled' }
+            ];
+
+            const priorities = await DataManager.getMaintenancePriorities();
+
+            const statusOptions = statuses.map(status => `
+                <option value="${status.id}" ${request.status === status.id ? 'selected' : ''}>
+                    ${status.name}
+                </option>
+            `).join('');
+
+            const priorityOptions = priorities.map(priority => `
+                <option value="${priority.id}" ${request.priority === priority.id ? 'selected' : ''}>
+                    ${priority.name}
+                </option>
+            `).join('');
+
+            const modalContent = `
+                <div class="update-maintenance-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-edit" style="font-size: 3rem; color: var(--warning); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Update Maintenance Request</h3>
+                        <p>Update the status and details of this maintenance request</p>
+                    </div>
+
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 10px 0; color: var(--royal-blue);">Request Details</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9rem;">
+                            <div><strong>Tenant:</strong> ${request.tenantName}</div>
+                            <div><strong>Room:</strong> ${request.roomNumber}</div>
+                            <div><strong>Type:</strong> ${request.type.replace('_', ' ')}</div>
+                            <div><strong>Title:</strong> ${request.title}</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Status *</label>
+                        <select id="updateStatus" class="form-input" required>
+                            ${statusOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Priority *</label>
+                        <select id="updatePriority" class="form-input" required>
+                            ${priorityOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Actual Cost (₱)</label>
+                        <input type="number" id="actualCost" class="form-input" 
+                            value="${request.actualCost || ''}" min="0" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Completion Date</label>
+                        <input type="date" id="completionDate" class="form-input"
+                            value="${request.completedDate ? new Date(request.completedDate).toISOString().split('T')[0] : ''}">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Staff Notes</label>
+                        <textarea id="staffNotes" class="form-input" 
+                            placeholder="Add notes about the work performed..."
+                            rows="4">${request.staffNotes || ''}</textarea>
+                    </div>
+
+                    <div id="updateMaintenanceError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Update Maintenance Request',
+                submitText: 'Update Request',
+                onSubmit: () => this.processMaintenanceUpdate(requestId)
+            });
+
+            this.updateMaintenanceModal = modal;
+
+        } catch (error) {
+            console.error('Error updating maintenance request:', error);
+            this.showNotification('Failed to load update form', 'error');
+        }
+    }
+
+    async loadBulkAssignmentRequests() {
+        try {
+            const maintenanceRequests = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+            const openRequests = maintenanceRequests.filter(req => 
+                req.status === 'open' && !req.assignedTo
+            );
+
+            const requestsList = document.getElementById('bulkRequestsList');
+            
+            if (openRequests.length === 0) {
+                requestsList.innerHTML = `
+                    <div style="text-align: center; padding: 20px; color: var(--dark-gray);">
+                        <i class="fas fa-check-circle"></i>
+                        <p>No open requests available for assignment.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            requestsList.innerHTML = openRequests.map(request => `
+                <div style="display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid #eee;">
+                    <input type="checkbox" id="req-${request.id}" value="${request.id}">
+                    <label for="req-${request.id}" style="flex: 1; cursor: pointer;">
+                        <div style="font-weight: 500;">${request.tenantName} - ${request.roomNumber}</div>
+                        <div style="font-size: 0.8rem; color: var(--dark-gray);">${request.title}</div>
+                    </label>
+                    <span class="status-badge ${this.getPriorityBadge(request.priority).split('"')[1]}">
+                        ${request.priority}
+                    </span>
+                </div>
+            `).join('');
+
+        } catch (error) {
+            console.error('Error loading bulk assignment requests:', error);
+            const requestsList = document.getElementById('bulkRequestsList');
+            requestsList.innerHTML = `
+                <div style="color: var(--danger); text-align: center;">
+                    Failed to load requests
+                </div>
+            `;
+        }
+    }
+
+    async showAssignStaffForm() {
+        const modalContent = `
+            <div class="assign-staff-modal">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <i class="fas fa-users" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                    <h3 style="margin-bottom: 10px;">Bulk Staff Assignment</h3>
+                    <p>Assign multiple maintenance requests to staff members</p>
+                </div>
+
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="margin: 0; color: var(--dark-gray);">
+                        <i class="fas fa-info-circle"></i> 
+                        This feature allows you to assign multiple open maintenance requests to staff members at once.
+                    </p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Staff Member *</label>
+                    <select id="bulkStaff" class="form-input" required>
+                        <option value="">Select staff member</option>
+                        <option value="staff1">Juan Dela Cruz - Maintenance Technician</option>
+                        <option value="staff2">Maria Santos - Plumbing Specialist</option>
+                        <option value="staff3">Roberto Garcia - Electrician</option>
+                        <option value="staff4">Anna Reyes - General Maintenance</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Select Requests to Assign</label>
+                    <div id="bulkRequestsList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 10px;">
+                        <div class="data-loading">
+                            <i class="fas fa-spinner fa-spin"></i> Loading open requests...
+                        </div>
+                    </div>
+                </div>
+
+                <div id="bulkAssignError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+            title: 'Bulk Staff Assignment',
+            submitText: 'Assign Selected',
+            onSubmit: () => this.processBulkAssignment()
+        });
+
+        // Load open requests
+        setTimeout(async () => {
+            await this.loadBulkAssignmentRequests();
+        }, 100);
+
+        this.bulkAssignModal = modal;
+    }
+
+    async saveMaintenanceSettings() {
+        try {
+            // In a real app, you'd save these to Firestore
+            const settings = {
+                autoAssign: document.getElementById('autoAssign').checked,
+                emailNotifications: document.getElementById('emailNotifications').checked,
+                responseTime: parseInt(document.getElementById('responseTime').value),
+                emergencyContact: document.getElementById('emergencyContact').value
+            };
+
+            // For now, just show a success message
+            ModalManager.closeModal(this.maintenanceSettingsModal);
+            this.showNotification('Maintenance settings saved successfully!', 'success');
+
+        } catch (error) {
+            console.error('Error saving maintenance settings:', error);
+            this.showNotification('Failed to save maintenance settings', 'error');
+        }
+    }
+
+
+    async showMaintenanceSettings() {
+        const modalContent = `
+            <div class="maintenance-settings-modal">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <i class="fas fa-cog" style="font-size: 3rem; color: var(--royal-blue); margin-bottom: 15px;"></i>
+                    <h3 style="margin-bottom: 10px;">Maintenance Settings</h3>
+                    <p>Configure maintenance preferences and notifications</p>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="autoAssign" checked>
+                        <span>Enable Auto-Assignment</span>
+                    </label>
+                    <small style="color: var(--dark-gray);">
+                        Automatically assign maintenance requests based on type and availability
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" style="display: flex; align-items: center; gap: 10px;">
+                        <input type="checkbox" id="emailNotifications" checked>
+                        <span>Email Notifications</span>
+                    </label>
+                    <small style="color: var(--dark-gray);">
+                        Send email notifications for new maintenance requests and status updates
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Default Response Time (Hours)</label>
+                    <input type="number" id="responseTime" class="form-input" value="24" min="1" max="168">
+                    <small style="color: var(--dark-gray);">
+                        Target time to respond to maintenance requests
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Emergency Contact</label>
+                    <input type="text" id="emergencyContact" class="form-input" 
+                        placeholder="Emergency contact number">
+                </div>
+
+                <div class="security-info">
+                    <i class="fas fa-info-circle"></i>
+                    <small>Changes will take effect immediately for new requests</small>
+                </div>
+            </div>
+        `;
+
+        const modal = ModalManager.openModal(modalContent, {
+            title: 'Maintenance Settings',
+            submitText: 'Save Settings',
+            onSubmit: () => this.saveMaintenanceSettings()
+        });
+
+        this.maintenanceSettingsModal = modal;
+    }
+
+    async exportMaintenance() {
+        try {
+            const maintenanceRequests = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+            
+            // Create CSV content
+            let csvContent = "Maintenance Report\n\n";
+            csvContent += "ID,Tenant,Room,Type,Priority,Status,Title,Estimated Cost,Actual Cost,Created Date,Completed Date,Assigned To\n";
+            
+            maintenanceRequests.forEach(request => {
+                const row = [
+                    request.id.substring(0, 8),
+                    `"${request.tenantName}"`,
+                    request.roomNumber,
+                    request.type,
+                    request.priority,
+                    request.status,
+                    `"${request.title}"`,
+                    request.estimatedCost || 0,
+                    request.actualCost || 0,
+                    new Date(request.createdAt).toLocaleDateString(),
+                    request.completedDate ? new Date(request.completedDate).toLocaleDateString() : 'N/A',
+                    request.assignedName || 'N/A'
+                ].join(',');
+                
+                csvContent += row + '\n';
+            });
+
+            // Create and download file
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `maintenance-report-${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            this.showNotification('Maintenance report exported successfully!', 'success');
+
+        } catch (error) {
+            console.error('Error exporting maintenance:', error);
+            this.showNotification('Failed to export maintenance report', 'error');
+        }
+    }
+
+    async showMaintenanceSchedule() {
+        try {
+            const maintenanceRequests = await DataManager.getMaintenanceRequests(this.currentUser.uid);
+            
+            const scheduledRequests = maintenanceRequests.filter(req => 
+                req.preferredDate || req.estimatedCompletion
+            ).sort((a, b) => {
+                const dateA = new Date(a.preferredDate || a.estimatedCompletion || a.createdAt);
+                const dateB = new Date(b.preferredDate || b.estimatedCompletion || b.createdAt);
+                return dateA - dateB;
+            });
+
+            let scheduleContent = '';
+
+            if (scheduledRequests.length === 0) {
+                scheduleContent = `
+                    <div style="text-align: center; padding: 40px; color: var(--dark-gray);">
+                        <i class="fas fa-calendar-times" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                        <h3>No Scheduled Maintenance</h3>
+                        <p>No maintenance requests have scheduled dates yet.</p>
+                    </div>
+                `;
+            } else {
+                scheduleContent = `
+                    <div style="max-height: 500px; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                            <thead>
+                                <tr style="background-color: #f8f9fa;">
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Date</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant/Room</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Issue</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Type</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Assigned To</th>
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${scheduledRequests.map(request => {
+                                    const scheduleDate = new Date(request.preferredDate || request.estimatedCompletion);
+                                    const today = new Date();
+                                    const isToday = scheduleDate.toDateString() === today.toDateString();
+                                    const isPast = scheduleDate < today && !isToday;
+                                    
+                                    return `
+                                        <tr style="border-bottom: 1px solid #e9ecef; ${isPast ? 'background: rgba(234, 67, 53, 0.05);' : ''}">
+                                            <td style="padding: 12px;">
+                                                <div style="font-weight: 600; ${isToday ? 'color: var(--warning);' : isPast ? 'color: var(--danger);' : ''}">
+                                                    ${scheduleDate.toLocaleDateString()}
+                                                </div>
+                                                ${isToday ? '<small style="color: var(--warning);">Today</small>' : ''}
+                                                ${isPast ? '<small style="color: var(--danger);">Overdue</small>' : ''}
+                                            </td>
+                                            <td style="padding: 12px;">
+                                                <div>${request.tenantName}</div>
+                                                <small style="color: var(--dark-gray);">${request.roomNumber}</small>
+                                            </td>
+                                            <td style="padding: 12px;">
+                                                <strong>${request.title}</strong>
+                                            </td>
+                                            <td style="padding: 12px; text-transform: capitalize;">
+                                                ${request.type.replace('_', ' ')}
+                                            </td>
+                                            <td style="padding: 12px;">
+                                                ${request.assignedName || 'Not assigned'}
+                                            </td>
+                                            <td style="padding: 12px;">
+                                                ${this.getStatusBadge(request.status)}
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+
+            const modalContent = `
+                <div class="maintenance-schedule-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-calendar-alt" style="font-size: 3rem; color: var(--info); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Maintenance Schedule</h3>
+                        <p>View all scheduled maintenance activities</p>
+                    </div>
+                    ${scheduleContent}
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Maintenance Schedule',
+                submitText: 'Close',
+                onSubmit: () => ModalManager.closeModal(modal)
+            });
+
+        } catch (error) {
+            console.error('Error showing maintenance schedule:', error);
+            this.showNotification('Failed to load maintenance schedule', 'error');
+        }
+    }
+
+    showAssignMaintenanceError(message) {
+        const errorElement = document.getElementById('assignMaintenanceError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async processStaffAssignment(requestId) {
+        try {
+            const staffId = document.getElementById('assignStaff').value;
+            const assignmentNotes = document.getElementById('assignmentNotes').value;
+            const estimatedCompletion = document.getElementById('estimatedCompletion').value;
+
+            if (!staffId) {
+                this.showAssignMaintenanceError('Please select a staff member');
+                return;
+            }
+
+            // Get staff name from the selected option
+            const staffSelect = document.getElementById('assignStaff');
+            const selectedStaff = staffSelect.options[staffSelect.selectedIndex].text.split(' - ')[0];
+
+            const updates = {
+                assignedTo: staffId,
+                assignedName: selectedStaff,
+                assignmentNotes: assignmentNotes,
+                estimatedCompletion: estimatedCompletion,
+                status: 'in-progress',
+                assignedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Assigning...';
+                submitBtn.disabled = true;
+            }
+
+            await DataManager.updateMaintenanceRequest(requestId, updates);
+            
+            ModalManager.closeModal(this.assignMaintenanceModal);
+            this.showNotification('Maintenance request assigned successfully!', 'success');
+
+            // Refresh maintenance data
+            setTimeout(() => {
+                this.loadMaintenanceData();
+                this.loadMaintenanceStats();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error assigning maintenance:', error);
+            this.showAssignMaintenanceError('Failed to assign staff: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Assign Staff';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    async assignMaintenance(requestId) {
+        try {
+            const request = await DataManager.getMaintenanceRequest(requestId);
+            if (!request) {
+                this.showNotification('Maintenance request not found', 'error');
+                return;
+            }
+
+            // In a real app, you'd fetch staff members from your database
+            const staffMembers = [
+                { id: 'staff1', name: 'Juan Dela Cruz', role: 'Maintenance Technician' },
+                { id: 'staff2', name: 'Maria Santos', role: 'Plumbing Specialist' },
+                { id: 'staff3', name: 'Roberto Garcia', role: 'Electrician' },
+                { id: 'staff4', name: 'Anna Reyes', role: 'General Maintenance' }
+            ];
+
+            const staffOptions = staffMembers.map(staff => `
+                <option value="${staff.id}">${staff.name} - ${staff.role}</option>
+            `).join('');
+
+            const modalContent = `
+                <div class="assign-maintenance-modal">
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-user-check" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Assign Maintenance Staff</h3>
+                        <p>Assign this maintenance request to a staff member</p>
+                    </div>
+
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 10px 0; color: var(--royal-blue);">Request Details</h4>
+                        <div style="font-size: 0.9rem;">
+                            <div><strong>Tenant:</strong> ${request.tenantName} (${request.roomNumber})</div>
+                            <div><strong>Issue:</strong> ${request.title}</div>
+                            <div><strong>Priority:</strong> <span class="status-badge ${this.getPriorityBadge(request.priority).split('"')[1]}">${request.priority}</span></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Assign To *</label>
+                        <select id="assignStaff" class="form-input" required>
+                            <option value="">Select staff member</option>
+                            ${staffOptions}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Assignment Notes</label>
+                        <textarea id="assignmentNotes" class="form-input" 
+                            placeholder="Add any specific instructions for the assigned staff..."
+                            rows="3"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Estimated Completion Date</label>
+                        <input type="date" id="estimatedCompletion" class="form-input"
+                            min="${new Date().toISOString().split('T')[0]}">
+                    </div>
+
+                    <div id="assignMaintenanceError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Assign Maintenance Staff',
+                submitText: 'Assign Staff',
+                onSubmit: () => this.processStaffAssignment(requestId)
+            });
+
+            this.assignMaintenanceModal = modal;
+
+        } catch (error) {
+            console.error('Error assigning maintenance:', error);
+            this.showNotification('Failed to load assignment form', 'error');
+        }
+    }
+
+    showMaintenanceUpdateError(message) {
+        const errorElement = document.getElementById('updateMaintenanceError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+
+    async processMaintenanceUpdate(requestId) {
+        try {
+            const updates = {
+                status: document.getElementById('updateStatus').value,
+                priority: document.getElementById('updatePriority').value,
+                actualCost: parseFloat(document.getElementById('actualCost').value) || 0,
+                staffNotes: document.getElementById('staffNotes').value,
+                updatedAt: new Date().toISOString()
+            };
+
+            // Set completion date if status is completed
+            if (updates.status === 'completed') {
+                const completionDate = document.getElementById('completionDate').value;
+                updates.completedDate = completionDate || new Date().toISOString();
+            }
+
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+                submitBtn.disabled = true;
+            }
+
+            await DataManager.updateMaintenanceRequest(requestId, updates);
+            
+            ModalManager.closeModal(this.updateMaintenanceModal);
+            this.showNotification('Maintenance request updated successfully!', 'success');
+
+            // Refresh maintenance data
+            setTimeout(() => {
+                this.loadMaintenanceData();
+                this.loadMaintenanceStats();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error updating maintenance request:', error);
+            this.showMaintenanceUpdateError('Failed to update request: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Update Request';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+    generateMaintenanceRequestDetails(request) {
+        const createdDate = new Date(request.createdAt);
+        const updatedDate = new Date(request.updatedAt);
+        const preferredDate = request.preferredDate ? new Date(request.preferredDate) : null;
+
+        const priorityConfig = {
+            low: { class: 'active', text: 'Low' },
+            medium: { class: 'warning', text: 'Medium' },
+            high: { class: 'danger', text: 'High' },
+            emergency: { class: 'danger', text: 'Emergency' }
+        };
+
+        const statusConfig = {
+            open: { class: 'warning', text: 'Open' },
+            'in-progress': { class: 'info', text: 'In Progress' },
+            pending_parts: { class: 'warning', text: 'Pending Parts' },
+            completed: { class: 'active', text: 'Completed' },
+            cancelled: { class: 'inactive', text: 'Cancelled' }
+        };
+
+        const priority = priorityConfig[request.priority] || priorityConfig.medium;
+        const status = statusConfig[request.status] || statusConfig.open;
+
+        return `
+            <div class="maintenance-details-modal" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Header -->
+                <div style="background: linear-gradient(135deg, var(--royal-blue), #101b4a); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin: 0 0 5px 0;">${request.title}</h3>
+                            <p style="margin: 0; opacity: 0.9;">Request #${request.id.substring(0, 8)}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 1.8rem; font-weight: 700;">
+                                ${request.estimatedCost > 0 ? `₱${request.estimatedCost.toLocaleString()}` : 'No cost estimate'}
+                            </div>
+                            <div style="opacity: 0.9;">Estimated Cost</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Info Grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--royal-blue);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Status</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--royal-blue);">
+                            <span class="status-badge ${status.class}">${status.text}</span>
+                        </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Priority</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--warning);">
+                            <span class="status-badge ${priority.class}">${priority.text}</span>
+                        </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--info);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Type</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--info); text-transform: capitalize;">
+                            ${request.type.replace('_', ' ')}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tenant Information -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-user"></i> Tenant Information
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Tenant Name:</strong><br>
+                            ${request.tenantName}
+                        </div>
+                        <div>
+                            <strong>Room Number:</strong><br>
+                            ${request.roomNumber}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Issue Details -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-clipboard-list"></i> Issue Details
+                    </h4>
+                    <div style="margin-bottom: 15px;">
+                        <strong>Description:</strong><br>
+                        <p style="margin: 10px 0; line-height: 1.6;">${request.description}</p>
+                    </div>
+                    
+                    ${request.specialInstructions ? `
+                        <div style="margin-bottom: 15px;">
+                            <strong>Special Instructions:</strong><br>
+                            <p style="margin: 10px 0; line-height: 1.6;">${request.specialInstructions}</p>
+                        </div>
+                    ` : ''}
+                </div>
+
+                <!-- Scheduling & Cost -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-calendar-alt"></i> Scheduling & Cost
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Preferred Date:</strong><br>
+                            ${preferredDate ? preferredDate.toLocaleDateString() : 'Not specified'}
+                        </div>
+                        <div>
+                            <strong>Estimated Cost:</strong><br>
+                            ${request.estimatedCost > 0 ? `₱${request.estimatedCost.toLocaleString()}` : 'Not estimated'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline -->
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-history"></i> Request Timeline
+                    </h4>
+                    <div style="display: grid; gap: 10px;">
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                            <div>Created</div>
+                            <div style="font-weight: 600;">${createdDate.toLocaleDateString()} at ${createdDate.toLocaleTimeString()}</div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                            <div>Last Updated</div>
+                            <div style="font-weight: 600;">${updatedDate.toLocaleDateString()} at ${updatedDate.toLocaleTimeString()}</div>
+                        </div>
+                        ${request.assignedTo ? `
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                                <div>Assigned To</div>
+                                <div style="font-weight: 600;">${request.assignedTo}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <!-- Photos Section -->
+                ${request.photosAttached ? `
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                        <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                            <i class="fas fa-images"></i> Attached Photos
+                        </h4>
+                        <p style="color: var(--dark-gray); font-style: italic;">
+                            Photos are attached to this request. (Photo viewing functionality coming soon)
+                        </p>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    async viewMaintenanceRequest(requestId) {
+        try {
+            console.log('🔧 Loading maintenance request:', requestId);
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading maintenance request details...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Maintenance Request Details',
+                showFooter: false
+            });
+
+            const request = await DataManager.getMaintenanceRequest(requestId);
+            
+            if (!request) {
+                ModalManager.closeModal(modal);
+                this.showNotification('Maintenance request not found', 'error');
+                return;
+            }
+
+            const requestDetails = this.generateMaintenanceRequestDetails(request);
+            
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = requestDetails;
+            }
+
+            // Add footer with actions
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                    ${request.status !== 'completed' ? `
+                        <button class="btn btn-primary" onclick="casaLink.updateMaintenanceRequest('${request.id}')">
+                            <i class="fas fa-edit"></i> Update
+                        </button>
+                        <button class="btn btn-success" onclick="casaLink.assignMaintenance('${request.id}')">
+                            <i class="fas fa-user-check"></i> Assign
+                        </button>
+                    ` : ''}
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('Error viewing maintenance request:', error);
+            this.showNotification('Failed to load maintenance request', 'error');
+        }
+    }
+
+    showMaintenanceError(message) {
+        const errorElement = document.getElementById('maintenanceCreateError');
+        if (errorElement) {
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
+    async createMaintenanceRequest() {
+        try {
+            const tenantSelect = document.getElementById('maintenanceTenant');
+            const selectedOption = tenantSelect.options[tenantSelect.selectedIndex];
+            
+            const requestData = {
+                tenantId: tenantSelect.value,
+                tenantName: selectedOption.text.split(' - ')[0],
+                roomNumber: selectedOption.getAttribute('data-room'),
+                landlordId: this.currentUser.uid,
+                type: document.getElementById('maintenanceType').value,
+                priority: document.getElementById('maintenancePriority').value,
+                title: document.getElementById('maintenanceTitle').value,
+                description: document.getElementById('maintenanceDescription').value,
+                estimatedCost: parseFloat(document.getElementById('maintenanceCost').value) || 0,
+                preferredDate: document.getElementById('maintenancePreferredDate').value,
+                specialInstructions: document.getElementById('maintenanceInstructions').value,
+                status: 'open',
+                createdBy: this.currentUser.uid,
+                createdByName: this.currentUser.name
+            };
+
+            // Validation
+            if (!requestData.tenantId) {
+                this.showMaintenanceError('Please select a tenant');
+                return;
+            }
+
+            if (!requestData.title || !requestData.description) {
+                this.showMaintenanceError('Please fill in title and description');
+                return;
+            }
+
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+                submitBtn.disabled = true;
+            }
+
+            // Handle file uploads if any
+            const photoFiles = document.getElementById('maintenancePhotos').files;
+            if (photoFiles.length > 0) {
+                // You can implement file upload to Firebase Storage here
+                console.log('Photos to upload:', photoFiles.length);
+                // For now, we'll just note that photos were attached
+                requestData.photosAttached = true;
+            }
+
+            await DataManager.createMaintenanceRequest(requestData);
+            
+            ModalManager.closeModal(this.createMaintenanceModal);
+            this.showNotification('Maintenance request created successfully!', 'success');
+
+            // Refresh maintenance data
+            setTimeout(() => {
+                this.loadMaintenanceData();
+                this.loadMaintenanceStats();
+            }, 1000);
+
+        } catch (error) {
+            console.error('Error creating maintenance request:', error);
+            this.showMaintenanceError('Failed to create request: ' + error.message);
+            
+            const submitBtn = document.querySelector('#modalSubmit');
+            if (submitBtn) {
+                submitBtn.innerHTML = 'Create Request';
+                submitBtn.disabled = false;
+            }
+        }
+    }
+
+
+    showMaintenanceSettings() {
+        this.showNotification('Maintenance settings coming soon!', 'info');
+    }
+
+    viewMaintenanceRequest(requestId) {
+        this.showNotification('Maintenance request details coming soon!', 'info');
+    }
+
+    updateMaintenanceRequest(requestId) {
+        this.showNotification('Update maintenance request coming soon!', 'info');
+    }
+
+    assignMaintenance(requestId) {
+        this.showNotification('Assign maintenance coming soon!', 'info');
+    }
+
+    showAssignStaffForm() {
+        this.showNotification('Assign staff form coming soon!', 'info');
+    }
+
+    exportMaintenance() {
+        this.showNotification('Export maintenance reports coming soon!', 'info');
+    }
+
+    showMaintenanceSchedule() {
+        this.showNotification('Maintenance schedule coming soon!', 'info');
+    }
+
+    searchMaintenance(searchTerm) {
+        const rows = document.querySelectorAll('.maintenance-row');
         rows.forEach(row => {
             const text = row.textContent.toLowerCase();
             row.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
         });
+    }
+
+    filterMaintenance(filter) {
+        // Implement quick filters
+        console.log('Filtering maintenance by:', filter);
+    }
+
+    filterMaintenanceByStatus(status) {
+        const rows = document.querySelectorAll('.maintenance-row');
+        rows.forEach(row => {
+            if (status === 'all') {
+                row.style.display = '';
+                return;
+            }
+            
+            const statusBadge = row.querySelector('.status-badge');
+            if (statusBadge && statusBadge.textContent.toLowerCase().includes(status.toLowerCase())) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    filterMaintenanceByPriority(priority) {
+        const rows = document.querySelectorAll('.maintenance-row');
+        rows.forEach(row => {
+            if (priority === 'all') {
+                row.style.display = '';
+                return;
+            }
+            
+            const priorityBadge = row.querySelector('.status-badge');
+            if (priorityBadge && priorityBadge.textContent.toLowerCase().includes(priority.toLowerCase())) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    filterMaintenanceByType(type) {
+        const rows = document.querySelectorAll('.maintenance-row');
+        rows.forEach(row => {
+            if (type === 'all') {
+                row.style.display = '';
+                return;
+            }
+            
+            const typeCell = row.querySelector('td:nth-child(4)'); // Type column
+            if (typeCell && typeCell.textContent.toLowerCase().includes(type.toLowerCase())) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    setupMaintenanceRowClickHandlers() {
+        // Remove existing handlers first
+        this.removeMaintenanceRowClickHandlers();
+        
+        this.maintenanceRowClickHandler = (e) => {
+            const maintenanceRow = e.target.closest('.maintenance-row');
+            if (maintenanceRow) {
+                const requestId = maintenanceRow.getAttribute('data-request-id');
+                if (requestId) {
+                    this.viewMaintenanceRequest(requestId);
+                }
+            }
+        };
+        
+        document.addEventListener('click', this.maintenanceRowClickHandler);
+    }
+
+    removeMaintenanceRowClickHandlers() {
+        if (this.maintenanceRowClickHandler) {
+            document.removeEventListener('click', this.maintenanceRowClickHandler);
+            this.maintenanceRowClickHandler = null;
+        }
+    }
+
+    renderMaintenanceTable(requests) {
+        return `
+            <div class="table-container">
+                <table class="tenants-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Title</th>
+                            <th>Tenant/Room</th>
+                            <th>Type</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Assigned To</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${requests.map(request => {
+                            const createdDate = new Date(request.createdAt);
+                            const isUrgent = request.priority === 'high' || request.priority === 'emergency';
+                            const isOverdue = request.status === 'open' && 
+                                            (new Date() - createdDate) > (7 * 24 * 60 * 60 * 1000); // 7 days
+                            
+                            return `
+                                <tr class="maintenance-row" data-request-id="${request.id}" style="cursor: pointer; ${isUrgent ? 'background: rgba(234, 67, 53, 0.05);' : ''}">
+                                    <td>
+                                        <small style="color: var(--dark-gray);">#${request.id.substring(0, 8)}</small>
+                                    </td>
+                                    <td>
+                                        <div style="font-weight: 500;">${request.title}</div>
+                                        <small style="color: var(--dark-gray);">${request.description.substring(0, 50)}${request.description.length > 50 ? '...' : ''}</small>
+                                    </td>
+                                    <td>
+                                        <div>${request.tenantName || 'N/A'}</div>
+                                        <small style="color: var(--dark-gray);">${request.roomNumber || 'No room'}</small>
+                                    </td>
+                                    <td>
+                                        <span style="text-transform: capitalize;">${request.type.replace('_', ' ')}</span>
+                                    </td>
+                                    <td>
+                                        ${this.getPriorityBadge(request.priority)}
+                                    </td>
+                                    <td>
+                                        ${this.getStatusBadge(request.status)}
+                                        ${isOverdue ? '<br><small style="color: var(--danger);">Overdue</small>' : ''}
+                                    </td>
+                                    <td>
+                                        <div>${createdDate.toLocaleDateString()}</div>
+                                        <small style="color: var(--dark-gray);">${createdDate.toLocaleTimeString()}</small>
+                                    </td>
+                                    <td>
+                                        ${request.assignedName ? `
+                                            <div>${request.assignedName}</div>
+                                            <small style="color: var(--dark-gray);">Assigned</small>
+                                        ` : '<span style="color: var(--dark-gray);">Not assigned</span>'}
+                                    </td>
+                                    <td>
+                                        <div class="action-buttons">
+                                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewMaintenanceRequest('${request.id}')">
+                                                <i class="fas fa-eye"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); casaLink.updateMaintenanceRequest('${request.id}')">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            ${request.status !== 'completed' ? `
+                                                <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); casaLink.assignMaintenance('${request.id}')">
+                                                    <i class="fas fa-user-check"></i>
+                                                </button>
+                                            ` : ''}
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+
+
+    filterTenants(searchTerm) {
+        if (!searchTerm) {
+            this.tenantsFilteredData = [...this.tenantsAllData];
+        } else {
+            const searchLower = searchTerm.toLowerCase();
+            this.tenantsFilteredData = this.tenantsAllData.filter(tenant => 
+                tenant.name?.toLowerCase().includes(searchLower) ||
+                tenant.email?.toLowerCase().includes(searchLower) ||
+                tenant.phone?.toLowerCase().includes(searchLower) ||
+                tenant.roomNumber?.toLowerCase().includes(searchLower) ||
+                tenant.occupation?.toLowerCase().includes(searchLower)
+            );
+        }
+        
+        this.tenantsCurrentPage = 1;
+        this.tenantsTotalPages = Math.ceil(this.tenantsFilteredData.length / this.tenantsItemsPerPage);
+        this.updateTenantsTable(this.getCurrentTenantsPage());
+        this.setupTenantsPagination();
     }
 
     async debugDashboardData() {
@@ -2385,7 +3999,7 @@ class CasaLink {
         
         this.currentBillingView = view;
         
-        // Load data for the selected view
+        // Load data for the selected view with pagination
         this.loadBillingViewData(view);
     }
 
@@ -2463,13 +4077,14 @@ class CasaLink {
             this.setupBillRowClickHandlers();
             this.setupPaymentRowClickHandlers();
             
-            console.log('✅ Billing page setup complete');
+            console.log('✅ Billing page setup complete with pagination');
             
         } catch (error) {
             console.error('❌ Error setting up billing page:', error);
             this.showNotification('Failed to load billing data', 'error');
         }
     }
+
 
     showRefundModal() {
         this.showNotification('Refund processing feature coming soon!', 'info');
@@ -2479,22 +4094,37 @@ class CasaLink {
         this.showNotification('Export payments feature coming soon!', 'info');
     }
 
+    getEmptyPaymentsState() {
+        return `
+            <div class="empty-state">
+                <i class="fas fa-money-check"></i>
+                <h3>No Payments Found</h3>
+                <p>No payment records found yet.</p>
+            </div>
+        `;
+    }
+
     updatePaymentsTable(payments) {
         const paymentsList = document.getElementById('paymentsList');
         if (!paymentsList) return;
         
         if (payments.length === 0) {
-            paymentsList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-money-check"></i>
-                    <h3>No Payments Found</h3>
-                    <p>No payment records found yet.</p>
-                </div>
-            `;
+            paymentsList.innerHTML = this.getEmptyPaymentsState();
+            document.getElementById('paymentsPagination').style.display = 'none';
             return;
         }
         
         paymentsList.innerHTML = this.renderPaymentsTable(payments);
+        this.updatePaymentsPaginationInfo();
+    }
+
+    updatePaymentsPaginationInfo() {
+        const infoElement = document.getElementById('paymentsPaginationInfo');
+        if (infoElement) {
+            const startItem = (this.paymentsCurrentPage - 1) * this.paymentsItemsPerPage + 1;
+            const endItem = Math.min(this.paymentsCurrentPage * this.paymentsItemsPerPage, this.paymentsFilteredData.length);
+            infoElement.textContent = `Showing ${startItem}-${endItem} of ${this.paymentsFilteredData.length} payments`;
+        }
     }
 
     renderPaymentsTable(payments) {
@@ -2591,24 +4221,21 @@ class CasaLink {
     }
 
     filterPaymentsByDate(dateFilter) {
-        const rows = document.querySelectorAll('#paymentsList tbody tr');
         if (!dateFilter) {
-            rows.forEach(row => row.style.display = '');
-            return;
+            this.paymentsFilteredData = [...this.paymentsAllData];
+        } else {
+            const [year, month] = dateFilter.split('-');
+            this.paymentsFilteredData = this.paymentsAllData.filter(payment => {
+                const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+                return paymentDate.getFullYear() == year && 
+                    (paymentDate.getMonth() + 1) == month;
+            });
         }
         
-        const [year, month] = dateFilter.split('-');
-        rows.forEach(row => {
-            const dateCell = row.querySelector('td:nth-child(5)'); // Adjust index based on your table structure
-            if (dateCell) {
-                const cellDate = new Date(dateCell.textContent);
-                if (cellDate.getFullYear() == year && (cellDate.getMonth() + 1) == month) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            }
-        });
+        this.paymentsCurrentPage = 1;
+        this.paymentsTotalPages = Math.ceil(this.paymentsFilteredData.length / this.paymentsItemsPerPage);
+        this.updatePaymentsTable(this.getCurrentPaymentsPage());
+        this.setupPaymentsPagination();
     }
 
     filterPaymentsByStatus(status) {
@@ -2632,28 +4259,37 @@ class CasaLink {
     }
 
     filterPaymentsByMethod(method) {
-        const rows = document.querySelectorAll('#paymentsList tbody tr');
-        rows.forEach(row => {
-            if (method === 'all') {
-                row.style.display = '';
-                return;
-            }
-            
-            const methodText = row.querySelector('.payment-method')?.textContent.toLowerCase();
-            if (methodText && methodText.includes(method.toLowerCase())) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        });
+        if (method === 'all') {
+            this.paymentsFilteredData = [...this.paymentsAllData];
+        } else {
+            this.paymentsFilteredData = this.paymentsAllData.filter(payment => 
+                payment.paymentMethod?.toLowerCase().includes(method.toLowerCase())
+            );
+        }
+        
+        this.paymentsCurrentPage = 1;
+        this.paymentsTotalPages = Math.ceil(this.paymentsFilteredData.length / this.paymentsItemsPerPage);
+        this.updatePaymentsTable(this.getCurrentPaymentsPage());
+        this.setupPaymentsPagination();
     }
 
     searchPayments(searchTerm) {
-        const rows = document.querySelectorAll('#paymentsList tbody tr');
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
-        });
+        if (!searchTerm) {
+            this.paymentsFilteredData = [...this.paymentsAllData];
+        } else {
+            const searchLower = searchTerm.toLowerCase();
+            this.paymentsFilteredData = this.paymentsAllData.filter(payment => 
+                payment.tenantName?.toLowerCase().includes(searchLower) ||
+                payment.roomNumber?.toLowerCase().includes(searchLower) ||
+                payment.paymentMethod?.toLowerCase().includes(searchLower) ||
+                payment.referenceNumber?.toLowerCase().includes(searchLower)
+            );
+        }
+        
+        this.paymentsCurrentPage = 1;
+        this.paymentsTotalPages = Math.ceil(this.paymentsFilteredData.length / this.paymentsItemsPerPage);
+        this.updatePaymentsTable(this.getCurrentPaymentsPage());
+        this.setupPaymentsPagination();
     }
 
     removePaymentRowClickHandlers() {
@@ -3356,6 +4992,10 @@ class CasaLink {
         const today = new Date();
         const currentMonth = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
         
+        // ✅ Use only current month paid bills for the table
+        const recentPayments = stats.currentMonthPaidBills || 
+                            bills.filter(bill => bill.status === 'paid').slice(0, 10);
+        
         return `
             <div style="margin-bottom: 25px;">
                 <!-- Summary Cards -->
@@ -3390,35 +5030,45 @@ class CasaLink {
                     </div>
                 </div>
 
-                <!-- Recent Payments -->
+                <!-- Recent Payments (CURRENT MONTH ONLY) -->
                 <div style="background: white; padding: 20px; border-radius: 8px;">
-                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">Recent Payments</h4>
-                    <div style="max-height: 300px; overflow-y: auto;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                            <thead>
-                                <tr style="background-color: #f8f9fa;">
-                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Amount</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Paid Date</th>
-                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${bills.filter(bill => bill.status === 'paid').slice(0, 10).map(bill => `
-                                    <tr style="border-bottom: 1px solid #e9ecef;">
-                                        <td style="padding: 12px;">${bill.tenantName || 'N/A'}</td>
-                                        <td style="padding: 12px;">${bill.roomNumber || 'N/A'}</td>
-                                        <td style="padding: 12px; font-weight: 600; color: var(--success);">₱${(bill.totalAmount || 0).toLocaleString()}</td>
-                                        <td style="padding: 12px;">${new Date(bill.paidDate).toLocaleDateString()}</td>
-                                        <td style="padding: 12px;">
-                                            <span style="color: var(--success); font-weight: 600;">Paid</span>
-                                        </td>
+                    <h4 style="margin: 0 0 15px 0; color: var(--royal-blue);">
+                        Recent Payments - ${currentMonth}
+                        ${recentPayments.length > 0 ? `<span style="font-size: 0.9rem; color: var(--dark-gray);">(${recentPayments.length} rent payments this month)</span>` : ''}
+                    </h4>
+                    ${recentPayments.length > 0 ? `
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background-color: #f8f9fa;">
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Tenant</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Room</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Amount</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Paid Date</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e9ecef;">Status</th>
                                     </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody>
+                                    ${recentPayments.map(bill => `
+                                        <tr style="border-bottom: 1px solid #e9ecef;">
+                                            <td style="padding: 12px;">${bill.tenantName || 'N/A'}</td>
+                                            <td style="padding: 12px;">${bill.roomNumber || 'N/A'}</td>
+                                            <td style="padding: 12px; font-weight: 600; color: var(--success);">₱${(bill.totalAmount || 0).toLocaleString()}</td>
+                                            <td style="padding: 12px;">${new Date(bill.paidDate).toLocaleDateString()}</td>
+                                            <td style="padding: 12px;">
+                                                <span style="color: var(--success); font-weight: 600;">Paid</span>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    ` : `
+                        <div style="text-align: center; padding: 20px; color: var(--dark-gray);">
+                            <i class="fas fa-receipt" style="font-size: 2rem; opacity: 0.5; margin-bottom: 10px;"></i>
+                            <p>No payments received this month yet.</p>
+                        </div>
+                    `}
                 </div>
             </div>
         `;
@@ -3482,6 +5132,16 @@ class CasaLink {
         const currentMonth = today.getMonth();
         const currentYear = today.getFullYear();
         
+        const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+        const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0);
+        
+        console.log('🔍 DEBUG: Date Range for filtering:', {
+            firstDay: firstDayOfMonth.toISOString().split('T')[0],
+            lastDay: lastDayOfMonth.toISOString().split('T')[0],
+            currentMonth: currentMonth,
+            currentYear: currentYear
+        });
+        
         // Active leases with rent
         const activeLeases = leases.filter(lease => 
             lease.isActive && lease.monthlyRent && lease.monthlyRent > 0
@@ -3489,28 +5149,75 @@ class CasaLink {
         
         const expectedRent = activeLeases.reduce((sum, lease) => sum + (lease.monthlyRent || 0), 0);
         
-        // Paid bills this month
-        const paidBills = bills.filter(bill => {
+        console.log('🔍 DEBUG: Expected Rent from active leases:', expectedRent);
+        
+        // ✅ STRICT FILTER: Only get RENT payments from CURRENT MONTH
+        const rentPayments = bills.filter(bill => {
+            // Must be paid
             if (bill.status !== 'paid') return false;
+            
+            // ✅ STRICTER DATE FILTERING
             const billDate = new Date(bill.paidDate || bill.dueDate);
-            return billDate.getMonth() === currentMonth && 
-                billDate.getFullYear() === currentYear;
+            const billMonth = billDate.getMonth();
+            const billYear = billDate.getFullYear();
+            
+            // Check if bill is from current month AND year
+            if (billMonth !== currentMonth || billYear !== currentYear) {
+                console.log(`❌ EXCLUDED: ${bill.tenantName} - ${bill.description} (Date: ${billDate.toISOString().split('T')[0]})`);
+                return false;
+            }
+            
+            // ✅ ONLY include rent payments
+            const isRentPayment = 
+                bill.type === 'rent' || 
+                (bill.description && (
+                    bill.description.toLowerCase().includes('rent') ||
+                    bill.description.toLowerCase().includes('monthly rent') ||
+                    bill.description.toLowerCase().includes('lease payment')
+                ));
+            
+            if (isRentPayment) {
+                console.log(`✅ INCLUDED: ${bill.tenantName} - ${bill.description} (Date: ${billDate.toISOString().split('T')[0]})`);
+            }
+            
+            return isRentPayment;
         });
         
-        const collectedRent = paidBills.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+        console.log('🔍 DEBUG: Rent payments found:', rentPayments.length);
+        console.log('🔍 DEBUG: All rent payment details:');
+        rentPayments.forEach(payment => {
+            const paymentDate = new Date(payment.paidDate || payment.dueDate);
+            console.log(`  - ${payment.tenantName}: ₱${payment.totalAmount} - ${payment.description} (${paymentDate.toISOString().split('T')[0]})`);
+        });
+        
+        // ✅ Calculate collected rent ONLY from rent payments
+        const collectedRent = rentPayments.reduce((sum, bill) => sum + (bill.totalAmount || 0), 0);
+        
+        console.log('🔍 DEBUG: Total collected rent:', collectedRent);
         
         const collectionRate = expectedRent > 0 ? Math.round((collectedRent / expectedRent) * 100) : 0;
+        
+        // Group by tenant for display
+        const tenantRentPaymentsMap = new Map();
+        rentPayments.forEach(bill => {
+            const tenantId = bill.tenantId;
+            if (!tenantRentPaymentsMap.has(tenantId)) {
+                tenantRentPaymentsMap.set(tenantId, bill);
+            }
+        });
+        
+        const uniqueRentPayments = Array.from(tenantRentPaymentsMap.values());
         
         return {
             expectedRent,
             collectedRent,
             collectionRate,
             pendingRent: expectedRent - collectedRent,
-            paidBillsCount: paidBills.length,
-            totalExpectedBills: activeLeases.length
+            paidBillsCount: uniqueRentPayments.length,
+            totalExpectedBills: activeLeases.length,
+            currentMonthPaidBills: uniqueRentPayments
         };
     }
-
     async showUnpaidBillsModal() {
         if (!this.debounceModalOpen(() => this.showUnpaidBillsModal())) return;
         
@@ -4539,37 +6246,42 @@ class CasaLink {
 
 
     searchBills(searchTerm) {
-        const rows = document.querySelectorAll('#billsList tbody tr');
-        rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(searchTerm.toLowerCase()) ? '' : 'none';
-        });
+        if (!searchTerm) {
+            this.billsFilteredData = [...this.billsAllData];
+        } else {
+            const searchLower = searchTerm.toLowerCase();
+            this.billsFilteredData = this.billsAllData.filter(bill => 
+                bill.tenantName?.toLowerCase().includes(searchLower) ||
+                bill.roomNumber?.toLowerCase().includes(searchLower) ||
+                bill.description?.toLowerCase().includes(searchLower) ||
+                bill.type?.toLowerCase().includes(searchLower)
+            );
+        }
+        
+        this.billsCurrentPage = 1;
+        this.billsTotalPages = Math.ceil(this.billsFilteredData.length / this.billsItemsPerPage);
+        this.updateBillsTable(this.getCurrentBillsPage());
+        this.setupBillsPagination();
     }
 
     filterBills(status) {
-        const rows = document.querySelectorAll('#billsList tbody tr');
-        rows.forEach(row => {
-            if (status === 'all') {
-                row.style.display = '';
-                return;
-            }
-            
-            const statusBadge = row.querySelector('.status-badge');
-            if (statusBadge) {
-                const billStatus = statusBadge.textContent.toLowerCase();
-                const isOverdue = row.textContent.includes('overdue');
+        if (status === 'all') {
+            this.billsFilteredData = [...this.billsAllData];
+        } else {
+            this.billsFilteredData = this.billsAllData.filter(bill => {
+                const isOverdue = bill.status === 'pending' && new Date(bill.dueDate) < new Date();
                 
-                if (status === 'overdue' && isOverdue) {
-                    row.style.display = '';
-                } else if (status === 'pending' && billStatus.includes('pending') && !isOverdue) {
-                    row.style.display = '';
-                } else if (status === 'paid' && billStatus.includes('paid')) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            }
-        });
+                if (status === 'overdue' && isOverdue) return true;
+                if (status === 'pending' && bill.status === 'pending' && !isOverdue) return true;
+                if (status === 'paid' && bill.status === 'paid') return true;
+                return false;
+            });
+        }
+        
+        this.billsCurrentPage = 1;
+        this.billsTotalPages = Math.ceil(this.billsFilteredData.length / this.billsItemsPerPage);
+        this.updateBillsTable(this.getCurrentBillsPage());
+        this.setupBillsPagination();
     }
 
     async showBillingSettings() {
@@ -6047,14 +7759,94 @@ class CasaLink {
         }
     }
 
+    getCurrentPaymentsPage() {
+        const startIndex = (this.paymentsCurrentPage - 1) * this.paymentsItemsPerPage;
+        const endIndex = startIndex + this.paymentsItemsPerPage;
+        return this.paymentsFilteredData.slice(startIndex, endIndex);
+    }
+
+    updatePaymentsPaginationControls() {
+        const pageNumbers = document.getElementById('paymentsPageNumbers');
+        if (!pageNumbers) return;
+        
+        pageNumbers.innerHTML = '';
+        
+        // Show page numbers (max 5 pages)
+        const startPage = Math.max(1, this.paymentsCurrentPage - 2);
+        const endPage = Math.min(this.paymentsTotalPages, startPage + 4);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = `btn btn-sm ${i === this.paymentsCurrentPage ? 'btn-primary' : 'btn-secondary'}`;
+            pageButton.textContent = i;
+            pageButton.onclick = () => {
+                this.paymentsCurrentPage = i;
+                this.updatePaymentsTable(this.getCurrentPaymentsPage());
+                this.updatePaymentsPaginationControls();
+            };
+            pageNumbers.appendChild(pageButton);
+        }
+        
+        // Update button states
+        const prevButton = document.getElementById('paymentsPrevPage');
+        const nextButton = document.getElementById('paymentsNextPage');
+        
+        if (prevButton) prevButton.disabled = this.paymentsCurrentPage === 1;
+        if (nextButton) nextButton.disabled = this.paymentsCurrentPage === this.paymentsTotalPages;
+    }
+
+
+    setupPaymentsPagination() {
+        const paginationContainer = document.getElementById('paymentsPagination');
+        if (!paginationContainer) return;
+        
+        // Show pagination if we have multiple pages
+        if (this.paymentsTotalPages > 1) {
+            paginationContainer.style.display = 'flex';
+            this.updatePaymentsPaginationControls();
+        } else {
+            paginationContainer.style.display = 'none';
+        }
+        
+        // Event listeners for pagination buttons
+        const prevButton = document.getElementById('paymentsPrevPage');
+        const nextButton = document.getElementById('paymentsNextPage');
+        
+        if (prevButton) {
+            prevButton.onclick = () => {
+                if (this.paymentsCurrentPage > 1) {
+                    this.paymentsCurrentPage--;
+                    this.updatePaymentsTable(this.getCurrentPaymentsPage());
+                    this.updatePaymentsPaginationControls();
+                }
+            };
+        }
+        
+        if (nextButton) {
+            nextButton.onclick = () => {
+                if (this.paymentsCurrentPage < this.paymentsTotalPages) {
+                    this.paymentsCurrentPage++;
+                    this.updatePaymentsTable(this.getCurrentPaymentsPage());
+                    this.updatePaymentsPaginationControls();
+                }
+            };
+        }
+    }
+
     async loadPaymentsData() {
         try {
             console.log('🔄 Loading payments data...');
             const payments = await DataManager.getPayments(this.currentUser.uid);
-            this.currentPayments = payments;
-            this.updatePaymentsTable(payments);
+            this.paymentsAllData = payments;
+            this.paymentsFilteredData = [...payments];
+            this.paymentsCurrentPage = 1;
+            this.paymentsTotalPages = Math.ceil(payments.length / this.paymentsItemsPerPage);
             
-            console.log('✅ Payments data loaded:', payments.length, 'payments');
+            this.updatePaymentsTable(this.getCurrentPaymentsPage());
+            this.updatePaymentStats(payments);
+            this.setupPaymentsPagination();
+            
+            console.log('✅ Payments data loaded and pagination set up');
         } catch (error) {
             console.error('Error loading payments:', error);
             this.showNotification('Failed to load payments', 'error');
@@ -7064,41 +8856,125 @@ class CasaLink {
         `;
     }
 
+    updateBillsPaginationControls() {
+        const pageNumbers = document.getElementById('billsPageNumbers');
+        if (!pageNumbers) return;
+        
+        pageNumbers.innerHTML = '';
+        
+        // Show page numbers (max 5 pages)
+        const startPage = Math.max(1, this.billsCurrentPage - 2);
+        const endPage = Math.min(this.billsTotalPages, startPage + 4);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = `btn btn-sm ${i === this.billsCurrentPage ? 'btn-primary' : 'btn-secondary'}`;
+            pageButton.textContent = i;
+            pageButton.onclick = () => {
+                this.billsCurrentPage = i;
+                this.updateBillsTable(this.getCurrentBillsPage());
+                this.updateBillsPaginationControls();
+            };
+            pageNumbers.appendChild(pageButton);
+        }
+        
+        // Update button states
+        document.getElementById('billsPrevPage').disabled = this.billsCurrentPage === 1;
+        document.getElementById('billsNextPage').disabled = this.billsCurrentPage === this.billsTotalPages;
+    }
+
+    setupBillsPagination() {
+        const paginationContainer = document.getElementById('billsPagination');
+        if (!paginationContainer) return;
+        
+        // Show pagination if we have multiple pages
+        if (this.billsTotalPages > 1) {
+            paginationContainer.style.display = 'flex';
+            this.updateBillsPaginationControls();
+        } else {
+            paginationContainer.style.display = 'none';
+        }
+        
+        // Event listeners for pagination buttons
+        document.getElementById('billsPrevPage')?.addEventListener('click', () => {
+            if (this.billsCurrentPage > 1) {
+                this.billsCurrentPage--;
+                this.updateBillsTable(this.getCurrentBillsPage());
+                this.updateBillsPaginationControls();
+            }
+        });
+        
+        document.getElementById('billsNextPage')?.addEventListener('click', () => {
+            if (this.billsCurrentPage < this.billsTotalPages) {
+                this.billsCurrentPage++;
+                this.updateBillsTable(this.getCurrentBillsPage());
+                this.updateBillsPaginationControls();
+            }
+        });
+    }
+
+    getEmptyBillsState() {
+        return `
+            <div class="empty-state">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <h3>No Bills Found</h3>
+                <p>No bills have been created yet. Generate monthly bills or create a custom bill.</p>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
+                    <button class="btn btn-primary" onclick="casaLink.forceGenerateBills()">
+                        Generate Monthly Bills
+                    </button>
+                    <button class="btn btn-secondary" onclick="casaLink.showCreateBillForm()">
+                        Create Custom Bill
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
     updateBillsTable(bills) {
         const billsList = document.getElementById('billsList');
         if (!billsList) return;
         
         if (bills.length === 0) {
-            billsList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-file-invoice-dollar"></i>
-                    <h3>No Bills Found</h3>
-                    <p>No bills have been created yet. Generate monthly bills or create a custom bill.</p>
-                    <div style="display: flex; gap: 10px; justify-content: center; margin-top: 20px;">
-                        <button class="btn btn-primary" onclick="casaLink.forceGenerateBills()">
-                            Generate Monthly Bills
-                        </button>
-                        <button class="btn btn-secondary" onclick="casaLink.showCreateBillForm()">
-                            Create Custom Bill
-                        </button>
-                    </div>
-                </div>
-            `;
+            billsList.innerHTML = this.getEmptyBillsState();
+            document.getElementById('billsPagination').style.display = 'none';
             return;
         }
         
         billsList.innerHTML = this.renderBillsTable(bills);
+        this.updateBillsPaginationInfo();
+    }
+
+    updateBillsPaginationInfo() {
+        const infoElement = document.getElementById('billsPaginationInfo');
+        if (infoElement) {
+            const startItem = (this.billsCurrentPage - 1) * this.billsItemsPerPage + 1;
+            const endItem = Math.min(this.billsCurrentPage * this.billsItemsPerPage, this.billsFilteredData.length);
+            infoElement.textContent = `Showing ${startItem}-${endItem} of ${this.billsFilteredData.length} bills`;
+        }
+    }
+
+
+    getCurrentBillsPage() {
+        const startIndex = (this.billsCurrentPage - 1) * this.billsItemsPerPage;
+        const endIndex = startIndex + this.billsItemsPerPage;
+        return this.billsFilteredData.slice(startIndex, endIndex);
     }
 
     async loadBillsData() {
         try {
             console.log('🔄 Loading bills data...');
             const bills = await DataManager.getBillsWithTenants(this.currentUser.uid);
-            this.currentBills = bills;
-            this.updateBillsTable(bills);
-            this.updateBillingStats(bills); // This line is crucial!
+            this.billsAllData = bills;
+            this.billsFilteredData = [...bills];
+            this.billsCurrentPage = 1;
+            this.billsTotalPages = Math.ceil(bills.length / this.billsItemsPerPage);
             
-            console.log('✅ Bills data loaded and stats updated');
+            this.updateBillsTable(this.getCurrentBillsPage());
+            this.updateBillingStats(bills);
+            this.setupBillsPagination();
+            
+            console.log('✅ Bills data loaded and pagination set up');
         } catch (error) {
             console.error('Error loading bills:', error);
             this.showNotification('Failed to load bills', 'error');
@@ -7264,6 +9140,19 @@ class CasaLink {
                                 <i class="fas fa-spinner fa-spin"></i> Loading bills...
                             </div>
                         </div>
+                        <!-- Pagination Controls for Bills -->
+                        <div class="pagination-container" id="billsPagination" style="display: none;">
+                            <div class="pagination-info" id="billsPaginationInfo"></div>
+                            <div class="pagination-controls">
+                                <button class="btn btn-sm btn-secondary" id="billsPrevPage">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </button>
+                                <div class="pagination-numbers" id="billsPageNumbers"></div>
+                                <button class="btn btn-sm btn-secondary" id="billsNextPage">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -7344,6 +9233,19 @@ class CasaLink {
                         <div id="paymentsList">
                             <div class="data-loading">
                                 <i class="fas fa-spinner fa-spin"></i> Loading payments...
+                            </div>
+                        </div>
+                        <!-- Pagination Controls for Payments -->
+                        <div class="pagination-container" id="paymentsPagination" style="display: none;">
+                            <div class="pagination-info" id="paymentsPaginationInfo"></div>
+                            <div class="pagination-controls">
+                                <button class="btn btn-sm btn-secondary" id="paymentsPrevPage">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </button>
+                                <div class="pagination-numbers" id="paymentsPageNumbers"></div>
+                                <button class="btn btn-sm btn-secondary" id="paymentsNextPage">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -7454,17 +9356,123 @@ class CasaLink {
         return `
         <div class="page-content">
             <div class="page-header">
-                <h1 class="page-title">Maintenance</h1>
-                <button class="btn btn-primary" onclick="casaLink.showMaintenanceRequestForm()">
-                    <i class="fas fa-plus"></i> New Request
+                <h1 class="page-title">Maintenance Management</h1>
+                <div>
+                    <button class="btn btn-secondary" onclick="casaLink.showMaintenanceSettings()">
+                        <i class="fas fa-cog"></i> Settings
+                    </button>
+                    <button class="btn btn-primary" onclick="casaLink.showCreateMaintenanceForm()">
+                        <i class="fas fa-plus"></i> Create Request
+                    </button>
+                </div>
+            </div>
+
+            <!-- Maintenance Stats -->
+            <div class="card-group">
+                <div class="card" data-clickable="open-maintenance" style="cursor: pointer;" title="Click to view open requests">
+                    <div class="card-header">
+                        <div class="card-title">Open Requests</div>
+                        <div class="card-icon maintenance"><i class="fas fa-tools"></i></div>
+                    </div>
+                    <div class="card-value" id="openMaintenanceCount">0</div>
+                    <div class="card-subtitle">Requiring attention</div>
+                </div>
+                
+                <div class="card" data-clickable="high-priority" style="cursor: pointer;" title="Click to view high priority requests">
+                    <div class="card-header">
+                        <div class="card-title">High Priority</div>
+                        <div class="card-icon late"><i class="fas fa-exclamation-triangle"></i></div>
+                    </div>
+                    <div class="card-value" id="highPriorityCount">0</div>
+                    <div class="card-subtitle">Urgent issues</div>
+                </div>
+                
+                <div class="card" data-clickable="in-progress" style="cursor: pointer;" title="Click to view in-progress requests">
+                    <div class="card-header">
+                        <div class="card-title">In Progress</div>
+                        <div class="card-icon renewals"><i class="fas fa-clock"></i></div>
+                    </div>
+                    <div class="card-value" id="inProgressCount">0</div>
+                    <div class="card-subtitle">Being worked on</div>
+                </div>
+                
+                <div class="card" data-clickable="completed" style="cursor: pointer;" title="Click to view completed requests">
+                    <div class="card-header">
+                        <div class="card-title">Completed</div>
+                        <div class="card-icon success"><i class="fas fa-check-circle"></i></div>
+                    </div>
+                    <div class="card-value" id="completedCount">0</div>
+                    <div class="card-subtitle">This month</div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions-bar">
+                <button class="btn btn-primary" onclick="casaLink.showCreateMaintenanceForm()">
+                    <i class="fas fa-plus"></i> Create New Request
+                </button>
+                <button class="btn btn-secondary" onclick="casaLink.showAssignStaffForm()">
+                    <i class="fas fa-user-plus"></i> Assign Staff
+                </button>
+                <button class="btn btn-secondary" onclick="casaLink.exportMaintenance()">
+                    <i class="fas fa-download"></i> Export Reports
+                </button>
+                <button class="btn btn-warning" onclick="casaLink.showMaintenanceSchedule()">
+                    <i class="fas fa-calendar"></i> View Schedule
                 </button>
             </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Maintenance Management</h3>
-                <p>Track and manage maintenance requests from tenants.</p>
-                <button class="btn btn-primary" onclick="casaLink.showMaintenanceRequestForm()">
-                    Create Maintenance Request
-                </button>
+
+            <!-- Filters and Search -->
+            <div class="search-filters-container">
+                <div class="search-box">
+                    <input type="text" id="maintenanceSearch" class="form-input" placeholder="Search maintenance requests...">
+                </div>
+                <div class="filter-controls">
+                    <select id="statusFilter" class="form-input">
+                        <option value="all">All Status</option>
+                        <option value="open">Open</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="pending_parts">Pending Parts</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <select id="priorityFilter" class="form-input">
+                        <option value="all">All Priorities</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="emergency">Emergency</option>
+                    </select>
+                    <select id="typeFilter" class="form-input">
+                        <option value="all">All Types</option>
+                        <option value="general">General</option>
+                        <option value="plumbing">Plumbing</option>
+                        <option value="electrical">Electrical</option>
+                        <option value="hvac">HVAC</option>
+                        <option value="appliance">Appliance</option>
+                        <option value="structural">Structural</option>
+                        <option value="pest_control">Pest Control</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Quick Filter Buttons -->
+            <div class="quick-filter-buttons">
+                <button class="btn btn-sm btn-secondary" onclick="casaLink.filterMaintenance('all')">All Requests</button>
+                <button class="btn btn-sm btn-secondary" onclick="casaLink.filterMaintenance('open')">Open</button>
+                <button class="btn btn-sm btn-secondary" onclick="casaLink.filterMaintenance('high')">High Priority</button>
+                <button class="btn btn-sm btn-secondary" onclick="casaLink.filterMaintenance('today')">Today</button>
+                <button class="btn btn-sm btn-secondary" onclick="casaLink.filterMaintenance('week')">This Week</button>
+            </div>
+
+            <!-- Maintenance Requests Table -->
+            <div class="table-section">
+                <div id="maintenanceList">
+                    <div class="data-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading maintenance requests...
+                    </div>
+                </div>
             </div>
         </div>
         `;
@@ -7490,6 +9498,19 @@ class CasaLink {
                 <div id="tenantsList">
                     <div class="data-loading">
                         <i class="fas fa-spinner fa-spin"></i> Loading tenants...
+                    </div>
+                </div>
+                <!-- Pagination Controls for Tenants -->
+                <div class="pagination-container" id="tenantsPagination" style="display: none;">
+                    <div class="pagination-info" id="tenantsPaginationInfo"></div>
+                    <div class="pagination-controls">
+                        <button class="btn btn-sm btn-secondary" id="tenantsPrevPage">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <div class="pagination-numbers" id="tenantsPageNumbers"></div>
+                        <button class="btn btn-sm btn-secondary" id="tenantsNextPage">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
                     </div>
                 </div>
             </div>
