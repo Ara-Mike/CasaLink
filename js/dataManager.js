@@ -222,6 +222,81 @@ class DataManager {
         }
     }
 
+    static async getPaymentStats(landlordId) {
+        try {
+            const payments = await this.getPayments(landlordId);
+            const today = new Date();
+            const currentMonth = today.getMonth();
+            const currentYear = today.getFullYear();
+
+            // Filter only completed payments
+            const completedPayments = payments.filter(p => p.status === 'completed');
+
+            // Total collected
+            const totalCollected = completedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+            // This month's collection
+            const monthlyPayments = completedPayments.filter(payment => {
+                const paymentDate = new Date(payment.paymentDate);
+                return paymentDate.getMonth() === currentMonth && 
+                    paymentDate.getFullYear() === currentYear;
+            });
+            const monthlyCollected = monthlyPayments.reduce((sum, payment) => sum + payment.amount, 0);
+
+            // Payment methods count
+            const methodCount = new Set(completedPayments.map(p => p.paymentMethod)).size;
+
+            // Average payment
+            const averagePayment = completedPayments.length > 0 ? totalCollected / completedPayments.length : 0;
+
+            return {
+                totalCollected,
+                monthlyCollected,
+                methodCount,
+                averagePayment,
+                totalTransactions: completedPayments.length,
+                monthlyTransactions: monthlyPayments.length
+            };
+        } catch (error) {
+            console.error('Error getting payment stats:', error);
+            throw error;
+        }
+    }
+
+    static async getPayments(landlordId, filters = {}) {
+        try {
+            let query = firebaseDb.collection('payments')
+                .where('landlordId', '==', landlordId)
+                .orderBy('paymentDate', 'desc');
+
+            // Apply filters
+            if (filters.method && filters.method !== 'all') {
+                query = query.where('paymentMethod', '==', filters.method);
+            }
+
+            if (filters.status && filters.status !== 'all') {
+                query = query.where('status', '==', filters.status);
+            }
+
+            if (filters.month) {
+                const startDate = new Date(filters.month + '-01');
+                const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 0);
+                
+                query = query.where('paymentDate', '>=', startDate.toISOString())
+                            .where('paymentDate', '<=', endDate.toISOString());
+            }
+
+            const snapshot = await query.get();
+            return snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+        } catch (error) {
+            console.error('Error getting payments:', error);
+            throw error;
+        }
+    }
+
     static async recordPayment(paymentData) {
         try {
             console.log('💳 Recording payment:', paymentData);

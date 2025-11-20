@@ -16,7 +16,10 @@
     <meta name="msapplication-TileColor" content="#1A73E8">
     <meta name="msapplication-tap-highlight" content="no">
     <meta name="theme-color" content="#1A73E8">
-    
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+        
     <!-- Icons -->
     <link rel="icon" type="image/png" href="icons/icon-72x72.png" sizes="72x72">
     <link rel="icon" type="image/png" href="icons/icon-96x96.png" sizes="96x96">
@@ -38,7 +41,7 @@
     <!-- Styles & Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=1.0.3">
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -528,6 +531,71 @@ function checkManifestRequirements(manifest) {
         console.log('📋 No install prompt available, showing manual instructions');
         showManualInstallGuide();
     };
+    </script>
+
+    <script>
+    // Cache Busting and Version Control
+    (function() {
+        const APP_VERSION = '1.0.3';
+        const storedVersion = localStorage.getItem('casalink_app_version');
+        
+        console.log('🔍 Cache Check:', {
+            currentVersion: APP_VERSION,
+            storedVersion: storedVersion,
+            needsRefresh: storedVersion !== APP_VERSION
+        });
+        
+        if (storedVersion !== APP_VERSION) {
+            console.log('🔄 Version changed from', storedVersion, 'to', APP_VERSION + ', clearing cache...');
+            
+            // Clear all caches
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    cacheNames.forEach(cacheName => {
+                        console.log('🗑️ Deleting cache:', cacheName);
+                        caches.delete(cacheName);
+                    });
+                });
+            }
+            
+            // Clear service worker registrations
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    registrations.forEach(registration => {
+                        console.log('🗑️ Unregistering service worker:', registration.scope);
+                        registration.unregister();
+                    });
+                });
+            }
+            
+            // Clear localStorage except auth
+            const keepKeys = ['casalink_user', 'casalink_app_version', 'firebase:host:casalink-dashboard.firebaseapp.com'];
+            const keysToRemove = [];
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && !keepKeys.some(keepKey => key.includes(keepKey))) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                console.log('🗑️ Removing localStorage:', key);
+                localStorage.removeItem(key);
+            });
+            
+            // Set new version
+            localStorage.setItem('casalink_app_version', APP_VERSION);
+            
+            // Force reload if this is a fresh load or major version change
+            if (!storedVersion) {
+                console.log('🚀 Fresh install, reloading...');
+                window.location.reload();
+            }
+        } else {
+            console.log('✅ Cache is up to date');
+        }
+    })();
     </script>
 
 </body>
