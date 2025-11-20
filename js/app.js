@@ -2253,6 +2253,9 @@ class CasaLink {
             // Setup real-time listeners
             this.setupMaintenanceRealTimeListeners();
             
+            // ADD THIS: Setup row click handlers
+            this.setupMaintenanceRowClickHandlers();
+            
             console.log('✅ Maintenance page setup complete with real-time updates');
         } catch (error) {
             console.error('Error setting up maintenance page:', error);
@@ -2312,6 +2315,9 @@ class CasaLink {
         }
         
         maintenanceList.innerHTML = this.renderMaintenanceTable(requests);
+        
+        // ADD THIS LINE to setup hover effects:
+        setTimeout(() => this.setupMaintenanceRowStyles(), 100);
     }
 
     getPriorityBadge(priority) {
@@ -3084,24 +3090,53 @@ class CasaLink {
         }
     }
 
+    setupMaintenanceRowStyles() {
+        const maintenanceRows = document.querySelectorAll('.maintenance-row');
+        maintenanceRows.forEach(row => {
+            // Add hover effects
+            row.style.cursor = 'pointer';
+            row.style.transition = 'all 0.3s ease';
+            
+            row.addEventListener('mouseenter', () => {
+                row.style.backgroundColor = 'rgba(22, 38, 96, 0.08)';
+                row.style.transform = 'translateY(-1px)';
+                row.style.boxShadow = '0 2px 8px rgba(22, 38, 96, 0.15)';
+            });
+            
+            row.addEventListener('mouseleave', () => {
+                row.style.backgroundColor = '';
+                row.style.transform = '';
+                row.style.boxShadow = '';
+            });
+        });
+    }
+
     generateMaintenanceRequestDetails(request) {
         const createdDate = new Date(request.createdAt);
         const updatedDate = new Date(request.updatedAt);
         const preferredDate = request.preferredDate ? new Date(request.preferredDate) : null;
+        const completedDate = request.completedDate ? new Date(request.completedDate) : null;
+        const assignedDate = request.assignedAt ? new Date(request.assignedAt) : null;
 
+        // Calculate days open
+        const today = new Date();
+        const daysOpen = Math.floor((today - createdDate) / (1000 * 60 * 60 * 24));
+        
+        // Priority configuration
         const priorityConfig = {
-            low: { class: 'active', text: 'Low' },
-            medium: { class: 'warning', text: 'Medium' },
-            high: { class: 'danger', text: 'High' },
-            emergency: { class: 'danger', text: 'Emergency' }
+            low: { class: 'active', text: 'Low', color: 'var(--success)' },
+            medium: { class: 'warning', text: 'Medium', color: 'var(--warning)' },
+            high: { class: 'danger', text: 'High', color: 'var(--danger)' },
+            emergency: { class: 'danger', text: 'Emergency', color: 'var(--danger)' }
         };
 
+        // Status configuration
         const statusConfig = {
-            open: { class: 'warning', text: 'Open' },
-            'in-progress': { class: 'info', text: 'In Progress' },
-            pending_parts: { class: 'warning', text: 'Pending Parts' },
-            completed: { class: 'active', text: 'Completed' },
-            cancelled: { class: 'inactive', text: 'Cancelled' }
+            open: { class: 'warning', text: 'Open', color: 'var(--warning)' },
+            'in-progress': { class: 'info', text: 'In Progress', color: 'var(--info)' },
+            pending_parts: { class: 'warning', text: 'Pending Parts', color: 'var(--warning)' },
+            completed: { class: 'active', text: 'Completed', color: 'var(--success)' },
+            cancelled: { class: 'inactive', text: 'Cancelled', color: 'var(--dark-gray)' }
         };
 
         const priority = priorityConfig[request.priority] || priorityConfig.medium;
@@ -3114,7 +3149,7 @@ class CasaLink {
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <h3 style="margin: 0 0 5px 0;">${request.title}</h3>
-                            <p style="margin: 0; opacity: 0.9;">Request #${request.id.substring(0, 8)}</p>
+                            <p style="margin: 0; opacity: 0.9;">Request #${request.id.substring(0, 8)} • ${request.type.replace('_', ' ')}</p>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 1.8rem; font-weight: 700;">
@@ -3127,26 +3162,35 @@ class CasaLink {
 
                 <!-- Quick Info Grid -->
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--royal-blue);">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${status.color};">
                         <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Status</div>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--royal-blue);">
+                        <div style="font-size: 1.1rem; font-weight: 600; color: ${status.color};">
                             <span class="status-badge ${status.class}">${status.text}</span>
                         </div>
                     </div>
                     
-                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid ${priority.color};">
                         <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Priority</div>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--warning);">
+                        <div style="font-size: 1.1rem; font-weight: 600; color: ${priority.color};">
                             <span class="status-badge ${priority.class}">${priority.text}</span>
                         </div>
                     </div>
                     
                     <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--info);">
-                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Type</div>
-                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--info); text-transform: capitalize;">
-                            ${request.type.replace('_', ' ')}
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Days Open</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--info);">
+                            ${daysOpen} days
                         </div>
                     </div>
+                    
+                    ${request.actualCost > 0 ? `
+                        <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--success);">
+                            <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Actual Cost</div>
+                            <div style="font-size: 1.1rem; font-weight: 600; color: var(--success);">
+                                ₱${request.actualCost.toLocaleString()}
+                            </div>
+                        </div>
+                    ` : ''}
                 </div>
 
                 <!-- Tenant Information -->
@@ -3157,12 +3201,24 @@ class CasaLink {
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                         <div>
                             <strong>Tenant Name:</strong><br>
-                            ${request.tenantName}
+                            ${request.tenantName || 'N/A'}
                         </div>
                         <div>
                             <strong>Room Number:</strong><br>
-                            ${request.roomNumber}
+                            ${request.roomNumber || 'N/A'}
                         </div>
+                        ${request.contactPreference ? `
+                            <div>
+                                <strong>Contact Preference:</strong><br>
+                                ${request.contactPreference}
+                            </div>
+                        ` : ''}
+                        ${request.accessInstructions ? `
+                            <div>
+                                <strong>Access Instructions:</strong><br>
+                                ${request.accessInstructions}
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -3173,33 +3229,91 @@ class CasaLink {
                     </h4>
                     <div style="margin-bottom: 15px;">
                         <strong>Description:</strong><br>
-                        <p style="margin: 10px 0; line-height: 1.6;">${request.description}</p>
+                        <p style="margin: 10px 0; line-height: 1.6; background: #f8f9fa; padding: 15px; border-radius: 8px;">${request.description}</p>
                     </div>
                     
                     ${request.specialInstructions ? `
                         <div style="margin-bottom: 15px;">
                             <strong>Special Instructions:</strong><br>
-                            <p style="margin: 10px 0; line-height: 1.6;">${request.specialInstructions}</p>
+                            <p style="margin: 10px 0; line-height: 1.6; background: rgba(251, 188, 4, 0.1); padding: 15px; border-radius: 8px;">${request.specialInstructions}</p>
                         </div>
                     ` : ''}
                 </div>
 
-                <!-- Scheduling & Cost -->
+                <!-- Assignment & Scheduling -->
                 <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                     <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
-                        <i class="fas fa-calendar-alt"></i> Scheduling & Cost
+                        <i class="fas fa-calendar-alt"></i> Assignment & Scheduling
                     </h4>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                        <div>
-                            <strong>Preferred Date:</strong><br>
-                            ${preferredDate ? preferredDate.toLocaleDateString() : 'Not specified'}
-                        </div>
-                        <div>
-                            <strong>Estimated Cost:</strong><br>
-                            ${request.estimatedCost > 0 ? `₱${request.estimatedCost.toLocaleString()}` : 'Not estimated'}
-                        </div>
+                        ${request.assignedName ? `
+                            <div>
+                                <strong>Assigned To:</strong><br>
+                                ${request.assignedName}
+                                ${assignedDate ? `<br><small style="color: var(--dark-gray);">Assigned on ${assignedDate.toLocaleDateString()}</small>` : ''}
+                            </div>
+                        ` : ''}
+                        
+                        ${preferredDate ? `
+                            <div>
+                                <strong>Preferred Date:</strong><br>
+                                ${preferredDate.toLocaleDateString()}
+                            </div>
+                        ` : ''}
+                        
+                        ${request.estimatedCompletion ? `
+                            <div>
+                                <strong>Estimated Completion:</strong><br>
+                                ${new Date(request.estimatedCompletion).toLocaleDateString()}
+                            </div>
+                        ` : ''}
+                        
+                        ${completedDate ? `
+                            <div>
+                                <strong>Completed Date:</strong><br>
+                                ${completedDate.toLocaleDateString()}
+                            </div>
+                        ` : ''}
                     </div>
+                    
+                    ${request.assignmentNotes ? `
+                        <div style="margin-top: 15px;">
+                            <strong>Assignment Notes:</strong><br>
+                            <p style="margin: 10px 0; line-height: 1.6; background: #f8f9fa; padding: 10px; border-radius: 6px;">${request.assignmentNotes}</p>
+                        </div>
+                    ` : ''}
                 </div>
+
+                <!-- Cost Information -->
+                ${request.estimatedCost > 0 || request.actualCost > 0 ? `
+                    <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                            <i class="fas fa-money-bill-wave"></i> Cost Information
+                        </h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            ${request.estimatedCost > 0 ? `
+                                <div>
+                                    <strong>Estimated Cost:</strong><br>
+                                    <span style="font-weight: 600; color: var(--warning);">₱${request.estimatedCost.toLocaleString()}</span>
+                                </div>
+                            ` : ''}
+                            
+                            ${request.actualCost > 0 ? `
+                                <div>
+                                    <strong>Actual Cost:</strong><br>
+                                    <span style="font-weight: 600; color: var(--success);">₱${request.actualCost.toLocaleString()}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                        
+                        ${request.staffNotes ? `
+                            <div style="margin-top: 15px;">
+                                <strong>Staff Notes:</strong><br>
+                                <p style="margin: 10px 0; line-height: 1.6; background: #f8f9fa; padding: 10px; border-radius: 6px;">${request.staffNotes}</p>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
 
                 <!-- Timeline -->
                 <div style="background: white; padding: 20px; border-radius: 8px;">
@@ -3208,17 +3322,26 @@ class CasaLink {
                     </h4>
                     <div style="display: grid; gap: 10px;">
                         <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                            <div>Created</div>
+                            <div><i class="fas fa-plus-circle" style="color: var(--success);"></i> Created</div>
                             <div style="font-weight: 600;">${createdDate.toLocaleDateString()} at ${createdDate.toLocaleTimeString()}</div>
                         </div>
+                        
                         <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                            <div>Last Updated</div>
+                            <div><i class="fas fa-sync-alt" style="color: var(--info);"></i> Last Updated</div>
                             <div style="font-weight: 600;">${updatedDate.toLocaleDateString()} at ${updatedDate.toLocaleTimeString()}</div>
                         </div>
-                        ${request.assignedTo ? `
+                        
+                        ${assignedDate ? `
                             <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                                <div>Assigned To</div>
-                                <div style="font-weight: 600;">${request.assignedTo}</div>
+                                <div><i class="fas fa-user-check" style="color: var(--info);"></i> Assigned</div>
+                                <div style="font-weight: 600;">${assignedDate.toLocaleDateString()}</div>
+                            </div>
+                        ` : ''}
+                        
+                        ${completedDate ? `
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                                <div><i class="fas fa-check-circle" style="color: var(--success);"></i> Completed</div>
+                                <div style="font-weight: 600;">${completedDate.toLocaleDateString()}</div>
                             </div>
                         ` : ''}
                     </div>
@@ -3256,6 +3379,7 @@ class CasaLink {
                 showFooter: false
             });
 
+            // Fetch maintenance request data
             const request = await DataManager.getMaintenanceRequest(requestId);
             
             if (!request) {
@@ -3264,28 +3388,30 @@ class CasaLink {
                 return;
             }
 
-            const requestDetails = this.generateMaintenanceRequestDetails(request);
+            // Generate maintenance request details content
+            const requestDetailsContent = this.generateMaintenanceRequestDetails(request);
             
+            // Update modal content
             const modalBody = modal.querySelector('.modal-body');
             if (modalBody) {
-                modalBody.innerHTML = requestDetails;
+                modalBody.innerHTML = requestDetailsContent;
             }
 
-            // Add footer with actions
+            // Add footer with action buttons
             const modalFooter = modal.querySelector('.modal-footer');
             if (!modalFooter) {
                 const footer = document.createElement('div');
                 footer.className = 'modal-footer';
                 footer.innerHTML = `
-                    <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
                         Close
                     </button>
                     ${request.status !== 'completed' ? `
-                        <button class="btn btn-primary" onclick="casaLink.updateMaintenanceRequest('${request.id}')">
+                        <button class="btn btn-warning" onclick="casaLink.updateMaintenanceRequest('${request.id}')">
                             <i class="fas fa-edit"></i> Update
                         </button>
                         <button class="btn btn-success" onclick="casaLink.assignMaintenance('${request.id}')">
-                            <i class="fas fa-user-check"></i> Assign
+                            <i class="fas fa-user-check"></i> Assign Staff
                         </button>
                     ` : ''}
                 `;
@@ -3293,8 +3419,8 @@ class CasaLink {
             }
 
         } catch (error) {
-            console.error('Error viewing maintenance request:', error);
-            this.showNotification('Failed to load maintenance request', 'error');
+            console.error('❌ Error loading maintenance request:', error);
+            this.showNotification('Failed to load maintenance request details', 'error');
         }
     }
 
@@ -3382,9 +3508,6 @@ class CasaLink {
         this.showNotification('Maintenance settings coming soon!', 'info');
     }
 
-    viewMaintenanceRequest(requestId) {
-        this.showNotification('Maintenance request details coming soon!', 'info');
-    }
 
     updateMaintenanceRequest(requestId) {
         this.showNotification('Update maintenance request coming soon!', 'info');
@@ -4075,7 +4198,7 @@ class CasaLink {
             
             // Setup row click handlers
             this.setupBillRowClickHandlers();
-            this.setupPaymentRowClickHandlers();
+            this.setupPaymentRowClickHandlers();  // ← newly added
             
             console.log('✅ Billing page setup complete with pagination');
             
@@ -4084,6 +4207,7 @@ class CasaLink {
             this.showNotification('Failed to load billing data', 'error');
         }
     }
+
 
 
     showRefundModal() {
@@ -4116,6 +4240,8 @@ class CasaLink {
         
         paymentsList.innerHTML = this.renderPaymentsTable(payments);
         this.updatePaymentsPaginationInfo();
+        
+        setTimeout(() => this.setupPaymentRowStyles(), 100);
     }
 
     updatePaymentsPaginationInfo() {
@@ -4147,7 +4273,7 @@ class CasaLink {
                         ${payments.map(payment => {
                             const paymentDate = new Date(payment.paymentDate || payment.createdAt);
                             return `
-                                <tr class="payment-row" data-payment-id="${payment.id}">
+                                <tr class="payment-row" data-payment-id="${payment.id}" style="cursor: pointer;">
                                     <td>
                                         <div class="tenant-info">
                                             <div class="tenant-avatar">${payment.tenantName?.charAt(0)?.toUpperCase() || 'T'}</div>
@@ -4292,6 +4418,250 @@ class CasaLink {
         this.setupPaymentsPagination();
     }
 
+    async showPaymentDetailsModal(paymentId) {
+        try {
+            console.log('💰 Loading payment details for:', paymentId);
+            
+            // Show loading state
+            const modalContent = `
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--royal-blue);"></i>
+                    <p>Loading payment details...</p>
+                </div>
+            `;
+
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Payment Details',
+                showFooter: false
+            });
+
+            // Fetch payment data
+            const paymentDoc = await firebaseDb.collection('payments').doc(paymentId).get();
+            
+            if (!paymentDoc.exists) {
+                ModalManager.closeModal(modal);
+                this.showNotification('Payment not found', 'error');
+                return;
+            }
+
+            const payment = { id: paymentDoc.id, ...paymentDoc.data() };
+            
+            // Generate payment details content
+            const paymentDetailsContent = this.generatePaymentDetailsContent(payment);
+            
+            // Update modal content
+            const modalBody = modal.querySelector('.modal-body');
+            if (modalBody) {
+                modalBody.innerHTML = paymentDetailsContent;
+            }
+
+            // Add footer with close button
+            const modalFooter = modal.querySelector('.modal-footer');
+            if (!modalFooter) {
+                const footer = document.createElement('div');
+                footer.className = 'modal-footer';
+                footer.innerHTML = `
+                    <button class="btn btn-primary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                        Close
+                    </button>
+                    <button class="btn btn-warning" onclick="casaLink.showRefundModal('${payment.id}')">
+                        <i class="fas fa-undo"></i> Process Refund
+                    </button>
+                `;
+                modal.querySelector('.modal-content').appendChild(footer);
+            }
+
+        } catch (error) {
+            console.error('❌ Error loading payment details:', error);
+            this.showNotification('Failed to load payment details', 'error');
+        }
+    }
+
+    setupPaymentRowStyles() {
+        const paymentRows = document.querySelectorAll('.payment-row');
+        paymentRows.forEach(row => {
+            // Add hover effects
+            row.style.cursor = 'pointer';
+            row.style.transition = 'all 0.3s ease';
+            
+            row.addEventListener('mouseenter', () => {
+                row.style.backgroundColor = 'rgba(52, 168, 83, 0.08)';
+                row.style.transform = 'translateY(-1px)';
+            });
+            
+            row.addEventListener('mouseleave', () => {
+                row.style.backgroundColor = '';
+                row.style.transform = '';
+            });
+        });
+    }
+
+    formatPaymentMethod(method) {
+        const methodMap = {
+            'cash': 'Cash',
+            'gcash': 'GCash',
+            'maya': 'Maya',
+            'bank_transfer': 'Bank Transfer',
+            'check': 'Check'
+        };
+        return methodMap[method] || method.charAt(0).toUpperCase() + method.slice(1);
+    }
+
+    generatePaymentDetailsContent(payment) {
+        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+        const processedDate = new Date(payment.processedAt || payment.createdAt);
+        
+        // Get associated bill details if available
+        const billAmount = payment.billAmount || payment.amount;
+        const amountPaid = payment.amount;
+        const change = amountPaid - billAmount;
+        
+        // Format payment method with icon
+        const paymentMethodIcons = {
+            'cash': 'fas fa-money-bill',
+            'gcash': 'fas fa-mobile-alt',
+            'maya': 'fas fa-wallet',
+            'bank_transfer': 'fas fa-university',
+            'check': 'fas fa-money-check'
+        };
+        
+        const paymentIcon = paymentMethodIcons[payment.paymentMethod] || 'fas fa-credit-card';
+
+        return `
+            <div class="payment-details-modal" style="max-height: 70vh; overflow-y: auto;">
+                <!-- Payment Header -->
+                <div style="background: linear-gradient(135deg, var(--success), #2ecc71); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin: 0 0 5px 0;">Payment Received</h3>
+                            <p style="margin: 0; opacity: 0.9;">Transaction #${payment.id.substring(0, 8)}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 1.8rem; font-weight: 700;">₱${(payment.amount || 0).toLocaleString()}</div>
+                            <div style="opacity: 0.9;">Amount Paid</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payment Information Grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--success);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Status</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--success);">
+                            <span class="status-badge active">Completed</span>
+                        </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--info);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Payment Method</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--info);">
+                            <i class="${paymentIcon}"></i> ${this.formatPaymentMethod(payment.paymentMethod)}
+                        </div>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                        <div style="font-size: 0.9rem; color: var(--dark-gray); margin-bottom: 5px;">Payment Date</div>
+                        <div style="font-size: 1.1rem; font-weight: 600; color: var(--warning);">
+                            ${paymentDate.toLocaleDateString()}
+                        </div>
+                        <div style="font-size: 0.8rem; margin-top: 5px;">${paymentDate.toLocaleTimeString()}</div>
+                    </div>
+                </div>
+
+                <!-- Tenant Information -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-user"></i> Tenant Information
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <strong>Tenant Name:</strong><br>
+                            ${payment.tenantName || 'N/A'}
+                        </div>
+                        <div>
+                            <strong>Room Number:</strong><br>
+                            ${payment.roomNumber || 'N/A'}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payment Breakdown -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-receipt"></i> Payment Breakdown
+                    </h4>
+                    
+                    <div style="display: grid; gap: 10px;">
+                        ${payment.billAmount ? `
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                                <div>Bill Amount:</div>
+                                <div style="font-weight: 600;">₱${(payment.billAmount || 0).toLocaleString()}</div>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                            <div>Amount Paid:</div>
+                            <div style="font-weight: 600; color: var(--success);">₱${(payment.amount || 0).toLocaleString()}</div>
+                        </div>
+                        
+                        ${change > 0 ? `
+                            <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                                <div>Change:</div>
+                                <div style="font-weight: 600; color: var(--warning);">₱${change.toLocaleString()}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <!-- Transaction Details -->
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h4 style="color: var(--royal-blue); margin-bottom: 15px; border-bottom: 2px solid var(--royal-blue); padding-bottom: 8px;">
+                        <i class="fas fa-info-circle"></i> Transaction Details
+                    </h4>
+                    <div style="display: grid; gap: 10px;">
+                        ${payment.referenceNumber ? `
+                            <div style="display: flex; justify-content: space-between;">
+                                <div><strong>Reference Number:</strong></div>
+                                <div>${payment.referenceNumber}</div>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="display: flex; justify-content: space-between;">
+                            <div><strong>Processed Date:</strong></div>
+                            <div>${processedDate.toLocaleDateString()} at ${processedDate.toLocaleTimeString()}</div>
+                        </div>
+                        
+                        ${payment.billId ? `
+                            <div style="display: flex; justify-content: space-between;">
+                                <div><strong>Bill ID:</strong></div>
+                                <div>${payment.billId.substring(0, 8)}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+
+                <!-- Notes Section -->
+                ${payment.notes ? `
+                    <div style="background: rgba(251, 188, 4, 0.1); padding: 20px; border-radius: 8px; border-left: 4px solid var(--warning);">
+                        <h4 style="color: var(--warning); margin-bottom: 10px;">
+                            <i class="fas fa-sticky-note"></i> Payment Notes
+                        </h4>
+                        <p style="margin: 0; line-height: 1.6;">${payment.notes}</p>
+                    </div>
+                ` : ''}
+
+                <!-- Payment Metadata -->
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; font-size: 0.9rem; color: var(--dark-gray);">
+                    <strong>Payment Metadata:</strong><br>
+                    • Payment ID: ${payment.id}<br>
+                    • Recorded by: ${payment.recordedBy || 'System'}<br>
+                    • ${payment.processedAt ? 'Automatically processed' : 'Manually recorded'}
+                </div>
+            </div>
+        `;
+    }
+
+
     removePaymentRowClickHandlers() {
         if (this.paymentRowClickHandler) {
             document.removeEventListener('click', this.paymentRowClickHandler);
@@ -4299,9 +4669,6 @@ class CasaLink {
         }
     }
 
-    showPaymentDetailsModal(paymentId) {
-        this.showNotification('Payment details feature coming soon!', 'info');
-    }
 
     setupPaymentRowClickHandlers() {
         // Remove existing handlers first
