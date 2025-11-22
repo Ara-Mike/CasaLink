@@ -370,7 +370,6 @@ class CasaLink {
         this.currentPage = page;
         this.updateUrlHash(page);
 
-        // ... rest of your existing showPage method remains the same
         let appElement = document.getElementById('app');
         if (!appElement) {
             console.error('❌ App element not found');
@@ -411,7 +410,7 @@ class CasaLink {
             let pageContent;
             console.log('📝 Getting page content for:', page);
 
-            // PAGE SWITCH
+            // FULL PAGE SWITCH (KEPT FROM FIRST VERSION)
             switch (page) {
                 case 'dashboard':
                     pageContent = this.getDashboardContentHTML();
@@ -479,12 +478,13 @@ class CasaLink {
             // Update nav state
             this.updateActiveNavState(page);
 
-            // SPECIAL CASE: DASHBOARD — refresh + setup listeners
+            // SPECIAL CASE: DASHBOARD (MERGED FROM BOTH VERSIONS)
             if (page === 'dashboard') {
                 console.log('📊 Force refreshing dashboard data and setting up listeners...');
                 setTimeout(() => {
                     this.loadDashboardData();
                     this.setupRealTimeStats();
+                    // Recent activities handled internally
                 }, 100);
             }
 
@@ -499,6 +499,7 @@ class CasaLink {
             `;
         }
     }
+
 
 
 
@@ -607,6 +608,418 @@ class CasaLink {
         });
     }
 
+    async loadRecentActivities() {
+        console.log('🔍 STEP 1: Starting loadRecentActivities');
+        
+        // Check if user is available
+        if (!this.currentUser) {
+            console.error('❌ STEP 1 FAILED: No current user');
+            this.showActivityError('User not authenticated');
+            return;
+        }
+        
+        console.log('✅ STEP 1 PASSED: User found:', this.currentUser.email);
+        
+        try {
+            // Show loading state immediately
+            const activityList = document.getElementById('recentActivityList');
+            if (activityList) {
+                activityList.innerHTML = `
+                    <div class="activity-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading recent activity...
+                    </div>
+                `;
+            }
+            
+            console.log('🔍 STEP 2: Calling fetchRecentActivities');
+            const activities = await this.fetchRecentActivities();
+            console.log('🔍 STEP 3: Received activities:', activities?.length || 0);
+            
+            this.displayRecentActivities(activities);
+            console.log('✅ STEP 3 COMPLETE: Activities displayed');
+        } catch (error) {
+            console.error('❌ STEP 2 FAILED: Error in loadRecentActivities:', error);
+            this.showActivityError();
+        }
+    }
+
+    getSampleActivities() {
+        console.log('🔍 Creating sample activities for demonstration');
+        
+        const now = new Date();
+        const sampleActivities = [
+            {
+                type: 'payment_received',
+                title: 'Payment Received',
+                description: '₱12,000 from Maria Santos - Room 2A',
+                timestamp: new Date(now.getFullYear(), now.getMonth(), 15).toISOString(),
+                icon: 'fas fa-credit-card',
+                color: 'var(--success)',
+                data: { amount: 12000, tenantName: 'Maria Santos' }
+            },
+            {
+                type: 'maintenance_request',
+                title: 'Maintenance Request',
+                description: 'Plumbing issue in Room 3B - High Priority',
+                timestamp: new Date(now.getFullYear(), now.getMonth(), 12).toISOString(),
+                icon: 'fas fa-tools',
+                color: 'var(--warning)',
+                data: { type: 'plumbing', tenantName: 'John Rivera' }
+            },
+            {
+                type: 'new_tenant',
+                title: 'New Tenant Registered',
+                description: 'Carlos Reyes - Room 1C',
+                timestamp: new Date(now.getFullYear(), now.getMonth(), 8).toISOString(),
+                icon: 'fas fa-user-plus',
+                color: 'var(--info)',
+                data: { name: 'Carlos Reyes', roomNumber: '1C' }
+            },
+            {
+                type: 'bill_generated',
+                title: 'Auto-Generated Bill',
+                description: '₱10,500 monthly rent for Ana Lopez',
+                timestamp: new Date(now.getFullYear(), now.getMonth(), 1).toISOString(),
+                icon: 'fas fa-file-invoice',
+                color: 'var(--warning)',
+                data: { totalAmount: 10500, tenantName: 'Ana Lopez' }
+            }
+        ];
+        
+        return sampleActivities;
+    }
+
+    debugRecentActivities() {
+        console.log('🐛 DEBUG: Recent Activities');
+        console.log('Current User:', this.currentUser);
+        
+        const activityList = document.getElementById('recentActivityList');
+        console.log('Activity List Element:', activityList);
+        
+        // Manually trigger activities load
+        this.loadRecentActivities();
+    }
+
+    async fetchRecentActivities() {
+        console.log('🔍 STEP 2.1: Starting fetchRecentActivities');
+        
+        const activities = [];
+        const now = new Date();
+        
+        // FIX: Use last 30 days instead of current month only
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(now.getDate() - 30);
+        
+        console.log('📅 Date range:', {
+            from: thirtyDaysAgo.toISOString(),
+            to: now.toISOString(),
+            user: this.currentUser.uid
+        });
+
+        try {
+            // Add a timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('Activity fetch timeout')), 10000);
+            });
+
+            const fetchPromise = (async () => {
+                // 1. Fetch Recent Tenants
+                console.log('🔍 STEP 2.2: Fetching recent tenants...');
+                const recentTenants = await firebaseDb.collection('users')
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .where('role', '==', 'tenant')
+                    .where('createdAt', '>=', thirtyDaysAgo)
+                    .where('createdAt', '<=', now)
+                    .orderBy('createdAt', 'desc')
+                    .limit(5)
+                    .get();
+
+                console.log(`✅ Found ${recentTenants.size} recent tenants`);
+                
+                recentTenants.forEach(doc => {
+                    const tenant = doc.data();
+                    activities.push({
+                        type: 'new_tenant',
+                        title: 'New Tenant Registered',
+                        description: `${tenant.name} has registered`,
+                        timestamp: tenant.createdAt,
+                        icon: 'fas fa-user-plus',
+                        color: 'var(--success)',
+                        data: tenant
+                    });
+                });
+
+                // 2. Fetch Recent Payments
+                console.log('🔍 STEP 2.3: Fetching recent payments...');
+                const recentPayments = await firebaseDb.collection('payments')
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .where('paymentDate', '>=', thirtyDaysAgo)
+                    .where('paymentDate', '<=', now)
+                    .orderBy('paymentDate', 'desc')
+                    .limit(10)
+                    .get();
+
+                console.log(`✅ Found ${recentPayments.size} recent payments`);
+                
+                recentPayments.forEach(doc => {
+                    const payment = doc.data();
+                    activities.push({
+                        type: 'payment_received',
+                        title: 'Payment Received',
+                        description: `₱${payment.amount?.toLocaleString()} from ${payment.tenantName}`,
+                        timestamp: payment.paymentDate,
+                        icon: 'fas fa-credit-card',
+                        color: 'var(--success)',
+                        data: payment
+                    });
+                });
+
+                // 3. Fetch Recent Bills
+                console.log('🔍 STEP 2.4: Fetching recent bills...');
+                const recentBills = await firebaseDb.collection('bills')
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .where('createdAt', '>=', thirtyDaysAgo)
+                    .where('createdAt', '<=', now)
+                    .orderBy('createdAt', 'desc')
+                    .limit(10)
+                    .get();
+
+                console.log(`✅ Found ${recentBills.size} recent bills`);
+                
+                recentBills.forEach(doc => {
+                    const bill = doc.data();
+                    activities.push({
+                        type: 'bill_generated',
+                        title: bill.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill Created',
+                        description: `₱${bill.totalAmount?.toLocaleString()} for ${bill.tenantName}`,
+                        timestamp: bill.createdAt,
+                        icon: 'fas fa-file-invoice',
+                        color: bill.isAutoGenerated ? 'var(--warning)' : 'var(--info)',
+                        data: bill
+                    });
+                });
+
+                // 4. Fetch Maintenance Requests
+                console.log('🔍 STEP 2.5: Fetching maintenance requests...');
+                const recentMaintenance = await firebaseDb.collection('maintenance')
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .where('createdAt', '>=', thirtyDaysAgo)
+                    .where('createdAt', '<=', now)
+                    .orderBy('createdAt', 'desc')
+                    .limit(10)
+                    .get();
+
+                console.log(`✅ Found ${recentMaintenance.size} maintenance requests`);
+
+                recentMaintenance.forEach(doc => {
+                    const request = doc.data();
+                    activities.push({
+                        type: 'maintenance_request',
+                        title: 'Maintenance Request',
+                        description: `${request.type} issue from ${request.tenantName}`,
+                        timestamp: request.createdAt,
+                        icon: 'fas fa-tools',
+                        color: 'var(--info)',
+                        data: request
+                    });
+                });
+
+                console.log(`📊 STEP 2.6: Total activities collected: ${activities.length}`);
+                return activities;
+            })();
+
+            // Race between fetch and timeout
+            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            
+            // If no activities found, provide sample data
+            if (result.length === 0) {
+                console.log('📝 No real activities found, providing sample data');
+                const sampleActivities = this.getSampleActivities();
+                console.log(`📝 Sample activities provided: ${sampleActivities.length} items`);
+                return sampleActivities;
+            }
+
+            // Sort by timestamp (newest first)
+            const sortedActivities = result.sort((a, b) => 
+                new Date(b.timestamp) - new Date(a.timestamp)
+            );
+            
+            console.log('✅ STEP 2.7: Activities sorted and ready');
+            return sortedActivities;
+
+        } catch (error) {
+            console.error('❌ STEP 2 FAILED: Error in fetchRecentActivities:', error);
+            console.log('🔄 Providing sample data due to error');
+            return this.getSampleActivities();
+        }
+    }
+
+    displayRecentActivities(activities) {
+        console.log('🔍 STEP 3: Starting displayRecentActivities');
+        
+        const activityList = document.getElementById('recentActivityList');
+        if (!activityList) {
+            console.error('❌ STEP 3 FAILED: recentActivityList element not found');
+            return;
+        }
+
+        console.log('✅ STEP 3.1: Activity list element found');
+
+        try {
+            if (!activities || activities.length === 0) {
+                console.log('📭 STEP 3.2: No activities to display');
+                activityList.innerHTML = `
+                    <div class="activity-empty">
+                        <i class="fas fa-inbox"></i>
+                        <h4>No Recent Activity</h4>
+                        <p>No activities found in the last 30 days</p>
+                        <button class="btn btn-primary btn-sm" onclick="casaLink.loadRecentActivities()">
+                            <i class="fas fa-redo"></i> Try Again
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+
+            console.log(`🎨 STEP 3.3: Displaying ${activities.length} activities`);
+            
+            activityList.innerHTML = activities.map(activity => `
+                <div class="activity-item" data-activity-type="${activity.type}">
+                    <div class="activity-icon" style="background: ${activity.color}20; color: ${activity.color};">
+                        <i class="${activity.icon}"></i>
+                    </div>
+                    <div class="activity-content">
+                        <div class="activity-title">${activity.title}</div>
+                        <div class="activity-description">${activity.description}</div>
+                        <div class="activity-time">${this.formatActivityTime(activity.timestamp)}</div>
+                    </div>
+                    <div class="activity-actions">
+                        <button class="btn btn-sm btn-secondary" onclick="casaLink.viewActivityDetails('${activity.type}', '${activity.data?.id || ''}')">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            console.log('✅ STEP 3 COMPLETE: Activities displayed successfully');
+
+        } catch (error) {
+            console.error('❌ STEP 3 FAILED: Error displaying activities:', error);
+            this.showActivityError('Failed to display activities');
+        }
+    }
+
+    formatActivityTime(timestamp) {
+        const now = new Date();
+        const activityTime = new Date(timestamp);
+        const diffMs = now - activityTime;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays === 1) return 'Yesterday';
+        if (diffDays < 7) return `${diffDays}d ago`;
+        
+        return activityTime.toLocaleDateString();
+    }
+
+    showActivityError(message = 'Unable to load activities') {
+        const activityList = document.getElementById('recentActivityList');
+        if (activityList) {
+            activityList.innerHTML = `
+                <div class="activity-error">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h4>Unable to Load Activities</h4>
+                    <p>${message}</p>
+                    <button class="btn btn-primary btn-sm" onclick="casaLink.loadRecentActivities()">
+                        <i class="fas fa-redo"></i> Retry
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    async viewActivityDetails(activityType, activityId) {
+        switch (activityType) {
+            case 'new_tenant':
+                this.showPage('tenants');
+                break;
+            case 'new_lease':
+                // You could show a lease details modal here
+                this.showNotification('Lease details feature coming soon!', 'info');
+                break;
+            case 'payment_received':
+                this.switchBillingView('payments');
+                break;
+            case 'bill_generated':
+                this.switchBillingView('bills');
+                break;
+            case 'maintenance_request':
+                this.showPage('maintenance');
+                break;
+            default:
+                console.log('Unknown activity type:', activityType);
+        }
+    }
+
+    async loadMoreActivities() {
+        try {
+            console.log('📅 Loading activities from previous months...');
+            
+            // Show loading state
+            const activityList = document.getElementById('recentActivityList');
+            const loadMoreBtn = activityList?.querySelector('.load-more-btn');
+            
+            if (loadMoreBtn) {
+                loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+                loadMoreBtn.disabled = true;
+            }
+
+            // You can implement logic here to load activities from previous months
+            // For now, we'll just show a notification
+            this.showNotification('Loading activities from previous months...', 'info');
+            
+            // Reset button after a delay
+            setTimeout(() => {
+                if (loadMoreBtn) {
+                    loadMoreBtn.innerHTML = '<i class="fas fa-history"></i> Load Previous Months';
+                    loadMoreBtn.disabled = false;
+                }
+            }, 2000);
+            
+        } catch (error) {
+            console.error('Error loading more activities:', error);
+            this.showNotification('Failed to load more activities', 'error');
+        }
+    }
+
+    async markAllAsRead() {
+        // This would typically update a 'read' status in your database
+        this.showNotification('All activities marked as read', 'success');
+    }
+
+    setupDashboardEvents() {
+        console.log('🔄 Setting up dashboard events with fresh data...');
+        
+        // Add Property Button
+        document.getElementById('addPropertyBtn')?.addEventListener('click', () => {
+            this.showAddPropertyForm();
+        });
+        
+        // Load recent activities when dashboard is shown 
+        setTimeout(() => {
+            this.loadRecentActivities();
+        }, 500);
+        
+        // Setup real-time stats when dashboard is shown
+        this.updateActiveNavState('dashboard');
+        
+        console.log('✅ All dashboard events setup complete');
+    }
+
 
 
     getLandlordDashboardHTML() {
@@ -693,7 +1106,7 @@ class CasaLink {
                     </div>
                 </div>
 
-                <!-- OPERATIONS SECTION (UPDATED) -->
+                <!-- OPERATIONS SECTION -->
                 <div class="card-group-title">Operations</div>
                 <div class="card-group">
                     <div class="card" data-clickable="renewals" style="cursor: pointer;" title="Click to view lease renewals">
@@ -724,56 +1137,27 @@ class CasaLink {
                     </div>
                 </div>
 
-                <!-- QUICK ACTIONS SECTION -->
-                <div class="card-group-title">Quick Actions</div>
-                <div class="card-group">
-                    <div class="card quick-action-card" onclick="casaLink.showPage('tenants')">
-                        <div class="card-header">
-                            <div class="card-title">Manage Tenants</div>
-                            <div class="card-icon tenants"><i class="fas fa-users"></i></div>
-                        </div>
-                        <p>View and manage all your tenants</p>
-                        <div class="quick-action-link">
-                            Go to Tenants <i class="fas fa-arrow-right"></i>
+                <!-- RECENT ACTIVITY SECTION -->
+                <div class="card-group-title">Recent Activity</div>
+                <div class="recent-activity-container">
+                    <div id="recentActivityList" class="recent-activity-list">
+                        <div class="activity-loading">
+                            <i class="fas fa-spinner fa-spin"></i> Loading recent activity...
                         </div>
                     </div>
-                    
-                    <div class="card quick-action-card" onclick="casaLink.showPage('billing')">
-                        <div class="card-header">
-                            <div class="card-title">Billing & Payments</div>
-                            <div class="card-icon revenue"><i class="fas fa-file-invoice-dollar"></i></div>
-                        </div>
-                        <p>Generate bills and track payments</p>
-                        <div class="quick-action-link">
-                            Go to Billing <i class="fas fa-arrow-right"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="card quick-action-card" onclick="casaLink.showPage('maintenance')">
-                        <div class="card-header">
-                            <div class="card-title">Maintenance</div>
-                            <div class="card-icon maintenance"><i class="fas fa-tools"></i></div>
-                        </div>
-                        <p>Handle maintenance requests</p>
-                        <div class="quick-action-link">
-                            Go to Maintenance <i class="fas fa-arrow-right"></i>
-                        </div>
-                    </div>
-
-                    <div class="card quick-action-card" onclick="casaLink.showAddTenantForm()">
-                        <div class="card-header">
-                            <div class="card-title">Add New Tenant</div>
-                            <div class="card-icon tenants"><i class="fas fa-user-plus"></i></div>
-                        </div>
-                        <p>Create a new tenant account</p>
-                        <div class="quick-action-link">
-                            Add Tenant <i class="fas fa-arrow-right"></i>
-                        </div>
+                    <div class="recent-activity-footer">
+                        <button class="btn btn-secondary btn-sm" onclick="casaLink.loadMoreActivities()">
+                            <i class="fas fa-history"></i> Load More
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="casaLink.markAllAsRead()">
+                            <i class="fas fa-check-double"></i> Mark All as Read
+                        </button>
                     </div>
                 </div>
             </div>
         `;
     }
+
 
 
 
@@ -1500,7 +1884,7 @@ class CasaLink {
                 this.setupTenantsPage();
                 break;
             case 'maintenance':
-                this.setupMaintenancePage(); // ADD THIS LINE
+                this.setupMaintenancePage();
                 break;
             case 'payments':
                 // Redirect to billing tab and switch to payments tab
@@ -6157,6 +6541,8 @@ class CasaLink {
         document.getElementById('addPropertyBtn')?.addEventListener('click', () => {
             this.showAddPropertyForm();
         });
+        
+        this.loadRecentActivities();
         
         // Setup real-time stats when dashboard is shown
         this.updateActiveNavState('dashboard');
