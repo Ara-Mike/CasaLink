@@ -29,6 +29,13 @@ class CasaLink {
         this.tenantsTotalPages = 1;
         this.tenantsAllData = [];
         this.tenantsFilteredData = [];
+        this.setupCacheBusting();
+
+        this.activitiesCurrentPage = 1;
+        this.activitiesItemsPerPage = 10;
+        this.activitiesTotalPages = 1;
+        this.activitiesAllData = [];
+        this.activitiesFilteredData = [];
         
         // 🔥 ADD BILLING VIEW TRACKING
         this.currentBillingView = 'bills'; // Default to Bills Management
@@ -46,6 +53,35 @@ class CasaLink {
         console.log('🔄 Initializing CasaLink...');
         this.init();
     }
+
+    setupCacheBusting() {
+        // Clear cache on new version
+        const storedVersion = localStorage.getItem('casalink_app_version');
+        if (storedVersion !== this.appVersion) {
+            console.log('🔄 New version detected, clearing cache...');
+            
+            // Clear all caches
+            if ('caches' in window) {
+                caches.keys().then(names => {
+                    names.forEach(name => caches.delete(name));
+                });
+            }
+            
+            // Clear specific problematic items
+            localStorage.removeItem('casalink_layout_cache');
+            sessionStorage.clear();
+            
+            // Store new version
+            localStorage.setItem('casalink_app_version', this.appVersion);
+            
+            // Reload to apply fresh files
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        }
+    }
+
+    
 
     addDebugTools() {
         // Only add in development or if there are issues
@@ -643,6 +679,36 @@ class CasaLink {
         }
     }
 
+    async debugActivityCounts() {
+        console.log('🐛 DEBUG: Activity Counts by Type');
+        
+        const now = new Date();
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(now.getDate() - 60);
+        
+        try {
+            const collections = ['users', 'payments', 'bills', 'maintenance'];
+            const counts = {};
+            
+            for (const collection of collections) {
+                const snapshot = await firebaseDb.collection(collection)
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .where('createdAt', '>=', sixtyDaysAgo)
+                    .where('createdAt', '<=', now)
+                    .get();
+                
+                counts[collection] = snapshot.size;
+                console.log(`📊 ${collection}: ${snapshot.size} documents`);
+            }
+            
+            console.log('📈 Total potential activities:', Object.values(counts).reduce((a, b) => a + b, 0));
+            return counts;
+            
+        } catch (error) {
+            console.error('Debug error:', error);
+        }
+    }
+
     getSampleActivities() {
         console.log('🔍 Creating sample activities for demonstration');
         
@@ -683,6 +749,25 @@ class CasaLink {
                 icon: 'fas fa-file-invoice',
                 color: 'var(--warning)',
                 data: { totalAmount: 10500, tenantName: 'Ana Lopez' }
+            },
+            // ADD MORE SAMPLE ACTIVITIES
+            {
+                type: 'payment_received',
+                title: 'Payment Received',
+                description: '₱15,000 from Roberto Cruz - Room 4A',
+                timestamp: new Date(now.getFullYear(), now.getMonth() - 1, 20).toISOString(),
+                icon: 'fas fa-credit-card',
+                color: 'var(--success)',
+                data: { amount: 15000, tenantName: 'Roberto Cruz' }
+            },
+            {
+                type: 'maintenance_request',
+                title: 'Maintenance Request',
+                description: 'Electrical issue in Room 2B - Medium Priority',
+                timestamp: new Date(now.getFullYear(), now.getMonth() - 1, 15).toISOString(),
+                icon: 'fas fa-tools',
+                color: 'var(--warning)',
+                data: { type: 'electrical', tenantName: 'Lisa Mendoza' }
             }
         ];
         
@@ -700,162 +785,623 @@ class CasaLink {
         this.loadRecentActivities();
     }
 
+    removeDuplicateActivities(activities) {
+        const seen = new Set();
+        return activities.filter(activity => {
+            // Create a unique key based on timestamp and description
+            const key = `${activity.timestamp}_${activity.description}`;
+            if (seen.has(key)) {
+                return false;
+            }
+            seen.add(key);
+            return true;
+        });
+    }
+
+    async debugFirestoreCollections() {
+        console.log('🐛 DEBUG: Checking Firestore collections...');
+        
+        const collections = ['users', 'payments', 'bills', 'maintenance'];
+        
+        for (const collection of collections) {
+            try {
+                const snapshot = await firebaseDb.collection(collection)
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .limit(5)
+                    .get();
+                
+                console.log(`📊 ${collection}: ${snapshot.size} documents found`);
+                
+                snapshot.forEach(doc => {
+                    console.log(`   📄 ${doc.id}:`, doc.data());
+                });
+            } catch (error) {
+                console.error(`❌ Error fetching ${collection}:`, error);
+            }
+        }
+    }
+
+    debugRecentActivitiesData() {
+        console.log('🐛 DEBUG: Recent Activities Data Flow');
+        this.debugFirestoreCollections();
+        this.loadRecentActivities();
+    }
+
+    debugActivityQueries() {
+        console.log('🐛 DEBUG: Activity Query Results - ENHANCED');
+        
+        const now = new Date();
+        const sixtyDaysAgo = new Date();
+        sixtyDaysAgo.setDate(now.getDate() - 60);
+        
+        console.log('📅 Date range:', {
+            from: sixtyDaysAgo.toISOString(),
+            to: now.toISOString(),
+            user: this.currentUser.uid
+        });
+
+        // Test each query individually with better error handling
+        const testQueries = [
+            {
+                name: 'users',
+                query: firebaseDb.collection('users')
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .where('role', '==', 'tenant')
+            },
+            {
+                name: 'payments', 
+                query: firebaseDb.collection('payments')
+                    .where('landlordId', '==', this.currentUser.uid)
+            },
+            {
+                name: 'bills',
+                query: firebaseDb.collection('bills')
+                    .where('landlordId', '==', this.currentUser.uid)
+            },
+            {
+                name: 'maintenance',
+                query: firebaseDb.collection('maintenance')
+                    .where('landlordId', '==', this.currentUser.uid)
+            }
+        ];
+        
+        // Test without date filters first
+        console.log('🔍 TEST 1: Without date filters');
+        testQueries.forEach(async (test) => {
+            try {
+                const simpleQuery = firebaseDb.collection(test.name)
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .limit(10);
+                    
+                const snapshot = await simpleQuery.get();
+                console.log(`📊 ${test.name} (no date filter): ${snapshot.size} documents`);
+                
+                if (snapshot.size > 0) {
+                    snapshot.forEach(doc => {
+                        const data = doc.data();
+                        console.log(`   📄 ${doc.id}:`, {
+                            createdAt: data.createdAt,
+                            landlordId: data.landlordId,
+                            // Show relevant fields for each collection
+                            ...(test.name === 'users' && { name: data.name, email: data.email }),
+                            ...(test.name === 'payments' && { amount: data.amount, paymentDate: data.paymentDate }),
+                            ...(test.name === 'bills' && { totalAmount: data.totalAmount, dueDate: data.dueDate }),
+                            ...(test.name === 'maintenance' && { title: data.title, status: data.status })
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error(`❌ Error in ${test.name} simple query:`, error);
+            }
+        });
+
+        // Test with date filters
+        setTimeout(async () => {
+            console.log('\n🔍 TEST 2: With date filters');
+            for (const test of testQueries) {
+                try {
+                    let dateField = 'createdAt';
+                    if (test.name === 'payments') dateField = 'paymentDate';
+                    
+                    const dateQuery = firebaseDb.collection(test.name)
+                        .where('landlordId', '==', this.currentUser.uid)
+                        .where(dateField, '>=', sixtyDaysAgo)
+                        .where(dateField, '<=', now)
+                        .limit(10);
+                        
+                    const snapshot = await dateQuery.get();
+                    console.log(`📊 ${test.name} (with date filter): ${snapshot.size} documents`);
+                    
+                    if (snapshot.size > 0) {
+                        snapshot.forEach(doc => {
+                            const data = doc.data();
+                            console.log(`   📄 ${doc.id}:`, {
+                                [dateField]: data[dateField],
+                                // Show relevant fields
+                                ...(test.name === 'users' && { name: data.name }),
+                                ...(test.name === 'payments' && { amount: data.amount }),
+                                ...(test.name === 'bills' && { totalAmount: data.totalAmount }),
+                                ...(test.name === 'maintenance' && { title: data.title })
+                            });
+                        });
+                    } else {
+                        console.log(`   ℹ️  No documents found with date range for ${test.name}`);
+                        
+                        // Check what dates actually exist in documents
+                        const anyDoc = await firebaseDb.collection(test.name)
+                            .where('landlordId', '==', this.currentUser.uid)
+                            .limit(1)
+                            .get();
+                            
+                        if (!anyDoc.empty) {
+                            const docData = anyDoc.docs[0].data();
+                            const dateValue = docData[dateField] || docData.createdAt;
+                            console.log(`   📅 Sample date in ${test.name}:`, dateValue);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`❌ Error in ${test.name} date query:`, error);
+                }
+            }
+        }, 1000);
+    }
+
+    async debugFirestoreStructure() {
+        console.log('🏗️ DEBUG: Firestore Structure Analysis');
+        
+        const collections = ['users', 'payments', 'bills', 'maintenance'];
+        
+        for (const collection of collections) {
+            try {
+                console.log(`\n📁 Checking ${collection} collection structure...`);
+                
+                // Get first document to see structure
+                const snapshot = await firebaseDb.collection(collection)
+                    .where('landlordId', '==', this.currentUser.uid)
+                    .limit(1)
+                    .get();
+                    
+                if (snapshot.empty) {
+                    console.log(`   ❌ No documents found in ${collection} for current user`);
+                    continue;
+                }
+                
+                const doc = snapshot.docs[0];
+                const data = doc.data();
+                
+                console.log(`   ✅ Document structure for ${collection}:`);
+                console.log('   Fields:', Object.keys(data));
+                
+                // Check for date fields
+                const dateFields = Object.keys(data).filter(key => 
+                    typeof data[key] === 'string' && 
+                    data[key].match(/\d{4}-\d{2}-\d{2}/) &&
+                    !isNaN(new Date(data[key]).getTime())
+                );
+                
+                if (dateFields.length > 0) {
+                    console.log(`   📅 Date fields: ${dateFields.join(', ')}`);
+                    dateFields.forEach(field => {
+                        console.log(`      ${field}: ${data[field]}`);
+                    });
+                } else {
+                    console.log('   ⚠️ No recognizable date fields found');
+                }
+                
+            } catch (error) {
+                console.error(`❌ Error analyzing ${collection}:`, error);
+            }
+        }
+    }
+
     async fetchRecentActivities() {
-        console.log('🔍 STEP 2.1: Starting fetchRecentActivities');
+        console.log('🔍 STEP 2.1: Starting fetchRecentActivities - IMPROVED');
         
         const activities = [];
         const now = new Date();
         
-        // FIX: Use last 30 days instead of current month only
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(now.getDate() - 30);
+        // Use last 90 days for better coverage
+        const ninetyDaysAgo = new Date();
+        ninetyDaysAgo.setDate(now.getDate() - 90);
         
-        console.log('📅 Date range:', {
-            from: thirtyDaysAgo.toISOString(),
+        console.log('📅 Date range for queries:', {
+            from: ninetyDaysAgo.toISOString(),
             to: now.toISOString(),
             user: this.currentUser.uid
         });
 
         try {
-            // Add a timeout to prevent hanging
-            const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('Activity fetch timeout')), 10000);
-            });
-
-            const fetchPromise = (async () => {
-                // 1. Fetch Recent Tenants
-                console.log('🔍 STEP 2.2: Fetching recent tenants...');
-                const recentTenants = await firebaseDb.collection('users')
+            const fetchPromises = [];
+            
+            // 1. Fetch Recent Tenants - SIMPLIFIED
+            console.log('🔍 Fetching recent tenants...');
+            fetchPromises.push(
+                firebaseDb.collection('users')
                     .where('landlordId', '==', this.currentUser.uid)
                     .where('role', '==', 'tenant')
-                    .where('createdAt', '>=', thirtyDaysAgo)
-                    .where('createdAt', '<=', now)
                     .orderBy('createdAt', 'desc')
-                    .limit(5)
-                    .get();
+                    .limit(20)
+                    .get().then(snapshot => {
+                        console.log(`✅ Found ${snapshot.size} tenants total`);
+                        snapshot.forEach(doc => {
+                            const tenant = doc.data();
+                            // Check if tenant is within date range
+                            const tenantDate = new Date(tenant.createdAt);
+                            if (tenantDate >= ninetyDaysAgo && tenantDate <= now) {
+                                activities.push({
+                                    type: 'new_tenant',
+                                    title: 'New Tenant Registered',
+                                    description: `${tenant.name} - ${tenant.roomNumber || 'No room'}`,
+                                    timestamp: tenant.createdAt,
+                                    icon: 'fas fa-user-plus',
+                                    color: 'var(--success)',
+                                    data: { ...tenant, id: doc.id }
+                                });
+                            }
+                        });
+                    }).catch(error => {
+                        console.error('❌ Error fetching tenants:', error);
+                    })
+            );
 
-                console.log(`✅ Found ${recentTenants.size} recent tenants`);
-                
-                recentTenants.forEach(doc => {
-                    const tenant = doc.data();
-                    activities.push({
-                        type: 'new_tenant',
-                        title: 'New Tenant Registered',
-                        description: `${tenant.name} has registered`,
-                        timestamp: tenant.createdAt,
-                        icon: 'fas fa-user-plus',
-                        color: 'var(--success)',
-                        data: tenant
-                    });
-                });
-
-                // 2. Fetch Recent Payments
-                console.log('🔍 STEP 2.3: Fetching recent payments...');
-                const recentPayments = await firebaseDb.collection('payments')
+            // 2. Fetch Recent Payments - SIMPLIFIED
+            console.log('🔍 Fetching recent payments...');
+            fetchPromises.push(
+                firebaseDb.collection('payments')
                     .where('landlordId', '==', this.currentUser.uid)
-                    .where('paymentDate', '>=', thirtyDaysAgo)
-                    .where('paymentDate', '<=', now)
                     .orderBy('paymentDate', 'desc')
-                    .limit(10)
-                    .get();
+                    .limit(20)
+                    .get().then(snapshot => {
+                        console.log(`✅ Found ${snapshot.size} payments total`);
+                        snapshot.forEach(doc => {
+                            const payment = doc.data();
+                            const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+                            if (paymentDate >= ninetyDaysAgo && paymentDate <= now) {
+                                activities.push({
+                                    type: 'payment_received',
+                                    title: 'Payment Received',
+                                    description: `₱${payment.amount?.toLocaleString()} from ${payment.tenantName || 'Tenant'}`,
+                                    timestamp: payment.paymentDate || payment.createdAt,
+                                    icon: 'fas fa-credit-card',
+                                    color: 'var(--success)',
+                                    data: { ...payment, id: doc.id }
+                                });
+                            }
+                        });
+                    }).catch(error => {
+                        console.error('❌ Error fetching payments:', error);
+                    })
+            );
 
-                console.log(`✅ Found ${recentPayments.size} recent payments`);
-                
-                recentPayments.forEach(doc => {
-                    const payment = doc.data();
-                    activities.push({
-                        type: 'payment_received',
-                        title: 'Payment Received',
-                        description: `₱${payment.amount?.toLocaleString()} from ${payment.tenantName}`,
-                        timestamp: payment.paymentDate,
-                        icon: 'fas fa-credit-card',
-                        color: 'var(--success)',
-                        data: payment
-                    });
-                });
-
-                // 3. Fetch Recent Bills
-                console.log('🔍 STEP 2.4: Fetching recent bills...');
-                const recentBills = await firebaseDb.collection('bills')
+            // 3. Fetch Recent Bills - SIMPLIFIED
+            console.log('🔍 Fetching recent bills...');
+            fetchPromises.push(
+                firebaseDb.collection('bills')
                     .where('landlordId', '==', this.currentUser.uid)
-                    .where('createdAt', '>=', thirtyDaysAgo)
-                    .where('createdAt', '<=', now)
                     .orderBy('createdAt', 'desc')
-                    .limit(10)
-                    .get();
+                    .limit(20)
+                    .get().then(snapshot => {
+                        console.log(`✅ Found ${snapshot.size} bills total`);
+                        snapshot.forEach(doc => {
+                            const bill = doc.data();
+                            const billDate = new Date(bill.createdAt);
+                            if (billDate >= ninetyDaysAgo && billDate <= now) {
+                                activities.push({
+                                    type: 'bill_generated',
+                                    title: bill.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill Created',
+                                    description: `₱${bill.totalAmount?.toLocaleString()} for ${bill.tenantName || 'Tenant'}`,
+                                    timestamp: bill.createdAt,
+                                    icon: 'fas fa-file-invoice',
+                                    color: bill.isAutoGenerated ? 'var(--warning)' : 'var(--info)',
+                                    data: { ...bill, id: doc.id }
+                                });
+                            }
+                        });
+                    }).catch(error => {
+                        console.error('❌ Error fetching bills:', error);
+                    })
+            );
 
-                console.log(`✅ Found ${recentBills.size} recent bills`);
-                
-                recentBills.forEach(doc => {
-                    const bill = doc.data();
-                    activities.push({
-                        type: 'bill_generated',
-                        title: bill.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill Created',
-                        description: `₱${bill.totalAmount?.toLocaleString()} for ${bill.tenantName}`,
-                        timestamp: bill.createdAt,
-                        icon: 'fas fa-file-invoice',
-                        color: bill.isAutoGenerated ? 'var(--warning)' : 'var(--info)',
-                        data: bill
-                    });
-                });
-
-                // 4. Fetch Maintenance Requests
-                console.log('🔍 STEP 2.5: Fetching maintenance requests...');
-                const recentMaintenance = await firebaseDb.collection('maintenance')
+            // 4. Fetch Maintenance Requests - SIMPLIFIED
+            console.log('🔍 Fetching maintenance requests...');
+            fetchPromises.push(
+                firebaseDb.collection('maintenance')
                     .where('landlordId', '==', this.currentUser.uid)
-                    .where('createdAt', '>=', thirtyDaysAgo)
-                    .where('createdAt', '<=', now)
                     .orderBy('createdAt', 'desc')
-                    .limit(10)
-                    .get();
+                    .limit(20)
+                    .get().then(snapshot => {
+                        console.log(`✅ Found ${snapshot.size} maintenance requests total`);
+                        snapshot.forEach(doc => {
+                            const request = doc.data();
+                            const requestDate = new Date(request.createdAt);
+                            if (requestDate >= ninetyDaysAgo && requestDate <= now) {
+                                activities.push({
+                                    type: 'maintenance_request',
+                                    title: 'Maintenance Request',
+                                    description: `${request.type || 'General'} issue from ${request.tenantName || 'Tenant'}`,
+                                    timestamp: request.createdAt,
+                                    icon: 'fas fa-tools',
+                                    color: 'var(--info)',
+                                    data: { ...request, id: doc.id }
+                                });
+                            }
+                        });
+                    }).catch(error => {
+                        console.error('❌ Error fetching maintenance:', error);
+                    })
+            );
 
-                console.log(`✅ Found ${recentMaintenance.size} maintenance requests`);
-
-                recentMaintenance.forEach(doc => {
-                    const request = doc.data();
-                    activities.push({
-                        type: 'maintenance_request',
-                        title: 'Maintenance Request',
-                        description: `${request.type} issue from ${request.tenantName}`,
-                        timestamp: request.createdAt,
-                        icon: 'fas fa-tools',
-                        color: 'var(--info)',
-                        data: request
-                    });
-                });
-
-                console.log(`📊 STEP 2.6: Total activities collected: ${activities.length}`);
-                return activities;
-            })();
-
-            // Race between fetch and timeout
-            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            // Wait for all queries
+            await Promise.allSettled(fetchPromises);
             
-            // If no activities found, provide sample data
-            if (result.length === 0) {
-                console.log('📝 No real activities found, providing sample data');
+            console.log(`📊 Total activities collected: ${activities.length}`);
+            
+            // DEBUG: Log what we found
+            const activityCounts = {
+                tenants: activities.filter(a => a.type === 'new_tenant').length,
+                payments: activities.filter(a => a.type === 'payment_received').length,
+                bills: activities.filter(a => a.type === 'bill_generated').length,
+                maintenance: activities.filter(a => a.type === 'maintenance_request').length
+            };
+            
+            console.log('🔍 Activities found by type:', activityCounts);
+
+            // If no activities found, check why
+            if (activities.length === 0) {
+                console.log('❌ No activities found. Possible issues:');
+                console.log('   1. Date range too restrictive');
+                console.log('   2. Field names mismatch (createdAt vs timestamp)');
+                console.log('   3. No data in the collections');
+                console.log('   4. landlordId mismatch');
+                
+                // Provide sample data for demo
+                console.log('📝 Providing sample data for demonstration');
                 const sampleActivities = this.getSampleActivities();
-                console.log(`📝 Sample activities provided: ${sampleActivities.length} items`);
                 return sampleActivities;
             }
 
             // Sort by timestamp (newest first)
-            const sortedActivities = result.sort((a, b) => 
+            const sortedActivities = activities.sort((a, b) => 
                 new Date(b.timestamp) - new Date(a.timestamp)
             );
             
-            console.log('✅ STEP 2.7: Activities sorted and ready');
-            return sortedActivities;
+            const uniqueActivities = this.removeDuplicateActivities(sortedActivities);
+            
+            console.log('✅ Activities processed:', {
+                total: activities.length,
+                unique: uniqueActivities.length,
+                sorted: sortedActivities.length
+            });
+            
+            return uniqueActivities;
 
         } catch (error) {
-            console.error('❌ STEP 2 FAILED: Error in fetchRecentActivities:', error);
+            console.error('❌ Error in fetchRecentActivities:', error);
             console.log('🔄 Providing sample data due to error');
             return this.getSampleActivities();
         }
     }
 
+    testActivitiesPagination() {
+        console.log('🧪 Testing activities pagination...');
+        console.log('Pagination State:', {
+            currentPage: this.activitiesCurrentPage,
+            totalPages: this.activitiesTotalPages,
+            itemsPerPage: this.activitiesItemsPerPage,
+            totalItems: this.activitiesFilteredData.length,
+            allData: this.activitiesAllData.length
+        });
+        
+        const paginationContainer = document.getElementById('activitiesPagination');
+        console.log('Pagination Container:', paginationContainer ? 'Found' : 'Not Found');
+        
+        const pageNumbers = document.getElementById('activitiesPageNumbers');
+        console.log('Page Numbers:', pageNumbers ? 'Found' : 'Not Found');
+        
+        // Force refresh the pagination
+        this.setupActivitiesPagination();
+    }
+
+    updateActivitiesPaginationControls() {
+        const pageNumbers = document.getElementById('activitiesPageNumbers');
+        if (!pageNumbers) {
+            console.error('❌ Activities page numbers container not found');
+            return;
+        }
+        
+        pageNumbers.innerHTML = '';
+        
+        console.log(`🔄 Updating pagination controls for page ${this.activitiesCurrentPage} of ${this.activitiesTotalPages}`);
+        
+        // Show page numbers (max 5 pages)
+        const startPage = Math.max(1, this.activitiesCurrentPage - 2);
+        const endPage = Math.min(this.activitiesTotalPages, startPage + 4);
+        
+        for (let i = startPage; i <= endPage; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = `btn btn-sm ${i === this.activitiesCurrentPage ? 'btn-primary' : 'btn-secondary'}`;
+            pageButton.textContent = i;
+            pageButton.onclick = () => {
+                console.log(`🔢 Page ${i} clicked`);
+                this.activitiesCurrentPage = i;
+                this.updateActivitiesList(this.getCurrentActivitiesPage());
+                this.updateActivitiesPaginationControls();
+            };
+            pageNumbers.appendChild(pageButton);
+        }
+        
+        // Update button states
+        const prevButton = document.getElementById('activitiesPrevPage');
+        const nextButton = document.getElementById('activitiesNextPage');
+        
+        if (prevButton) {
+            prevButton.disabled = this.activitiesCurrentPage === 1;
+            prevButton.title = this.activitiesCurrentPage === 1 ? 'You are on the first page' : 'Go to previous page';
+        }
+        
+        if (nextButton) {
+            nextButton.disabled = this.activitiesCurrentPage === this.activitiesTotalPages;
+            nextButton.title = this.activitiesCurrentPage === this.activitiesTotalPages ? 'You are on the last page' : 'Go to next page';
+        }
+        
+        // Update pagination info
+        this.updateActivitiesPaginationInfo();
+        
+        console.log('✅ Pagination controls updated');
+    }
+
+    setupActivitiesPagination() {
+        const paginationContainer = document.getElementById('activitiesPagination');
+        if (!paginationContainer) {
+            console.error('❌ Activities pagination container not found');
+            return;
+        }
+        
+        console.log(`🔧 Setting up pagination controls - ${this.activitiesTotalPages} pages available`);
+        
+        // Show pagination if we have multiple pages
+        if (this.activitiesTotalPages > 1) {
+            paginationContainer.style.display = 'flex';
+            this.updateActivitiesPaginationControls();
+            console.log('✅ Pagination controls shown');
+        } else {
+            paginationContainer.style.display = 'none';
+            console.log('⏭️ Pagination hidden (only one page)');
+        }
+        
+        // Setup event listeners
+        this.setupActivitiesPaginationEventListeners();
+    }
+
+    setupActivitiesPaginationEventListeners() {
+        const prevButton = document.getElementById('activitiesPrevPage');
+        const nextButton = document.getElementById('activitiesNextPage');
+        
+        if (prevButton) {
+            // Remove existing event listeners to avoid duplicates
+            prevButton.replaceWith(prevButton.cloneNode(true));
+            const newPrevButton = document.getElementById('activitiesPrevPage');
+            
+            newPrevButton.onclick = () => {
+                console.log('⬅️ Previous page clicked');
+                if (this.activitiesCurrentPage > 1) {
+                    this.activitiesCurrentPage--;
+                    this.updateActivitiesList(this.getCurrentActivitiesPage());
+                    this.updateActivitiesPaginationControls();
+                    console.log(`📄 Now on page ${this.activitiesCurrentPage}`);
+                }
+            };
+        }
+        
+        if (nextButton) {
+            // Remove existing event listeners to avoid duplicates
+            nextButton.replaceWith(nextButton.cloneNode(true));
+            const newNextButton = document.getElementById('activitiesNextPage');
+            
+            newNextButton.onclick = () => {
+                console.log('➡️ Next page clicked');
+                if (this.activitiesCurrentPage < this.activitiesTotalPages) {
+                    this.activitiesCurrentPage++;
+                    this.updateActivitiesList(this.getCurrentActivitiesPage());
+                    this.updateActivitiesPaginationControls();
+                    console.log(`📄 Now on page ${this.activitiesCurrentPage}`);
+                }
+            };
+        }
+    }
+
+    updateActivitiesPaginationInfo() {
+        const infoElement = document.getElementById('activitiesPaginationInfo');
+        if (infoElement) {
+            const startItem = (this.activitiesCurrentPage - 1) * this.activitiesItemsPerPage + 1;
+            const endItem = Math.min(this.activitiesCurrentPage * this.activitiesItemsPerPage, this.activitiesFilteredData.length);
+            const totalItems = this.activitiesFilteredData.length;
+            
+            infoElement.textContent = `Showing ${startItem}-${endItem} of ${totalItems} activities`;
+            
+            console.log(`📊 Pagination info: ${startItem}-${endItem} of ${totalItems}`);
+        }
+    }
+
+    renderActivitiesList(activities) {
+        console.log(`🎨 Rendering ${activities.length} activity items`);
+        
+        return activities.map((activity, index) => `
+            <div class="activity-item" data-activity-type="${activity.type}" data-activity-index="${index}">
+                <div class="activity-icon" style="background: ${activity.color}20; color: ${activity.color};">
+                    <i class="${activity.icon}"></i>
+                </div>
+                <div class="activity-content">
+                    <div class="activity-title">${activity.title}</div>
+                    <div class="activity-description">${activity.description}</div>
+                    <div class="activity-time">${this.formatActivityTime(activity.timestamp)}</div>
+                </div>
+                <div class="activity-actions">
+                    <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.viewActivityDetails('${activity.type}', '${activity.data?.id || ''}')">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Empty state for activities
+    getEmptyActivitiesState() {
+        return `
+            <div class="activity-empty">
+                <i class="fas fa-inbox"></i>
+                <h4>No Recent Activity</h4>
+                <p>No activities found in the last 30 days</p>
+                <button class="btn btn-primary btn-sm" onclick="casaLink.loadRecentActivities()">
+                    <i class="fas fa-redo"></i> Try Again
+                </button>
+            </div>
+        `;
+    }
+
+    updateActivitiesList(activities) {
+        const activityList = document.getElementById('recentActivityList');
+        if (!activityList) {
+            console.error('❌ Activity list element not found for update');
+            return;
+        }
+        
+        console.log(`🔄 Updating activities list with ${activities.length} items`);
+        
+        if (activities.length === 0) {
+            activityList.innerHTML = this.getEmptyActivitiesState();
+            return;
+        }
+        
+        activityList.innerHTML = this.renderActivitiesList(activities);
+        this.updateActivitiesPaginationInfo();
+    }
+
+
+    getCurrentActivitiesPage() {
+        const startIndex = (this.activitiesCurrentPage - 1) * this.activitiesItemsPerPage;
+        const endIndex = startIndex + this.activitiesItemsPerPage;
+        const currentPageData = this.activitiesFilteredData.slice(startIndex, endIndex);
+        
+        console.log(`📄 Getting page ${this.activitiesCurrentPage}: ${startIndex}-${endIndex} of ${this.activitiesFilteredData.length} items`);
+        
+        return currentPageData;
+    }
+
+    hideActivitiesPagination() {
+        const paginationContainer = document.getElementById('activitiesPagination');
+        if (paginationContainer) {
+            paginationContainer.style.display = 'none';
+        }
+        
+        const paginationInfo = document.getElementById('activitiesPaginationInfo');
+        if (paginationInfo) {
+            paginationInfo.textContent = 'No activities to display';
+        }
+    }
+
     displayRecentActivities(activities) {
-        console.log('🔍 STEP 3: Starting displayRecentActivities');
+        console.log('🔍 STEP 3: Starting displayRecentActivities with pagination');
         
         const activityList = document.getElementById('recentActivityList');
         if (!activityList) {
@@ -868,40 +1414,26 @@ class CasaLink {
         try {
             if (!activities || activities.length === 0) {
                 console.log('📭 STEP 3.2: No activities to display');
-                activityList.innerHTML = `
-                    <div class="activity-empty">
-                        <i class="fas fa-inbox"></i>
-                        <h4>No Recent Activity</h4>
-                        <p>No activities found in the last 30 days</p>
-                        <button class="btn btn-primary btn-sm" onclick="casaLink.loadRecentActivities()">
-                            <i class="fas fa-redo"></i> Try Again
-                        </button>
-                    </div>
-                `;
+                activityList.innerHTML = this.getEmptyActivitiesState();
+                this.hideActivitiesPagination();
                 return;
             }
 
-            console.log(`🎨 STEP 3.3: Displaying ${activities.length} activities`);
+            console.log(`📊 Total activities received: ${activities.length}`);
             
-            activityList.innerHTML = activities.map(activity => `
-                <div class="activity-item" data-activity-type="${activity.type}">
-                    <div class="activity-icon" style="background: ${activity.color}20; color: ${activity.color};">
-                        <i class="${activity.icon}"></i>
-                    </div>
-                    <div class="activity-content">
-                        <div class="activity-title">${activity.title}</div>
-                        <div class="activity-description">${activity.description}</div>
-                        <div class="activity-time">${this.formatActivityTime(activity.timestamp)}</div>
-                    </div>
-                    <div class="activity-actions">
-                        <button class="btn btn-sm btn-secondary" onclick="casaLink.viewActivityDetails('${activity.type}', '${activity.data?.id || ''}')">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-
-            console.log('✅ STEP 3 COMPLETE: Activities displayed successfully');
+            // Set up pagination data
+            this.activitiesAllData = activities;
+            this.activitiesFilteredData = [...activities];
+            this.activitiesCurrentPage = 1;
+            this.activitiesTotalPages = Math.ceil(activities.length / this.activitiesItemsPerPage);
+            
+            console.log(`🎨 STEP 3.3: Setting up pagination - ${this.activitiesTotalPages} pages total`);
+            
+            // Display current page of activities
+            this.updateActivitiesList(this.getCurrentActivitiesPage());
+            this.setupActivitiesPagination();
+            
+            console.log('✅ STEP 3 COMPLETE: Activities displayed successfully with pagination');
 
         } catch (error) {
             console.error('❌ STEP 3 FAILED: Error displaying activities:', error);
@@ -967,7 +1499,7 @@ class CasaLink {
 
     async loadMoreActivities() {
         try {
-            console.log('📅 Loading activities from previous months...');
+            console.log('📅 Loading more activities...');
             
             // Show loading state
             const activityList = document.getElementById('recentActivityList');
@@ -980,12 +1512,12 @@ class CasaLink {
 
             // You can implement logic here to load activities from previous months
             // For now, we'll just show a notification
-            this.showNotification('Loading activities from previous months...', 'info');
+            this.showNotification('Loading more activities...', 'info');
             
             // Reset button after a delay
             setTimeout(() => {
                 if (loadMoreBtn) {
-                    loadMoreBtn.innerHTML = '<i class="fas fa-history"></i> Load Previous Months';
+                    loadMoreBtn.innerHTML = '<i class="fas fa-history"></i> Load More';
                     loadMoreBtn.disabled = false;
                 }
             }, 2000);
@@ -1137,17 +1669,39 @@ class CasaLink {
                     </div>
                 </div>
 
-                <!-- RECENT ACTIVITY SECTION -->
+                <!-- RECENT ACTIVITY SECTION WITH PAGINATION -->
                 <div class="card-group-title">Recent Activity</div>
                 <div class="recent-activity-container">
+                    
+                    <div class="recent-activity-header">
+                        <h3>Recent Activities</h3>
+                        <div class="activities-pagination-info" id="activitiesPaginationInfo">
+                            Showing 0–0 of 0 activities
+                        </div>
+                    </div>
+
                     <div id="recentActivityList" class="recent-activity-list">
                         <div class="activity-loading">
                             <i class="fas fa-spinner fa-spin"></i> Loading recent activity...
                         </div>
                     </div>
+
+                    <!-- Pagination Controls -->
+                    <div class="pagination-container" id="activitiesPagination" style="display: none; margin-top: 20px;">
+                        <div class="pagination-controls">
+                            <button class="btn btn-sm btn-secondary" id="activitiesPrevPage">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </button>
+                            <div class="pagination-numbers" id="activitiesPageNumbers"></div>
+                            <button class="btn btn-sm btn-secondary" id="activitiesNextPage">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="recent-activity-footer">
                         <button class="btn btn-secondary btn-sm" onclick="casaLink.loadMoreActivities()">
-                            <i class="fas fa-history"></i> Load More
+                            <i class="fas fa-history"></i> Load Older Activities
                         </button>
                         <button class="btn btn-primary btn-sm" onclick="casaLink.markAllAsRead()">
                             <i class="fas fa-check-double"></i> Mark All as Read
@@ -1157,6 +1711,8 @@ class CasaLink {
             </div>
         `;
     }
+
+
 
 
 
