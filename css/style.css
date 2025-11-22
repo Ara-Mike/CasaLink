@@ -1175,6 +1175,24 @@ header {
     }
 }
 
+.activity-item {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
+}
+
+.activity-item:hover {
+    background-color: rgba(22, 38, 96, 0.05);
+    border-color: rgba(22, 38, 96, 0.1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.activity-details-modal {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
 /* Quick Filter Buttons */
 .quick-filter-buttons {
     display: flex;
