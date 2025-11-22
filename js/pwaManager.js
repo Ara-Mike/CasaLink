@@ -10,6 +10,7 @@ class PWAManager {
         this.setupOfflineDetection();
         this.setupUserEngagement(); 
         this.registerServiceWorker();
+        this.setupServiceWorkerListeners();
         this.checkPWAStatus();
         
         // Show install prompt after a short delay if conditions are met
@@ -203,7 +204,26 @@ class PWAManager {
               }
           }, { once: false, passive: true });
       });
-  }
+    }
+
+    static setupServiceWorkerListeners() {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                console.log('🔄 Service Worker controller changed');
+            });
+            
+            // FIX: Add null check for service worker state access
+            navigator.serviceWorker.ready.then((registration) => {
+                if (registration && registration.active) {
+                    console.log('✅ Service Worker ready and active');
+                } else {
+                    console.warn('⚠️ Service Worker not active after ready');
+                }
+            }).catch(error => {
+                console.error('❌ Service Worker ready promise rejected:', error);
+            });
+        }
+    }
 
     static async registerServiceWorker() {
         if ('serviceWorker' in navigator) {
@@ -236,17 +256,49 @@ class PWAManager {
                 
                 console.log('✅ ServiceWorker registered:', registration.scope);
                 
-                // Wait for activation
+                // FIX: Add null checks for service worker state tracking
                 if (registration.installing) {
-                    await new Promise((resolve) => {
-                        registration.installing.addEventListener('statechange', () => {
-                            if (registration.installing.state === 'activated') {
+                    await new Promise((resolve, reject) => {
+                        const worker = registration.installing;
+                        if (!worker) {
+                            resolve();
+                            return;
+                        }
+                        
+                        worker.addEventListener('statechange', () => {
+                            console.log('🔧 Service Worker state:', worker.state);
+                            if (worker.state === 'activated') {
                                 console.log('🎯 Service Worker activated!');
                                 resolve();
+                            } else if (worker.state === 'redundant') {
+                                console.warn('⚠️ Service Worker became redundant');
+                                reject(new Error('Service Worker redundant'));
                             }
                         });
+                        
+                        // Safety timeout
+                        setTimeout(() => {
+                            if (worker.state !== 'activated') {
+                                console.warn('⏰ Service Worker activation timeout');
+                                resolve(); // Resolve anyway to prevent blocking
+                            }
+                        }, 10000);
                     });
+                } else if (registration.active) {
+                    console.log('✅ Service Worker already active');
+                } else if (registration.waiting) {
+                    console.log('⏳ Service Worker waiting');
                 }
+                
+                // FIX: Add global error handler for service worker events
+                registration.addEventListener('updatefound', () => {
+                    const newWorker = registration.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            console.log('🔄 New Service Worker state:', newWorker.state);
+                        });
+                    }
+                });
                 
                 return registration;
                 
