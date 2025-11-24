@@ -484,6 +484,12 @@ class CasaLink {
                     pageContent = await this.getTenantProfilePage();
                     break;
 
+                case 'lease-management':  
+                    this.setupLeaseManagementPage?.();
+                    pageContent = await this.getLeaseManagementPage();              
+            
+                    break;
+
                 default:
                     pageContent = `
                         <div class="page-content">
@@ -1682,6 +1688,21 @@ class CasaLink {
         } catch (error) {
             console.error('❌ Error loading maintenance details:', error);
             this.showNotification('Failed to load maintenance details', 'error');
+        }
+    }
+
+    async getLease(leaseId) {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            const doc = await this.db.collection('leases').doc(leaseId).get();
+            if (!doc.exists) {
+                throw new Error('Lease not found');
+            }
+            return doc.data();
+        } catch (error) {
+            console.error('Error getting lease:', error);
+            throw error;
         }
     }
 
@@ -2938,8 +2959,10 @@ class CasaLink {
             case 'maintenance':
                 this.setupMaintenancePage();
                 break;
+            case 'lease-management':                
+                this.setupLeaseManagementPage?.();
+                break;
             case 'payments':
-                // Redirect to billing tab and switch to payments tab
                 console.log('🔄 Redirecting from payments page to billing tab...');
                 this.showPage('billing');
                 setTimeout(() => {
@@ -5642,6 +5665,93 @@ class CasaLink {
             console.error('❌ Error setting up billing page:', error);
             this.showNotification('Failed to load billing data', 'error');
         }
+    }
+
+    getNotificationIcon(type) {
+        const icons = {
+            'success': 'check-circle',
+            'error': 'exclamation-circle',
+            'warning': 'exclamation-triangle',
+            'info': 'info-circle'
+        };
+        return icons[type] || 'info-circle';
+    }
+
+     showNotification(message, type = 'info', duration = 5000) {
+        // Check if NotificationManager exists
+        if (window.NotificationManager && typeof NotificationManager.show === 'function') {
+            NotificationManager.show(message, type, duration);
+            return;
+        }
+        
+        // Fallback notification system
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <i class="fas fa-${getNotificationIcon(type)}"></i>
+                <span>${message}</span>
+                <button class="notification-close" onclick="this.parentElement.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        // Add styles if they don't exist
+        if (!document.querySelector('#notification-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'notification-styles';
+            styles.textContent = `
+                .notification {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: white;
+                    border-radius: 8px;
+                    padding: 15px 20px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                    border-left: 4px solid #3498db;
+                    z-index: 10000;
+                    max-width: 400px;
+                    animation: slideInRight 0.3s ease;
+                }
+                
+                .notification-success { border-left-color: #27ae60; }
+                .notification-error { border-left-color: #e74c3c; }
+                .notification-warning { border-left-color: #f39c12; }
+                .notification-info { border-left-color: #3498db; }
+                
+                .notification-content {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+                
+                .notification-close {
+                    background: none;
+                    border: none;
+                    color: #7f8c8d;
+                    cursor: pointer;
+                    padding: 5px;
+                    margin-left: auto;
+                }
+                
+                @keyframes slideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        document.body.appendChild(notification);
+        
+        // Auto remove after duration
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, duration);
     }
 
 
@@ -8703,6 +8813,7 @@ class CasaLink {
                                 <a href="#" data-page="billing">Billing & Payments</a>
                                 <a href="#" data-page="maintenance">Maintenance</a>
                                 <a href="#" data-page="tenants">Tenant Management</a>
+                                <a href="#" data-page="lease-management">Lease Management</a> 
                                 <a href="#" data-page="reports">Reports</a>
                             ` : `
                                 <a href="#" class="active" data-page="dashboard">Dashboard</a>
@@ -8735,6 +8846,7 @@ class CasaLink {
                             <li><a href="#" data-page="billing"><i class="fas fa-file-invoice-dollar"></i> <span>Billing & Payments</span></a></li>
                             <li><a href="#" data-page="maintenance"><i class="fas fa-tools"></i> <span>Maintenance</span></a></li>
                             <li><a href="#" data-page="tenants"><i class="fas fa-users"></i> <span>Tenant Management</span></a></li>
+                            <li><a href="#" data-page="lease-management"><i class="fas fa-file-contract"></i> <span>Lease Management</span></a></li>
                             <li><a href="#" data-page="reports"><i class="fas fa-chart-pie"></i> <span>Reports</span></a></li>
                             <li><a href="#" id="logoutBtn"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
                         ` : `
@@ -11155,6 +11267,569 @@ class CasaLink {
             </div>
         `;
     }
+
+    getStatusText(status) {
+        const statusMap = {
+            'active': 'Active',
+            'expiring': 'Expiring Soon',
+            'expired': 'Expired',
+            'pending': 'Pending'
+        };
+        return statusMap[status] || status;
+    }
+
+    formatDate(dateString) {
+        return new Date(dateString).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+
+    getDaysRemaining(endDate) {
+        const end = new Date(endDate);
+        const today = new Date();
+        const diffTime = end - today;
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    getTenantName(tenantId, tenants) {
+        const tenant = tenants.find(t => t.id === tenantId);
+        return tenant ? `${tenant.firstName} ${tenant.lastName}` : 'Unknown Tenant';
+    }
+
+    getPropertyName(propertyId, properties) {
+        const property = properties.find(p => p.id === propertyId);
+        return property ? property.name : 'Unknown Property';
+    }
+
+    async renderLeaseManagement() {
+        try {
+            const leases = await DataManager.getLeases();
+            const properties = await DataManager.getProperties();
+            const tenants = await DataManager.getTenants();
+            
+            return `
+                <div class="lease-section">
+                    <div class="section-header">
+                        <div class="header-content">
+                            <h2>Lease Management</h2>
+                            <p>Manage rental agreements, track lease terms, and handle renewals</p>
+                        </div>
+                        <div class="header-actions">
+                            <button class="btn btn-secondary" onclick="exportLeases()">
+                                <i class="fas fa-download"></i> Export
+                            </button>
+                            <button class="btn btn-primary" onclick="showNewLeaseModal()">
+                                <i class="fas fa-plus"></i> New Lease
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Quick Stats -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon active">
+                                <i class="fas fa-file-contract"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>${leases.filter(l => l.status === 'active').length}</h3>
+                                <p>Active Leases</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon expired">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>${leases.filter(l => l.status === 'expiring').length}</h3>
+                                <p>Expiring Soon</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon pending">
+                                <i class="fas fa-hourglass-half"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>${leases.filter(l => l.status === 'pending').length}</h3>
+                                <p>Pending</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon total">
+                                <i class="fas fa-list"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>${leases.length}</h3>
+                                <p>Total Leases</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Leases Table -->
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h3>All Leases</h3>
+                            <div class="search-filter">
+                                <input type="text" id="leaseSearch" placeholder="Search leases..." class="search-input">
+                                <select id="leaseFilter" class="filter-select">
+                                    <option value="all">All Status</option>
+                                    <option value="active">Active</option>
+                                    <option value="expiring">Expiring Soon</option>
+                                    <option value="expired">Expired</option>
+                                    <option value="pending">Pending</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        ${leases.length > 0 ? `
+                            <div class="table-container">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Property</th>
+                                            <th>Tenant</th>
+                                            <th>Lease Term</th>
+                                            <th>Monthly Rent</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${leases.map(lease => `
+                                            <tr>
+                                                <td>
+                                                    <div class="property-info">
+                                                        <strong>${getPropertyName(lease.propertyId, properties)}</strong>
+                                                    </div>
+                                                </td>
+                                                <td>${getTenantName(lease.tenantId, tenants)}</td>
+                                                <td>
+                                                    <div>${formatDate(lease.startDate)}</div>
+                                                    <div class="text-muted">to ${formatDate(lease.endDate)}</div>
+                                                </td>
+                                                <td>$${lease.monthlyRent?.toLocaleString() || '0'}</td>
+                                                <td>
+                                                    <span class="lease-status ${lease.status}">
+                                                        ${getStatusText(lease.status)}
+                                                        ${lease.status === 'expiring' ? ` (${getDaysRemaining(lease.endDate)} days)` : ''}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div class="action-buttons">
+                                                        <button class="btn-icon" onclick="viewLeaseDetails('${lease.id}')" title="View Details">
+                                                            <i class="fas fa-eye"></i>
+                                                        </button>
+                                                        <button class="btn-icon" onclick="editLease('${lease.id}')" title="Edit Lease">
+                                                            <i class="fas fa-edit"></i>
+                                                        </button>
+                                                        <button class="btn-icon" onclick="downloadLeasePDF('${lease.id}')" title="Download PDF">
+                                                            <i class="fas fa-download"></i>
+                                                        </button>
+                                                        <button class="btn-icon danger" onclick="deleteLease('${lease.id}')" title="Delete Lease">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ` : `
+                            <div class="empty-state">
+                                <i class="fas fa-file-contract fa-4x"></i>
+                                <h3>No Leases Found</h3>
+                                <p>Create your first lease agreement to get started with property management.</p>
+                                <button class="btn btn-primary" onclick="showNewLeaseModal()">
+                                    <i class="fas fa-plus"></i> Create First Lease
+                                </button>
+                            </div>
+                        `}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Error rendering lease management:', error);
+            return `
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle fa-3x"></i>
+                    <h3>Error Loading Leases</h3>
+                    <p>Failed to load lease data. Please try again.</p>
+                    <button class="btn btn-primary" onclick="showSection('lease-management')">
+                        <i class="fas fa-redo"></i> Retry
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    async showNewLeaseModal() {
+        try {
+            const properties = await DataManager.getProperties();
+            const tenants = await DataManager.getTenants();
+            
+            const modalContent = `
+                <div class="modal-header">
+                    <h3>Create New Lease Agreement</h3>
+                    <button class="modal-close" onclick="ModalManager.closeModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="newLeaseForm" class="lease-form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leaseProperty">Property *</label>
+                                <select id="leaseProperty" required>
+                                    <option value="">Select Property</option>
+                                    ${properties.map(prop => `
+                                        <option value="${prop.id}">${prop.name} - ${prop.address}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="leaseTenant">Tenant *</label>
+                                <select id="leaseTenant" required>
+                                    <option value="">Select Tenant</option>
+                                    ${tenants.map(tenant => `
+                                        <option value="${tenant.id}">${tenant.firstName} ${tenant.lastName}</option>
+                                    `).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leaseStart">Start Date *</label>
+                                <input type="date" id="leaseStart" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="leaseEnd">End Date *</label>
+                                <input type="date" id="leaseEnd" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="leaseRent">Monthly Rent ($) *</label>
+                                <input type="number" id="leaseRent" placeholder="0.00" step="0.01" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="leaseDeposit">Security Deposit ($) *</label>
+                                <input type="number" id="leaseDeposit" placeholder="0.00" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="leaseTerms">Additional Terms</label>
+                            <textarea id="leaseTerms" placeholder="Enter any additional lease terms or conditions..." rows="3"></textarea>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="ModalManager.closeModal()">Cancel</button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Create Lease
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            ModalManager.showModal(modalContent);
+            
+            // Set default dates
+            const today = new Date();
+            const oneYearLater = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+            
+            document.getElementById('leaseStart').value = today.toISOString().split('T')[0];
+            document.getElementById('leaseEnd').value = oneYearLater.toISOString().split('T')[0];
+            
+            // Add form submission handler
+            document.getElementById('newLeaseForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                createNewLease();
+            });
+            
+        } catch (error) {
+            console.error('Error showing lease modal:', error);
+            showNotification('Error loading form data', 'error');
+        }
+    }
+
+    downloadLeasePDF(leaseId) {
+        showNotification('PDF download feature coming soon!', 'info');
+    }
+
+    exportLeases() {
+        showNotification('Export feature coming soon!', 'info');
+    }
+
+    async deleteLease(leaseId) {
+        if (!confirm('Are you sure you want to delete this lease? This action cannot be undone.')) {
+            return;
+        }
+        
+        try {
+            await DataManager.deleteLease(leaseId);
+            showNotification('Lease deleted successfully', 'success');
+            showSection('lease-management'); // Refresh the view
+        } catch (error) {
+            console.error('Error deleting lease:', error);
+            showNotification('Error deleting lease', 'error');
+        }
+    }
+
+    async viewLeaseDetails(leaseId) {
+        try {
+            console.log('🔎 Loading lease details:', leaseId);
+
+            // Resolve DataManager method (handle class vs instance)
+            let lease;
+            try {
+                if (typeof DataManager.getLease === 'function') {
+                    lease = await DataManager.getLease(leaseId);
+                } else if (typeof DataManager.prototype?.getLease === 'function') {
+                    // DataManager is a class exported; create temp instance
+                    const dm = new DataManager();
+                    if (typeof dm.init === 'function') await dm.init();
+                    lease = await dm.getLease(leaseId);
+                } else if (window.DataManager && typeof window.DataManager.getLease === 'function') {
+                    // already an instance assigned to window
+                    lease = await window.DataManager.getLease(leaseId);
+                } else {
+                    throw new Error('No DataManager.getLease available');
+                }
+            } catch (err) {
+                console.error('Error resolving DataManager.getLease:', err);
+                this.showNotification('Failed to load lease: DataManager method missing', 'error');
+                return;
+            }
+
+            if (!lease) {
+                this.showNotification('Lease not found', 'warning');
+                return;
+            }
+
+            // Build and show modal (reuse your existing modal generator)
+            const leaseModalContent = this.generateLeaseInformationContent({ name: lease.tenantName || lease.primaryTenant }, lease);
+            ModalManager.openModal(leaseModalContent, { title: 'Lease Details', showFooter: true });
+
+        } catch (error) {
+            console.error('Error viewing lease:', error);
+            // Use instance method so it resolves correctly
+            this.showNotification('Failed to view lease details', 'error');
+        }
+    }
+
+    async createNewLease() {
+        const submitBtn = document.querySelector('#newLeaseForm button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        
+        try {
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            submitBtn.disabled = true;
+            
+            const leaseData = {
+                propertyId: document.getElementById('leaseProperty').value,
+                tenantId: document.getElementById('leaseTenant').value,
+                startDate: document.getElementById('leaseStart').value,
+                endDate: document.getElementById('leaseEnd').value,
+                monthlyRent: parseFloat(document.getElementById('leaseRent').value),
+                securityDeposit: parseFloat(document.getElementById('leaseDeposit').value),
+                additionalTerms: document.getElementById('leaseTerms').value,
+                status: 'active',
+                createdAt: new Date().toISOString()
+            };
+            
+            // Validate dates
+            const startDate = new Date(leaseData.startDate);
+            const endDate = new Date(leaseData.endDate);
+            
+            if (endDate <= startDate) {
+                throw new Error('End date must be after start date');
+            }
+            
+            await DataManager.createLease(leaseData);
+            ModalManager.closeModal();
+            showNotification('Lease created successfully!', 'success');
+            
+            // Refresh the leases display
+            showSection('lease-management');
+            
+        } catch (error) {
+            console.error('Error creating lease:', error);
+            showNotification(error.message || 'Failed to create lease', 'error');
+        } finally {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    }
+
+
+    removeLeaseRowClickHandlers() {
+        const el = document.getElementById('leasesList');
+        if (el && this.leaseListClickHandler) {
+            el.removeEventListener('click', this.leaseListClickHandler);
+            this.leaseListClickHandler = null;
+        }
+    }
+
+    renderLeasesList(leases) {
+        const el = document.getElementById('leasesList');
+        if (!el) return;
+        if (!leases || leases.length === 0) {
+            el.innerHTML = `<div class="empty-state"><i class="fas fa-file-contract"></i><h3>No leases found</h3></div>`;
+            return;
+        }
+
+        el.innerHTML = `
+            <div class="table-container">
+                <table class="tenants-table">
+                    <thead>
+                        <tr><th>Lease ID</th><th>Tenant</th><th>Room</th><th>Rent</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody>
+                        ${leases.map(lease => `
+                            <tr class="lease-row" data-lease-id="${lease.id}">
+                                <td>#${(lease.id || '').substring(0,8)}</td>
+                                <td>${lease.tenantName || lease.primaryTenant || 'N/A'}</td>
+                                <td>${lease.roomNumber || 'N/A'}</td>
+                                <td>₱${(lease.monthlyRent || 0).toLocaleString()}</td>
+                                <td>${lease.leaseStart ? new Date(lease.leaseStart).toLocaleDateString() : 'N/A'}</td>
+                                <td>${lease.leaseEnd ? new Date(lease.leaseEnd).toLocaleDateString() : 'N/A'}</td>
+                                <td>${lease.isActive ? 'Active' : 'Inactive'}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-secondary" data-lease-action="view" data-lease-id="${lease.id}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        // Remove previous delegated listener (if any) and add a single delegated listener on the container
+        this.removeLeaseRowClickHandlers?.();
+
+        this.leaseListClickHandler = (e) => {
+            // prefer button action then row click
+            const actionBtn = e.target.closest('[data-lease-action="view"]');
+            const row = actionBtn ? actionBtn : e.target.closest('.lease-row');
+            if (!row) return;
+            const id = row.getAttribute('data-lease-id');
+            if (!id) return;
+
+            // Debug trace
+            console.log('Lease row clicked, id=', id);
+
+            // Call existing method (try known names)
+            if (typeof this.viewLeaseDetails === 'function') {
+                this.viewLeaseDetails(id);
+                return;
+            }
+            if (typeof this.showLeaseDetailsModal === 'function') {
+                this.showLeaseDetailsModal(id);
+                return;
+            }
+            if (typeof this.showLeaseDetailsModalFromActivity === 'function') {
+                this.showLeaseDetailsModalFromActivity(id);
+                return;
+            }
+
+            // Fallback: attempt global casaLink view
+            if (window.casaLink && typeof window.casaLink.viewLeaseDetails === 'function') {
+                window.casaLink.viewLeaseDetails(id);
+                return;
+            }
+
+            console.warn('No lease details handler found (expected viewLeaseDetails or showLeaseDetailsModal)', id);
+        };
+
+        // Attach to the specific container to avoid many document listeners
+        el.addEventListener('click', this.leaseListClickHandler);
+    }
+
+    
+
+    async loadLeaseManagementData() {
+        try {
+            const landlordId = this.currentUser?.uid;
+            const leases = (window.DataManager && typeof DataManager.getLandlordLeases === 'function')
+                ? await DataManager.getLandlordLeases(landlordId)
+                : await DataManager.getActiveLeases();
+            this.leasesAllData = leases || [];
+            this.leasesFilteredData = [...this.leasesAllData];
+            this.renderLeasesList(this.leasesFilteredData);
+        } catch (err) {
+            console.error('Error loading leases:', err);
+            const el = document.getElementById('leasesList');
+            if (el) el.innerHTML = `<div class="empty-state"><i class="fas fa-exclamation-triangle"></i> Failed to load leases</div>`;
+        }
+    }
+
+    async setupLeaseManagementPage() {
+        // Wire search/filter events, row handlers, etc.
+        document.getElementById('leaseSearch')?.addEventListener('input', (e) => {
+            const q = e.target.value.trim().toLowerCase();
+            if (!q) {
+                this.leasesFilteredData = [...(this.leasesAllData || [])];
+            } else {
+                this.leasesFilteredData = (this.leasesAllData || []).filter(l =>
+                    (l.tenantName || '').toLowerCase().includes(q) ||
+                    (l.roomNumber || '').toLowerCase().includes(q) ||
+                    (l.id || '').toLowerCase().includes(q)
+                );
+            }
+            this.renderLeasesList(this.leasesFilteredData);
+        });
+
+        // Load initial data
+        await this.loadLeaseManagementData();
+    }
+
+    async getLeaseManagementPage() {
+    // Simple page scaffold — extend with tables/filters as needed
+    // Data loading should be done in setupLeaseManagementPage()
+    setTimeout(() => {
+        if (window.casaLink) {
+            // trigger background load of lease data
+            window.casaLink.loadLeaseManagementData?.();
+        }
+    }, 100);
+
+    return `
+        <div class="page-content">
+            <div class="page-header">
+                <h1 class="page-title">Lease Management</h1>
+                <div>
+                    <button class="btn btn-secondary" onclick="casaLink.showLeaseSettings?.()">
+                        <i class="fas fa-cog"></i> Settings
+                    </button>
+                    <button class="btn btn-primary" onclick="casaLink.createLease?.()">
+                        <i class="fas fa-plus"></i> Create Lease
+                    </button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>Active Leases</h3>
+                    <div class="search-box">
+                        <input type="text" id="leaseSearch" class="form-input" placeholder="Search leases...">
+                    </div>
+                </div>
+                <div id="leasesList">
+                    <div class="data-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading leases...
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
 
 
     async getMaintenancePage() {

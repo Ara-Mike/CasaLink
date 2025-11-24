@@ -66,6 +66,12 @@ class AuthManager {
                 // Update the user document with new login count
                 await firebaseDb.collection('users').doc(user.uid).update(updates);
                 
+                // SYNC TO DATA MANAGER - ADD THIS LINE
+                this.syncUserToDataManager({
+                    ...userData,
+                    requiresPasswordChange: requiresPasswordChange
+                });
+                
                 // Return user data with password change requirement
                 return {
                     ...userData,
@@ -93,18 +99,49 @@ class AuthManager {
                 
                 console.log('Auto-created tenant account with first login');
                 
-                return {
+                const userResponse = {
                     id: user.uid,
                     ...newUserData,
                     uid: user.uid,
                     requiresPasswordChange: true // Require password change on first login
                 };
+                
+                // SYNC TO DATA MANAGER - ADD THIS LINE
+                this.syncUserToDataManager(userResponse);
+                
+                return userResponse;
             }
             
         } catch (error) {
             console.error('Login error details:', error);
+            // SYNC NULL TO DATA MANAGER ON ERROR - ADD THIS LINE
+            this.syncUserToDataManager(null);
             await firebaseAuth.signOut();
             throw error;
+        }
+    }
+
+    setUser(user) {
+        this.user = user;
+        console.log('👤 DataManager user set:', user ? user.email : 'null');
+        
+        if (user) {
+            // User is logged in - initialize Firestore
+            this.db = firebase.firestore();
+            console.log('✅ Firestore initialized for user:', user.email);
+        } else {
+            // User is logged out
+            this.db = null;
+            console.log('❌ Firestore disconnected - user logged out');
+        }
+    }
+
+    static syncUserToDataManager(userData) {
+        if (window.DataManager && typeof DataManager.setUser === 'function') {
+            console.log('🔄 Syncing user to DataManager:', userData ? userData.email : 'null');
+            DataManager.setUser(userData);
+        } else {
+            console.warn('⚠️ DataManager not available for user sync');
         }
     }
 
@@ -112,10 +149,10 @@ class AuthManager {
         if (!window.firebaseAuth) {
             console.error('Firebase Auth not available for auth state listener');
             return () => {};
-        }
-        
-        // Enhanced auth state listener for page refreshes
-        return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
+    }
+    
+    // Enhanced auth state listener for page refreshes
+    return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
             console.log('🔄 Firebase auth state changed:', firebaseUser ? `User: ${firebaseUser.uid}` : 'No user');
             
             if (firebaseUser) {
@@ -155,18 +192,27 @@ class AuthManager {
                             requiresPasswordChange: enhancedUserData.requiresPasswordChange
                         });
                         
+                        // SYNC TO DATA MANAGER - ADD THIS LINE
+                        this.syncUserToDataManager(enhancedUserData);
+                        
                         callback(enhancedUserData);
                     } else {
                         console.error('❌ User document not found in Firestore');
+                        // SYNC NULL TO DATA MANAGER - ADD THIS LINE
+                        this.syncUserToDataManager(null);
                         await this.logout();
                         callback(null);
                     }
                 } catch (error) {
                     console.error('❌ Error fetching user data in auth listener:', error);
+                    // SYNC NULL TO DATA MANAGER - ADD THIS LINE
+                    this.syncUserToDataManager(null);
                     callback(null);
                 }
             } else {
                 console.log('👤 No Firebase user - calling callback with null');
+                // SYNC NULL TO DATA MANAGER - ADD THIS LINE
+                this.syncUserToDataManager(null);
                 callback(null);
             }
         });
@@ -423,6 +469,9 @@ class AuthManager {
 
     static async logout() {
         try {
+            // SYNC NULL TO DATA MANAGER FIRST - ADD THIS LINE
+            this.syncUserToDataManager(null);
+            
             if (window.firebaseAuth) {
                 await firebaseAuth.signOut();
             }

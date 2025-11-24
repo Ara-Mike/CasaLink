@@ -16,6 +16,116 @@ class DataManager {
         console.log('✅ DataManager initialized');
     }
 
+    async getTenants() {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            const snapshot = await this.db.collection('tenants')
+                .where('landlordId', '==', this.user.uid)
+                .get();
+            
+            const tenants = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { ...data, id: doc.id };
+            });
+            
+            console.log('✅ Tenants loaded:', tenants.length);
+            return tenants;
+        } catch (error) {
+            console.error('❌ Error getting tenants:', error);
+            return [];
+        }
+    }
+
+    static async getProperties() {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            const snapshot = await this.db.collection('properties')
+                .where('landlordId', '==', this.user.uid)
+                .get();
+            
+            const properties = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { ...data, id: doc.id };
+            });
+            
+            console.log('✅ Properties loaded:', properties.length);
+            return properties;
+        } catch (error) {
+            console.error('❌ Error getting properties:', error);
+            return [];
+        }
+    }
+
+    async getLease() {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            console.log('🔍 Fetching lease:', leaseId);
+            const doc = await this.db.collection('leases').doc(leaseId).get();
+            
+            if (!doc.exists) {
+                throw new Error('Lease not found');
+            }
+            
+            const leaseData = doc.data();
+            console.log('✅ Lease data found:', leaseData);
+            return leaseData;
+        } catch (error) {
+            console.error('❌ Error getting lease:', error);
+            throw error;
+        }
+    }
+
+    
+    async updateLease(leaseId, updates) {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        await this.db.collection('leases').doc(leaseId).update({
+            ...updates,
+            updatedAt: new Date().toISOString()
+        });
+    }
+    
+    async deleteLease(leaseId) {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            await this.db.collection('leases').doc(leaseId).delete();
+            console.log('✅ Lease deleted:', leaseId);
+        } catch (error) {
+            console.error('❌ Error deleting lease:', error);
+            throw error;
+        }
+    }
+
+    generateId() {
+        return 'lease_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+
+    async createLease(leaseData) {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            const lease = {
+                ...leaseData,
+                id: this.generateId(),
+                landlordId: this.user.uid,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            await this.db.collection('leases').doc(lease.id).set(lease);
+            console.log('✅ Lease created:', lease.id);
+            return lease;
+        } catch (error) {
+            console.error('❌ Error creating lease:', error);
+            throw error;
+        }
+    }
+
     static testDueDateCalculation() {
         const testLease = {
             paymentDueDay: 15, // 15th of each month
@@ -1226,6 +1336,27 @@ class DataManager {
         }
     }
 
+    async getTenants() {
+        if (!this.user) throw new Error('User not authenticated');
+        
+        try {
+            const snapshot = await this.db.collection('tenants')
+                .where('landlordId', '==', this.user.uid)
+                .get();
+            
+            const tenants = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return { ...data, id: doc.id };
+            });
+            
+            console.log('✅ Tenants loaded:', tenants.length);
+            return tenants;
+        } catch (error) {
+            console.error('❌ Error getting tenants:', error);
+            return [];
+        }
+    }
+
     static async getLandlordLeases(landlordId) {
         try {
             const querySnapshot = await firebaseDb.collection('leases')
@@ -1521,12 +1652,6 @@ class DataManager {
         await firebaseDb.doc(`maintenance/${requestId}`).update(updates);
     }
 
-    static async getProperties(landlordId) {
-        const querySnapshot = await firebaseDb.collection('properties')
-            .where('landlordId', '==', landlordId)
-            .get();
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    }
 
     static async addProperty(propertyData) {
         const docRef = await firebaseDb.collection('properties').add({
@@ -1578,5 +1703,6 @@ class DataManager {
     }
 }
 
-DataManager.init();
-window.DataManager = DataManager;
+const dataManager = new DataManager();
+if (typeof dataManager.init === 'function') dataManager.init();
+window.DataManager = dataManager;
