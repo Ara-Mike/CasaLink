@@ -1722,20 +1722,43 @@ class DataManager {
 
     static async getTenantProfile(tenantId) {
         try {
-            const userDoc = await firebaseDb.collection('tenants').doc(tenantId).get();
-            return userDoc.exists ? { id: userDoc.id, ...userDoc.data() } : null;
+            console.log('📋 Fetching tenant profile:', tenantId);
+            
+            const userDoc = await firebaseDb.collection('users').doc(tenantId).get();
+            
+            if (!userDoc.exists) {
+                console.warn('⚠️ Tenant profile not found');
+                return null;
+            }
+
+            const profileData = userDoc.data();
+            console.log('✅ Tenant profile loaded');
+            
+            return {
+                id: userDoc.id,
+                ...profileData
+            };
+
         } catch (error) {
-            console.error('Error getting tenant profile:', error);
-            return null;
+            console.error('❌ Error fetching tenant profile:', error);
+            throw error;
         }
     }
 
     static async updateTenantProfile(tenantId, updates) {
         try {
-            const docRef = firebaseDb.doc(`tenants/${tenantId}`);
-            await docRef.update(updates);
+            console.log('💾 Updating tenant profile:', tenantId);
+            
+            await firebaseDb.collection('users').doc(tenantId).update({
+                ...updates,
+                updatedAt: new Date().toISOString()
+            });
+
+            console.log('✅ Tenant profile updated');
+            return true;
+
         } catch (error) {
-            console.error('Error updating tenant profile:', error);
+            console.error('❌ Error updating tenant profile:', error);
             throw error;
         }
     }

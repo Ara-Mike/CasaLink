@@ -561,19 +561,319 @@ class CasaLink {
         `;
     }
 
+    async showEditProfileModal() {
+        console.log('📝 Opening edit profile modal...');
+        
+        try {
+            const tenantData = await DataManager.getTenantProfile(this.currentUser.id);
+            
+            if (!tenantData) {
+                this.showNotification('Unable to load profile data', 'error');
+                return;
+            }
+
+            const modalContent = `
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div class="form-group">
+                        <label class="form-label">Full Name</label>
+                        <input type="text" class="form-input" id="editName" value="${tenantData.name}" placeholder="Enter your full name">
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label class="form-label">Phone Number</label>
+                            <input type="tel" class="form-input" id="editPhone" value="${tenantData.phone || ''}" placeholder="09XXXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Age</label>
+                            <input type="number" class="form-input" id="editAge" value="${tenantData.age || ''}" placeholder="Your age" min="18" max="120">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Occupation</label>
+                        <input type="text" class="form-input" id="editOccupation" value="${tenantData.occupation || ''}" placeholder="Your occupation">
+                    </div>
+
+                    <div id="editProfileError" style="display: none; padding: 15px; background: #ffebee; border-radius: 8px; color: var(--danger); border-left: 4px solid var(--danger);">
+                        <i class="fas fa-exclamation-circle" style="margin-right: 8px;"></i>
+                        <span id="editProfileErrorText"></span>
+                    </div>
+                </div>
+            `;
+
+            ModalManager.openModal(modalContent, {
+                title: 'Edit Profile',
+                submitText: 'Save Changes',
+                cancelText: 'Cancel',
+                showFooter: true,
+                width: '500px',
+                onSubmit: () => this.saveProfileChanges(tenantData)
+            });
+
+        } catch (error) {
+            console.error('Error opening edit profile modal:', error);
+            this.showNotification('Failed to load profile editor', 'error');
+        }
+    }
+
+    // Save Profile Changes
+    async saveProfileChanges(originalData) {
+        console.log('💾 Saving profile changes...');
+        
+        try {
+            // Get form values
+            const name = document.getElementById('editName')?.value || '';
+            const phone = document.getElementById('editPhone')?.value || '';
+            const age = document.getElementById('editAge')?.value || '';
+            const occupation = document.getElementById('editOccupation')?.value || '';
+
+            // Validate
+            if (!name.trim()) {
+                this.showEditProfileError('Please enter your full name');
+                return;
+            }
+
+            if (phone && !/^[0-9\s\-+()]+$/.test(phone)) {
+                this.showEditProfileError('Please enter a valid phone number');
+                return;
+            }
+
+            if (age && (age < 18 || age > 120)) {
+                this.showEditProfileError('Age must be between 18 and 120');
+                return;
+            }
+
+            // Prepare updates
+            const updates = {
+                name: name.trim(),
+                phone: phone.trim(),
+                age: age ? parseInt(age) : 0,
+                occupation: occupation.trim(),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Update in Firestore
+            await firebaseDb.collection('users').doc(this.currentUser.id).update(updates);
+
+            // Update local user data
+            this.currentUser = {
+                ...this.currentUser,
+                ...updates
+            };
+
+            console.log('✅ Profile updated successfully');
+            this.showNotification('Profile updated successfully!', 'success');
+
+            // Close modal and reload page
+            setTimeout(() => {
+                this.showPage('tenantProfile');
+            }, 1500);
+
+        } catch (error) {
+            console.error('Error saving profile:', error);
+            this.showEditProfileError(error.message || 'Failed to save changes');
+        }
+    }
+
+    showEditProfileError(message) {
+        const errorElement = document.getElementById('editProfileError');
+        const errorText = document.getElementById('editProfileErrorText');
+        
+        if (errorElement && errorText) {
+            errorText.textContent = message;
+            errorElement.style.display = 'block';
+        }
+    }
+
     async getTenantProfilePage() {
-        return `
-        <div class="page-content">
-            <div class="page-header">
-                <h1 class="page-title">My Profile</h1>
-            </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Tenant Profile</h3>
-                <p>Manage your personal information and account settings.</p>
-                <p><em>Profile management coming soon!</em></p>
-            </div>
-        </div>
-        `;
+        console.log('📋 Loading tenant profile page...');
+        
+        if (!this.currentUser) {
+            return this.getErrorDashboard('tenantProfile', 'User not authenticated');
+        }
+
+        try {
+            // Fetch tenant data
+            const tenantData = await DataManager.getTenantProfile(this.currentUser.id);
+            const lease = await DataManager.getTenantLease(this.currentUser.id);
+            
+            if (!tenantData) {
+                return `
+                    <div class="page-content">
+                        <div class="page-header">
+                            <h1 class="page-title">My Profile</h1>
+                        </div>
+                        <div class="error-state">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <h3>Profile Not Found</h3>
+                            <p>Unable to load your profile information.</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const profileHTML = `
+                <div class="page-content">
+                    <div class="page-header">
+                        <div>
+                            <h1 class="page-title">My Profile</h1>
+                            <p style="color: var(--dark-gray); margin-top: 5px;">Manage your personal information and account settings</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="casaLink.showEditProfileModal()">
+                            <i class="fas fa-edit"></i> Edit Profile
+                        </button>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 25px; max-width: 1200px;">
+                        <!-- Left Column: Profile Card -->
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <!-- Profile Card -->
+                            <div class="card" style="text-align: center;">
+                                <div class="avatar" style="width: 80px; height: 80px; margin: 0 auto 15px; font-size: 2rem;">
+                                    ${tenantData.name.charAt(0).toUpperCase()}
+                                </div>
+                                <h2 style="margin: 0 0 5px 0; color: var(--text-dark);">${tenantData.name}</h2>
+                                <p style="color: var(--dark-gray); margin: 0 0 15px 0;">${tenantData.email}</p>
+                                <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                                    <span class="status-badge active">
+                                        <i class="fas fa-check-circle"></i> Active Tenant
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Quick Stats -->
+                            <div class="card">
+                                <h3 style="margin: 0 0 15px 0; color: var(--text-dark);">Quick Stats</h3>
+                                <div style="display: flex; flex-direction: column; gap: 12px;">
+                                    <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                                        <span style="color: var(--dark-gray);">Room Number</span>
+                                        <strong>${tenantData.roomNumber || 'N/A'}</strong>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                                        <span style="color: var(--dark-gray);">Account Status</span>
+                                        <strong style="color: var(--success);">Verified</strong>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+                                        <span style="color: var(--dark-gray);">Member Since</span>
+                                        <strong>${this.formatDate(tenantData.createdAt)}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Profile Details -->
+                        <div style="display: flex; flex-direction: column; gap: 20px;">
+                            <!-- Personal Information -->
+                            <div class="card">
+                                <h3 style="margin: 0 0 20px 0; color: var(--text-dark); border-bottom: 2px solid var(--royal-blue); padding-bottom: 10px;">
+                                    <i class="fas fa-user" style="color: var(--royal-blue); margin-right: 10px;"></i>
+                                    Personal Information
+                                </h3>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                    <div>
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Full Name</label>
+                                        <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${tenantData.name}</p>
+                                    </div>
+                                    <div>
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Email Address</label>
+                                        <p style="margin: 0; color: var(--text-dark); font-weight: 500; word-break: break-all;">${tenantData.email}</p>
+                                    </div>
+                                    <div>
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Phone Number</label>
+                                        <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${tenantData.phone || 'Not provided'}</p>
+                                    </div>
+                                    <div>
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Age</label>
+                                        <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${tenantData.age || 'Not provided'}</p>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 20px;">
+                                    <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Occupation</label>
+                                    <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${tenantData.occupation || 'Not provided'}</p>
+                                </div>
+                            </div>
+
+                            <!-- Property Information -->
+                            <div class="card">
+                                <h3 style="margin: 0 0 20px 0; color: var(--text-dark); border-bottom: 2px solid var(--success); padding-bottom: 10px;">
+                                    <i class="fas fa-home" style="color: var(--success); margin-right: 10px;"></i>
+                                    Property Information
+                                </h3>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                    <div>
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Room Number</label>
+                                        <p style="margin: 0; color: var(--text-dark); font-weight: 500; font-size: 1.2rem;">${tenantData.roomNumber || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Monthly Rent</label>
+                                        <p style="margin: 0; color: var(--text-dark); font-weight: 500; font-size: 1.2rem;">₱${lease?.monthlyRent ? parseFloat(lease.monthlyRent).toLocaleString() : '0'}</p>
+                                    </div>
+                                </div>
+
+                                <div style="margin-top: 20px;">
+                                    <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Rental Address</label>
+                                    <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${tenantData.rentalAddress || 'Not provided'}</p>
+                                </div>
+
+                                ${lease ? `
+                                    <div style="margin-top: 20px; padding: 15px; background: #f0f7ff; border-radius: 8px; border-left: 4px solid var(--info);">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                            <div>
+                                                <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Lease Start Date</label>
+                                                <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${this.formatDate(lease.leaseStart)}</p>
+                                            </div>
+                                            <div>
+                                                <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Lease End Date</label>
+                                                <p style="margin: 0; color: var(--text-dark); font-weight: 500;">${this.formatDate(lease.leaseEnd)}</p>
+                                            </div>
+                                        </div>
+                                        <div style="margin-top: 10px; text-align: center;">
+                                            <small style="color: var(--dark-gray);">Days Remaining: <strong>${this.getDaysRemaining(lease.leaseEnd)}</strong></small>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+
+                            <!-- Account Security -->
+                            <div class="card">
+                                <h3 style="margin: 0 0 20px 0; color: var(--text-dark); border-bottom: 2px solid var(--warning); padding-bottom: 10px;">
+                                    <i class="fas fa-lock" style="color: var(--warning); margin-right: 10px;"></i>
+                                    Account Security
+                                </h3>
+
+                                <div style="display: flex; flex-direction: column; gap: 15px;">
+                                    <div style="padding: 15px; background: #fffbf0; border-radius: 8px; border-left: 4px solid var(--warning);">
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 5px;">Password</label>
+                                        <p style="margin: 0 0 10px 0; color: var(--text-dark);">••••••••</p>
+                                        <button class="btn btn-warning btn-sm" onclick="casaLink.showPasswordChangeModal()">
+                                            <i class="fas fa-key"></i> Change Password
+                                        </button>
+                                    </div>
+
+                                    <div style="padding: 15px; background: #f0fff4; border-radius: 8px;">
+                                        <label style="color: var(--dark-gray); font-size: 0.9rem; font-weight: 500; display: block; margin-bottom: 10px;">
+                                            <i class="fas fa-check-circle" style="color: var(--success); margin-right: 8px;"></i>
+                                            Two-Factor Authentication
+                                        </label>
+                                        <p style="margin: 0; color: var(--dark-gray); font-size: 0.9rem;">Enhance your account security with 2FA (Coming soon)</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            return profileHTML;
+
+        } catch (error) {
+            console.error('❌ Error loading tenant profile:', error);
+            return this.getErrorDashboard('tenantProfile', error.message);
+        }
     }
 
     // Add this method - returns just the dashboard content, not the full layout
@@ -3548,84 +3848,219 @@ class CasaLink {
         `;
     }
 
-    async showTenantMaintenanceRequestForm() {
-        const modalContent = `
-            <div class="tenant-maintenance-form">
-                <div style="text-align: center; margin-bottom: 20px;">
-                    <i class="fas fa-tools" style="font-size: 3rem; color: var(--royal-blue); margin-bottom: 15px;"></i>
-                    <h3 style="margin-bottom: 10px;">Submit Maintenance Request</h3>
-                    <p>Let us know what needs fixing in your unit</p>
-                </div>
-
+    showTenantMaintenanceRequestForm() {
+        // Build form HTML
+        const content = `
+            <div style="max-width:700px;">
                 <div class="form-group">
-                    <label class="form-label">Issue Type *</label>
-                    <select id="tenantIssueType" class="form-input" required>
-                        <option value="">What type of issue is this?</option>
-                        <option value="plumbing">Plumbing (leaks, clogged drains)</option>
-                        <option value="electrical">Electrical (outlets, lights)</option>
-                        <option value="appliance">Appliance Repair</option>
-                        <option value="hvac">Heating/Cooling</option>
-                        <option value="general">General Repair</option>
-                        <option value="pest_control">Pest Control</option>
-                        <option value="other">Other</option>
-                    </select>
+                    <label class="form-label">Title</label>
+                    <input id="maintTitle" class="form-input" placeholder="e.g. Leaky faucet in bathroom" />
                 </div>
-
                 <div class="form-group">
-                    <label class="form-label">Urgency *</label>
-                    <select id="tenantUrgency" class="form-input" required>
-                        <option value="">How urgent is this?</option>
-                        <option value="low">Low - Can wait a few days</option>
-                        <option value="medium">Medium - Should be fixed soon</option>
-                        <option value="high">High - Needs attention within 24 hours</option>
-                        <option value="emergency">Emergency - Immediate attention required</option>
-                    </select>
+                    <label class="form-label">Description</label>
+                    <textarea id="maintDescription" class="form-input" rows="6" placeholder="Describe the issue and location"></textarea>
                 </div>
-
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Type</label>
+                        <select id="maintType" class="form-input">
+                            <option value="general">General</option>
+                            <option value="plumbing">Plumbing</option>
+                            <option value="electrical">Electrical</option>
+                            <option value="hvac">HVAC</option>
+                            <option value="appliance">Appliance</option>
+                            <option value="structural">Structural</option>
+                            <option value="pest_control">Pest Control</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Priority</label>
+                        <select id="maintPriority" class="form-input">
+                            <option value="low">Low</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="high">High</option>
+                            <option value="emergency">Emergency</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="form-group">
-                    <label class="form-label">Description *</label>
-                    <textarea id="tenantIssueDescription" class="form-input" 
-                        placeholder="Please describe the issue in detail. Include location, what happens, when it started, etc."
-                        rows="4" required></textarea>
+                    <label class="form-label">Attach images (optional)</label>
+                    <input id="maintImages" type="file" accept="image/*" multiple class="form-input" />
                 </div>
-
-                <div class="form-group">
-                    <label class="form-label">Best Time for Access</label>
-                    <select id="tenantAccessTime" class="form-input">
-                        <option value="">When can maintenance access your unit?</option>
-                        <option value="morning">Morning (8AM-12PM)</option>
-                        <option value="afternoon">Afternoon (12PM-5PM)</option>
-                        <option value="evening">Evening (5PM-8PM)</option>
-                        <option value="anytime">Anytime</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Upload Photos (Optional)</label>
-                    <input type="file" id="tenantIssuePhotos" class="form-input" 
-                        accept="image/*" multiple>
-                    <small style="color: var(--dark-gray);">Photos help us understand the issue better</small>
-                </div>
-
-                <div class="form-group">
-                    <label class="form-label">Contact Preference</label>
-                    <select id="tenantContactPref" class="form-input">
-                        <option value="call">Call me</option>
-                        <option value="text">Text me</option>
-                        <option value="email">Email me</option>
-                        <option value="any">Any method</option>
-                    </select>
-                </div>
-
-                <div id="tenantMaintenanceError" style="color: var(--danger); display: none; margin-bottom: 15px;"></div>
+                <div id="maintFormError" class="text-muted" style="display:none;color:var(--danger);margin-top:8px;"></div>
             </div>
         `;
 
-        const modal = ModalManager.openModal(modalContent, {
-            title: 'Submit Maintenance Request',
+        const modal = ModalManager.openModal(content, {
+            title: 'New Maintenance Request',
             submitText: 'Submit Request',
-            onSubmit: () => this.submitTenantMaintenanceRequest()
+            cancelText: 'Cancel',
+            showFooter: true,
+            onSubmit: async () => {
+                const title = document.getElementById('maintTitle')?.value.trim();
+                const description = document.getElementById('maintDescription')?.value.trim();
+                const type = document.getElementById('maintType')?.value;
+                const priority = document.getElementById('maintPriority')?.value;
+                const filesInput = document.getElementById('maintImages');
+                const errorEl = document.getElementById('maintFormError');
+
+                if (!title) {
+                    if (errorEl) { errorEl.textContent = 'Please enter a title for the request.'; errorEl.style.display = 'block'; }
+                    return;
+                }
+
+                // Prepare request payload
+                const tenant = this.currentUser || {};
+                const tenantId = tenant.id || tenant.uid || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.uid);
+                const tenantName = tenant.name || tenant.email || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.email) || 'Tenant';
+
+                const requestData = {
+                    title,
+                    description,
+                    type,
+                    priority,
+                    tenantId,
+                    tenantName,
+                    landlordId: tenant.landlordId || tenant.landlord || null,
+                    roomNumber: tenant.roomNumber || '',
+                    status: 'open',
+                    images: [], // we'll attempt to upload images (optional)
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                // Show loading state on submit button
+                const submitBtn = document.getElementById('modalSubmit');
+                const originalText = submitBtn ? submitBtn.innerHTML : null;
+                if (submitBtn) {
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+                    submitBtn.disabled = true;
+                }
+
+                try {
+                    // If images provided, try uploading to firebase storage (best-effort, non-blocking fallback)
+                    if (filesInput && filesInput.files && filesInput.files.length > 0 && window.firebase && firebase.storage) {
+                        const storageRef = firebase.storage().ref();
+                        const uploadPromises = Array.from(filesInput.files).map(async (file) => {
+                            const filePath = `maintenance_images/${tenantId || 'unknown'}/${Date.now()}_${file.name}`;
+                            const ref = storageRef.child(filePath);
+                            const snapshot = await ref.put(file);
+                            const url = await snapshot.ref.getDownloadURL();
+                            return url;
+                        });
+
+                        try {
+                            const urls = await Promise.all(uploadPromises);
+                            requestData.images = urls;
+                        } catch (uploadErr) {
+                            console.warn('Image upload failed (continuing without images):', uploadErr);
+                        }
+                    }
+
+                    // Persist request via DataManager
+                    if (!window.DataManager || typeof DataManager.createMaintenanceRequest !== 'function') {
+                        throw new Error('DataManager.createMaintenanceRequest not available');
+                    }
+
+                    const createdId = await DataManager.createMaintenanceRequest(requestData);
+
+                    // Close modal, refresh list
+                    ModalManager.closeModal(modal);
+                    await this.loadTenantMaintenanceData();
+
+                    if (window.NotificationManager && typeof NotificationManager.showNotification === 'function') {
+                        NotificationManager.showNotification('Maintenance request submitted', { body: 'Your request has been sent to your landlord.' });
+                    } else {
+                        this.showNotification('Maintenance request submitted', 'success');
+                    }
+
+                } catch (err) {
+                    console.error('Error submitting maintenance request:', err);
+                    if (errorEl) { errorEl.textContent = 'Failed to submit request. Please try again.'; errorEl.style.display = 'block'; }
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        if (originalText) submitBtn.innerHTML = originalText;
+                    }
+                }
+            }
         });
+    }
+
+    async loadTenantMaintenanceData() {
+        try {
+            const tenant = this.currentUser || {};
+            const tenantId = tenant.id || tenant.uid || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.uid);
+
+            const container = document.getElementById('tenantMaintenanceList');
+            if (!container) return;
+
+            container.innerHTML = `<div class="data-loading"><i class="fas fa-spinner fa-spin"></i> Loading maintenance requests...</div>`;
+
+            if (!tenantId) {
+                container.innerHTML = `<div class="empty-state"><h3>Not signed in</h3><p>Please sign in to view your maintenance requests.</p></div>`;
+                return;
+            }
+
+            if (!window.DataManager || typeof DataManager.getTenantMaintenanceRequests !== 'function') {
+                container.innerHTML = `<div class="error-state"><h3>Error</h3><p>Data manager not available.</p></div>`;
+                return;
+            }
+
+            const requests = await DataManager.getTenantMaintenanceRequests(tenantId);
+
+            if (!requests || requests.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-wrench" style="font-size:40px;"></i>
+                        <h3>No maintenance requests</h3>
+                        <p>You have not submitted any maintenance requests yet.</p>
+                        <button class="btn btn-primary" onclick="casaLink.showTenantMaintenanceRequestForm()">Create a request</button>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort newest first
+            requests.sort((a,b) => (new Date(b.createdAt || 0)) - (new Date(a.createdAt || 0)));
+
+            const html = requests.map(r => {
+                const created = r.createdAt ? new Date(r.createdAt).toLocaleString() : '–';
+                const priorityClass = r.priority === 'high' || r.priority === 'emergency' ? 'priority-high' : (r.priority === 'medium' ? 'priority-medium' : 'priority-low');
+                const status = (r.status || 'open');
+                return `
+                    <div class="maintenance-row lease-card" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                        <div style="flex:1;">
+                            <div style="display:flex;gap:12px;align-items:center;">
+                                <div>
+                                    <div style="font-weight:700;">${r.title || 'Untitled request'}</div>
+                                    <div class="text-muted" style="font-size:0.9rem;">${r.type || 'general'} • ${created}</div>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;color:var(--dark-gray);">${(r.description || '').substring(0,300)}</div>
+                            ${r.images && r.images.length ? `<div style="margin-top:10px;"><img src="${r.images[0]}" style="max-width:120px;border-radius:8px;border:1px solid #eee;" /></div>` : ''}
+                        </div>
+                        <div style="min-width:160px;text-align:right;">
+                            <div style="margin-bottom:8px;"><span class="lease-status ${status}">${status}</span></div>
+                            <div style="margin-bottom:8px;"><span class="${priorityClass}">${r.priority || 'medium'}</span></div>
+                            <div>
+                                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); casaLink.viewTenantMaintenanceRequest('${r.id || r.documentId || r._id || r.requestId || ''}')">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = `<div class="maintenance-list">${html}</div>`;
+
+        } catch (error) {
+            console.error('Failed loading tenant maintenance data:', error);
+            const container = document.getElementById('tenantMaintenanceList');
+            if (container) container.innerHTML = `<div class="error-state"><h3>Error</h3><p>Unable to load maintenance requests. Try refreshing.</p></div>`;
+        }
     }
 
     async submitTenantMaintenanceRequest() {
@@ -9152,8 +9587,53 @@ class CasaLink {
 
     // ===== STUB METHODS FOR UNIMPLEMENTED FEATURES =====
 
-    viewTenantMaintenanceRequest(requestId) {
-        this.showNotification('Maintenance request details feature coming soon!', 'info');
+    async viewTenantMaintenanceRequest(requestId) {
+        if (!requestId) return;
+
+        try {
+            // try to fetch document directly
+            let docData = null;
+            try {
+                const doc = await firebaseDb.collection('maintenance').doc(requestId).get();
+                if (doc.exists) docData = { id: doc.id, ...doc.data() };
+            } catch (err) {
+                console.warn('Could not fetch maintenance doc directly:', err);
+            }
+
+            // fallback: search in recently loaded list
+            if (!docData && window.DataManager && typeof DataManager.getMaintenanceRequest === 'function') {
+                try {
+                    docData = await DataManager.getMaintenanceRequest(requestId);
+                } catch (e) {
+                    console.warn('DataManager.getMaintenanceRequest failed:', e);
+                }
+            }
+
+            if (!docData) {
+                // minimal modal if we can't fetch details
+                ModalManager.openModal(`<div style="padding:20px;"><p>Unable to load request details.</p></div>`, { title: 'Request Details', submitText: 'Close' });
+                return;
+            }
+
+            const imagesHtml = docData.images && docData.images.length ? docData.images.map(url => `<img src="${url}" style="max-width:140px;border-radius:8px;margin-right:8px;border:1px solid #eee;" />`).join('') : '';
+
+            const content = `
+                <div style="max-width:800px;">
+                    <h3 style="margin-bottom:8px;">${docData.title}</h3>
+                    <div class="text-muted" style="margin-bottom:12px;">${docData.type || 'general'} • ${docData.priority || 'medium'} • ${docData.status || 'open'}</div>
+                    <div style="margin-bottom:12px;">${docData.description || ''}</div>
+                    ${imagesHtml ? `<div style="margin-bottom:12px;">${imagesHtml}</div>` : ''}
+                    <div class="text-muted" style="font-size:0.9rem;">Submitted: ${docData.createdAt ? new Date(docData.createdAt).toLocaleString() : '–'}</div>
+                    <div style="margin-top:12px;">${docData.notes ? `<strong>Landlord notes:</strong><div style="margin-top:6px;">${docData.notes}</div>` : ''}</div>
+                </div>
+            `;
+
+            ModalManager.openModal(content, { title: 'Request Details', submitText: 'Close', showFooter: true });
+
+        } catch (error) {
+            console.error('Error viewing maintenance request:', error);
+            ModalManager.openModal(`<div style="padding:20px;"><p>Unable to show request details.</p></div>`, { title: 'Request Details', submitText: 'Close' });
+        }
     }
 
     updateMaintenanceRequest(requestId) {
@@ -14347,20 +14827,27 @@ class CasaLink {
     }
 
     async getTenantMaintenancePage() {
+        // Simple tenant maintenance page: list + create button
         return `
         <div class="page-content">
             <div class="page-header">
                 <h1 class="page-title">Maintenance Requests</h1>
-                <button class="btn btn-primary" onclick="casaLink.showMaintenanceRequestForm()">
-                    <i class="fas fa-plus"></i> New Request
-                </button>
+                <div>
+                    <button class="btn btn-primary" onclick="casaLink.showTenantMaintenanceRequestForm()">
+                        <i class="fas fa-plus-circle"></i> New Request
+                    </button>
+                </div>
             </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Maintenance Requests</h3>
-                <p>Submit and track maintenance requests for your unit.</p>
-                <button class="btn btn-primary" onclick="casaLink.showMaintenanceRequestForm()">
-                    Submit a Request
-                </button>
+
+            <div class="content-card">
+                <div style="padding:20px;">
+                    <p class="text-muted">Submit maintenance requests to your landlord and track status here.</p>
+                </div>
+                <div class="table-container" style="padding:20px;">
+                    <div id="tenantMaintenanceList">
+                        <div class="data-loading"><i class="fas fa-spinner fa-spin"></i> Loading maintenance requests...</div>
+                    </div>
+                </div>
             </div>
         </div>
         `;
