@@ -635,6 +635,29 @@ class DataManager {
         }
     }
 
+    static async getTenantPayments(tenantId) {
+        try {
+            console.log('💰 Fetching payments for tenant:', tenantId);
+            
+            const querySnapshot = await firebaseDb.collection('payments')
+                .where('tenantId', '==', tenantId)
+                .orderBy('paymentDate', 'desc')
+                .get();
+            
+            const payments = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            
+            console.log('✅ Fetched', payments.length, 'payments for tenant');
+            return payments;
+            
+        } catch (error) {
+            console.error('❌ Error getting tenant payments:', error);
+            return [];
+        }
+    }
+
     static async getPaymentMethods() {
         return [
             { id: 'cash', name: 'Cash', icon: 'fas fa-money-bill' },
@@ -1667,11 +1690,26 @@ class DataManager {
     }
 
     static async getTenantBills(tenantId) {
-        const querySnapshot = await firebaseDb.collection('bills')
-            .where('tenantId', '==', tenantId)
-            .orderBy('dueDate', 'desc')
-            .get();
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        try {
+            console.log('💰 Fetching bills for tenant:', tenantId);
+            
+            const querySnapshot = await firebaseDb.collection('bills')
+                .where('tenantId', '==', tenantId)
+                .orderBy('dueDate', 'desc')
+                .get();
+            
+            const bills = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            
+            console.log('✅ Fetched', bills.length, 'bills for tenant');
+            return bills;
+            
+        } catch (error) {
+            console.error('❌ Error getting tenant bills:', error);
+            return [];
+        }
     }
 
     static async getTenantMaintenanceRequests(tenantId) {

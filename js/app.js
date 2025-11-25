@@ -13539,25 +13539,811 @@ class CasaLink {
         return password;
     }
 
+    calculateTenantBillingStats(bills) {
+        const today = new Date();
+        
+        const unpaidBills = bills.filter(b => b.status === 'pending');
+        const paidBills = bills.filter(b => b.status === 'paid');
+        const overdueBills = unpaidBills.filter(b => new Date(b.dueDate) < today);
+        
+        const totalDue = unpaidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+        const totalPaid = paidBills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
+        
+        // Find next due date
+        const nextUnpaid = unpaidBills.sort((a, b) => 
+            new Date(a.dueDate) - new Date(b.dueDate)
+        )[0];
+        
+        let nextDueDate = 'N/A';
+        let daysUntilDue = 0;
+        
+        if (nextUnpaid) {
+            const dueDate = new Date(nextUnpaid.dueDate);
+            nextDueDate = dueDate.toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric', 
+                year: 'numeric' 
+            });
+            daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+        }
+        
+        return {
+            totalDue: totalDue,
+            totalPaid: totalPaid,
+            unpaidCount: unpaidBills.length,
+            paidCount: paidBills.length,
+            overdueCount: overdueBills.length,
+            nextDueDate: nextDueDate,
+            daysUntilDue: Math.max(0, daysUntilDue)
+        };
+    }
+
+    switchTenantBillingTab(tabName) {
+        console.log('🔄 Switching tenant billing tab to:', tabName);
+        
+        // Hide all tabs
+        const tabs = document.querySelectorAll('#billsAllTab, #billsPendingTab, #billsPaidTab, #billsOverdueTab');
+        tabs.forEach(tab => tab.classList.remove('active'));
+        
+        // Remove active from all buttons
+        const buttons = document.querySelectorAll('.billing-tabs .tab-button');
+        buttons.forEach(btn => btn.classList.remove('active'));
+        
+        // Show selected tab
+        document.getElementById(`bills${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Tab`)?.classList.add('active');
+        
+        // Mark button as active
+        event.target.closest('.tab-button')?.classList.add('active');
+    }
+
 
     async getTenantBillingPage() {
+        console.log('📋 Loading tenant billing page...');
+        
+        if (!this.currentUser) {
+            return this.getErrorDashboard('tenantBilling', 'User not authenticated');
+        }
+
+        try {
+            // Fetch tenant's bills and payments
+            const bills = await DataManager.getTenantBills(this.currentUser.id);
+            const payments = await DataManager.getTenantPayments(this.currentUser.id);
+            
+            console.log('✅ Fetched tenant bills:', bills.length);
+            console.log('✅ Fetched tenant payments:', payments.length);
+
+            // Calculate billing stats
+            const stats = this.calculateTenantBillingStats(bills);
+
+            return `
+                <div class="page-content">
+                    <div class="page-header">
+                        <h1 class="page-title">My Billing</h1>
+                        <p style="color: var(--dark-gray); margin: 5px 0 0 0;">View and pay your bills</p>
+                    </div>
+
+                    <!-- Billing Stats -->
+                    <div class="card-group">
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Current Balance</span>
+                                <div class="card-icon success">
+                                    <i class="fas fa-wallet"></i>
+                                </div>
+                            </div>
+                            <div class="card-value">₱${stats.totalDue.toLocaleString()}</div>
+                            <div class="card-subtitle">${stats.unpaidCount} unpaid bill(s)</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Next Due Date</span>
+                                <div class="card-icon info">
+                                    <i class="fas fa-calendar-alt"></i>
+                                </div>
+                            </div>
+                            <div class="card-value">${stats.nextDueDate}</div>
+                            <div class="card-subtitle">${stats.daysUntilDue} days remaining</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Total Paid</span>
+                                <div class="card-icon success">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                            </div>
+                            <div class="card-value">₱${stats.totalPaid.toLocaleString()}</div>
+                            <div class="card-subtitle">${stats.paidCount} paid bill(s)</div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <span class="card-title">Late Payments</span>
+                                <div class="card-icon ${stats.overdueCount > 0 ? 'danger' : 'success'}">
+                                    <i class="fas fa-exclamation-circle"></i>
+                                </div>
+                            </div>
+                            <div class="card-value" style="color: ${stats.overdueCount > 0 ? 'var(--danger)' : 'var(--success)'}">
+                                ${stats.overdueCount}
+                            </div>
+                            <div class="card-subtitle">overdue bills</div>
+                        </div>
+                    </div>
+
+                    <!-- Bills Section -->
+                    <div style="margin-bottom: 30px;">
+                        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); overflow: hidden;">
+                            <div style="padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef;">
+                                <h3 style="margin: 0; color: var(--text-dark); font-size: 1.2rem;">Outstanding Bills</h3>
+                                <p style="margin: 5px 0 0 0; color: var(--dark-gray); font-size: 0.9rem;">Bills waiting for payment</p>
+                            </div>
+                            ${this.renderTenantBillsTable(bills.filter(b => b.status === 'pending'), 'outstanding')}
+                        </div>
+                    </div>
+
+                    <!-- All Payments Section -->
+                    <div>
+                        <div style="background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); overflow: hidden;">
+                            <div style="padding: 20px; background: #f8f9fa; border-bottom: 1px solid #e9ecef;">
+                                <h3 style="margin: 0; color: var(--text-dark); font-size: 1.2rem;">All Payments</h3>
+                                <p style="margin: 5px 0 0 0; color: var(--dark-gray); font-size: 0.9rem;">Your complete payment history</p>
+                            </div>
+                            ${this.renderTenantPaymentsHistory(payments)}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error('❌ Error loading tenant billing page:', error);
+            return this.getErrorDashboard('tenantBilling', error.message);
+        }
+    }
+
+    getPaymentMethodBadge(method) {
+        const methods = {
+            'cash': { name: 'Cash', icon: 'fas fa-money-bill', color: '#34A853' },
+            'gcash': { name: 'GCash', icon: 'fas fa-mobile-alt', color: '#0099CC' },
+            'maya': { name: 'Maya', icon: 'fas fa-wallet', color: '#6933CC' },
+            'bank_transfer': { name: 'Bank Transfer', icon: 'fas fa-university', color: '#FBBC04' },
+            'check': { name: 'Check', icon: 'fas fa-money-check', color: '#EA4335' }
+        };
+        
+        const methodData = methods[method] || { name: method, icon: 'fas fa-credit-card', color: '#5F6368' };
+        
         return `
-        <div class="page-content">
-            <div class="page-header">
-                <h1 class="page-title">My Bills & Payments</h1>
-                <button class="btn btn-primary" onclick="casaLink.showPaymentModal()">
-                    <i class="fas fa-credit-card"></i> Make Payment
-                </button>
-            </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Billing History</h3>
-                <p>View your payment history and upcoming bills.</p>
-                <button class="btn btn-primary" onclick="casaLink.showPaymentModal()">
-                    Make a Payment
-                </button>
-            </div>
-        </div>
+            <span style="
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 10px;
+                border-radius: 6px;
+                font-size: 0.85rem;
+                background: ${methodData.color}20;
+                color: ${methodData.color};
+                font-weight: 500;
+            ">
+                <i class="${methodData.icon}" style="font-size: 0.9rem;"></i>
+                ${methodData.name}
+            </span>
         `;
+    }
+
+    getPaymentMethodLabel(method) {
+        const methods = {
+            'cash': 'Cash Payment',
+            'gcash': 'GCash',
+            'maya': 'Maya',
+            'bank_transfer': 'Bank Transfer',
+            'check': 'Check Payment'
+        };
+        
+        return methods[method] || method;
+    }
+
+    async showTenantPaymentDetailsModal(paymentId) {
+        console.log('💳 Opening tenant payment details for:', paymentId);
+        
+        try {
+            const payment = await firebaseDb.collection('payments').doc(paymentId).get();
+            
+            if (!payment.exists) {
+                throw new Error('Payment record not found');
+            }
+            
+            const paymentData = { id: payment.id, ...payment.data() };
+            const paymentDate = new Date(paymentData.paymentDate || paymentData.createdAt);
+            
+            const statusColor = paymentData.status === 'completed' ? 'var(--success)' : 
+                            paymentData.status === 'pending_verification' ? 'var(--warning)' :
+                            'var(--danger)';
+            
+            const statusLabel = paymentData.status === 'completed' ? 'Payment Completed' :
+                            paymentData.status === 'pending_verification' ? 'Pending Verification' :
+                            'Payment Failed';
+
+            const modalContent = `
+                <div style="max-width: 600px;">
+                    <!-- Payment Summary -->
+                    <div style="background: ${statusColor}15; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid ${statusColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div>
+                                <div style="color: var(--dark-gray); font-size: 0.9rem;">Payment Amount</div>
+                                <div style="font-size: 2rem; font-weight: 700; color: ${statusColor};">
+                                    ₱${(paymentData.amount || 0).toLocaleString()}
+                                </div>
+                            </div>
+                            <i class="fas fa-check-circle" style="font-size: 2rem; color: ${statusColor}; opacity: 0.5;"></i>
+                        </div>
+                        <div style="color: var(--dark-gray); font-size: 0.85rem;">
+                            Status: <strong style="color: ${statusColor};">${statusLabel}</strong>
+                        </div>
+                    </div>
+
+                    <!-- Payment Details -->
+                    <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e9ecef;">
+                        <h4 style="margin: 0 0 15px 0; color: var(--text-dark);">Payment Details</h4>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;">
+                            <span style="color: var(--dark-gray);">Payment Date:</span>
+                            <strong>${paymentDate.toLocaleDateString('en-US', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            })}</strong>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;">
+                            <span style="color: var(--dark-gray);">Payment Method:</span>
+                            <strong>${this.getPaymentMethodLabel(paymentData.paymentMethod)}</strong>
+                        </div>
+
+                        ${paymentData.reference ? `
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;">
+                                <span style="color: var(--dark-gray);">Reference Number:</span>
+                                <strong>${paymentData.reference}</strong>
+                            </div>
+                        ` : ''}
+
+                        <div style="display: flex; justify-content: space-between;">
+                            <span style="color: var(--dark-gray);">Transaction ID:</span>
+                            <strong style="font-family: monospace; font-size: 0.9rem;">${paymentData.id}</strong>
+                        </div>
+                    </div>
+
+                    ${paymentData.notes ? `
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 20px; border-left: 3px solid var(--royal-blue);">
+                            <h5 style="margin: 0 0 10px 0; color: var(--text-dark); font-size: 0.9rem;">Notes</h5>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.9rem; line-height: 1.5;">
+                                ${paymentData.notes}
+                            </p>
+                        </div>
+                    ` : ''}
+
+                    ${paymentData.status === 'pending_verification' ? `
+                        <div style="background: rgba(251, 188, 4, 0.1); border: 1px solid rgba(251, 188, 4, 0.3); padding: 15px; border-radius: 8px; margin-top: 20px;">
+                            <div style="color: var(--warning); font-weight: 600; margin-bottom: 8px;">
+                                <i class="fas fa-info-circle"></i> Payment Pending Verification
+                            </div>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.9rem;">
+                                Your payment has been submitted and is awaiting verification from your landlord. This usually takes 1-2 business days.
+                            </p>
+                        </div>
+                    ` : ''}
+
+                    ${paymentData.status === 'completed' ? `
+                        <div style="background: rgba(52, 168, 83, 0.1); border: 1px solid rgba(52, 168, 83, 0.3); padding: 15px; border-radius: 8px; margin-top: 20px;">
+                            <div style="color: var(--success); font-weight: 600; margin-bottom: 8px;">
+                                <i class="fas fa-check-circle"></i> Payment Confirmed
+                            </div>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.9rem;">
+                                Your payment has been verified and processed successfully.
+                            </p>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Payment Details',
+                showFooter: true,
+                submitText: 'Close',
+                cancelText: null,
+                onSubmit: () => {
+                    ModalManager.closeModal(modal);
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error loading payment details:', error);
+            this.showNotification('Failed to load payment details', 'error');
+        }
+    }
+
+    renderTenantPaymentsHistory(payments) {
+        if (payments.length === 0) {
+            return `
+                <div class="empty-state" style="padding: 40px;">
+                    <i class="fas fa-history" style="font-size: 2.5rem; color: var(--dark-gray); opacity: 0.5; margin-bottom: 15px;"></i>
+                    <h4>No Payment History</h4>
+                    <p style="color: var(--dark-gray);">You haven't made any payments yet</p>
+                </div>
+            `;
+        }
+
+        // Sort payments by date (newest first)
+        const sortedPayments = [...payments].sort((a, b) => 
+            new Date(b.paymentDate || b.createdAt) - new Date(a.paymentDate || a.createdAt)
+        );
+
+        const rows = sortedPayments.map(payment => {
+            const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+            const billDate = payment.billId ? new Date(payment.dueDate || payment.createdAt) : null;
+            
+            const statusColor = payment.status === 'completed' ? 'var(--success)' : 
+                            payment.status === 'pending_verification' ? 'var(--warning)' :
+                            'var(--danger)';
+            
+            const statusLabel = payment.status === 'completed' ? 'Completed' :
+                            payment.status === 'pending_verification' ? 'Pending Verification' :
+                            'Failed';
+            
+            return `
+                <tr class="payment-row" onclick="casaLink.showTenantPaymentDetailsModal('${payment.id}')">
+                    <td>
+                        <strong style="color: var(--text-dark);">${payment.type === 'rent' ? 'Monthly Rent' : payment.description || 'Payment'}</strong>
+                    </td>
+                    <td>
+                        ${paymentDate.toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                        })}
+                    </td>
+                    <td>
+                        <strong style="font-size: 1.1rem; color: var(--text-dark);">
+                            ₱${(payment.amount || 0).toLocaleString()}
+                        </strong>
+                    </td>
+                    <td>
+                        ${this.getPaymentMethodBadge(payment.paymentMethod)}
+                    </td>
+                    <td>
+                        <span style="
+                            padding: 6px 12px; 
+                            border-radius: 20px; 
+                            font-size: 0.85rem;
+                            font-weight: 600;
+                            background: ${statusColor === 'var(--success)' ? 'rgba(52, 168, 83, 0.1)' : 
+                                    statusColor === 'var(--warning)' ? 'rgba(251, 188, 4, 0.1)' :
+                                    'rgba(234, 67, 53, 0.1)'};
+                            color: ${statusColor};
+                        ">
+                            ${statusLabel}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.showTenantPaymentDetailsModal('${payment.id}')">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <div class="table-container">
+                <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Description</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Payment Date</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Amount</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Method</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Status</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    getOverdueBills(bills) {
+        const today = new Date();
+        return bills.filter(b => new Date(b.dueDate) < today && b.status === 'pending');
+    }
+
+    renderTenantBillsTable(bills, filterType) {
+        if (bills.length === 0) {
+            return `
+                <div class="empty-state" style="padding: 40px;">
+                    <i class="fas fa-file-invoice-dollar" style="font-size: 2.5rem; color: var(--dark-gray); opacity: 0.5; margin-bottom: 15px;"></i>
+                    <h4>No ${filterType} bills</h4>
+                    <p style="color: var(--dark-gray);">
+                        ${filterType === 'paid' ? 'You haven\'t paid any bills yet' : 'No bills found'}
+                    </p>
+                </div>
+            `;
+        }
+
+        const rows = bills.map(bill => {
+            const dueDate = new Date(bill.dueDate);
+            const today = new Date();
+            const isOverdue = dueDate < today && bill.status === 'pending';
+            const daysRemaining = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+            
+            return `
+                <tr class="bill-row" onclick="casaLink.showTenantBillDetailsModal('${bill.id}')">
+                    <td>
+                        <strong>${bill.type === 'rent' ? 'Monthly Rent' : bill.description || 'Bill'}</strong>
+                    </td>
+                    <td>
+                        ${dueDate.toLocaleDateString('en-US', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            year: 'numeric' 
+                        })}
+                    </td>
+                    <td>
+                        <strong style="font-size: 1.1rem; color: var(--text-dark);">
+                            ₱${(bill.totalAmount || 0).toLocaleString()}
+                        </strong>
+                    </td>
+                    <td>
+                        ${bill.status === 'paid' 
+                            ? `<span class="status-badge" style="background: rgba(52, 168, 83, 0.1); color: var(--success); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem;">Paid</span>`
+                            : isOverdue
+                            ? `<span class="status-badge" style="background: rgba(234, 67, 53, 0.1); color: var(--danger); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem;">Overdue</span>`
+                            : `<span class="status-badge" style="background: rgba(251, 188, 4, 0.1); color: var(--warning); padding: 6px 12px; border-radius: 20px; font-size: 0.85rem;">Due in ${daysRemaining} days</span>`
+                        }
+                    </td>
+                    <td>
+                        ${bill.status === 'pending' 
+                            ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); casaLink.showTenantPaymentModal('${bill.id}')">
+                                <i class="fas fa-credit-card"></i> Pay Now
+                            </button>`
+                            : `<button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); casaLink.showTenantBillDetailsModal('${bill.id}')">
+                                <i class="fas fa-eye"></i> View
+                            </button>`
+                        }
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <div class="table-container">
+                <table class="data-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Description</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Due Date</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Amount</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Status</th>
+                            <th style="padding: 15px; text-align: left; font-weight: 600; color: var(--dark-gray);">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async showTenantBillDetailsModal(billId) {
+        console.log('📋 Opening tenant bill details for:', billId);
+        
+        try {
+            const bill = await firebaseDb.collection('bills').doc(billId).get();
+            
+            if (!bill.exists) {
+                throw new Error('Bill not found');
+            }
+            
+            const billData = { id: bill.id, ...bill.data() };
+            const dueDate = new Date(billData.dueDate);
+            const today = new Date();
+            const isOverdue = dueDate < today && billData.status === 'pending';
+            
+            const modalContent = `
+                <div style="max-width: 500px;">
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="margin: 0; color: var(--text-dark);">
+                                ${billData.type === 'rent' ? 'Monthly Rent' : billData.description || 'Bill'}
+                            </h3>
+                            <span style="
+                                padding: 6px 12px; 
+                                border-radius: 20px; 
+                                font-size: 0.85rem; 
+                                font-weight: 600;
+                                background: ${billData.status === 'paid' 
+                                    ? 'rgba(52, 168, 83, 0.1)' 
+                                    : isOverdue 
+                                    ? 'rgba(234, 67, 53, 0.1)' 
+                                    : 'rgba(251, 188, 4, 0.1)'};
+                                color: ${billData.status === 'paid' 
+                                    ? 'var(--success)' 
+                                    : isOverdue 
+                                    ? 'var(--danger)' 
+                                    : 'var(--warning)'};
+                            ">
+                                ${billData.status === 'paid' ? 'Paid' : isOverdue ? 'Overdue' : 'Pending'}
+                            </span>
+                        </div>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div>
+                                <div style="color: var(--dark-gray); font-size: 0.9rem; margin-bottom: 5px;">Due Date</div>
+                                <div style="font-size: 1.2rem; font-weight: 600; color: var(--text-dark);">
+                                    ${dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </div>
+                            </div>
+                            <div>
+                                <div style="color: var(--dark-gray); font-size: 0.9rem; margin-bottom: 5px;">Amount</div>
+                                <div style="font-size: 1.2rem; font-weight: 600; color: var(--text-dark);">
+                                    ₱${(billData.totalAmount || 0).toLocaleString()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e9ecef;">
+                        <h4 style="margin: 0 0 15px 0; color: var(--text-dark);">Bill Details</h4>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;">
+                            <span style="color: var(--dark-gray);">Description:</span>
+                            <strong>${billData.description || 'Monthly Rent'}</strong>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;">
+                            <span style="color: var(--dark-gray);">Billing Period:</span>
+                            <strong>${new Date(billData.billingPeriodStart || billData.createdAt).toLocaleDateString()} - ${new Date(billData.billingPeriodEnd || billData.dueDate).toLocaleDateString()}</strong>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e9ecef;">
+                            <span style="color: var(--dark-gray);">Status:</span>
+                            <strong style="color: ${billData.status === 'paid' ? 'var(--success)' : isOverdue ? 'var(--danger)' : 'var(--warning)'};">
+                                ${billData.status === 'paid' ? 'Paid' : isOverdue ? 'Overdue' : 'Pending'}
+                            </strong>
+                        </div>
+
+                        ${billData.status === 'paid' && billData.paidDate 
+                            ? `<div style="display: flex; justify-content: space-between;">
+                                <span style="color: var(--dark-gray);">Paid Date:</span>
+                                <strong>${new Date(billData.paidDate).toLocaleDateString()}</strong>
+                            </div>`
+                            : ''
+                        }
+                    </div>
+
+                    ${billData.status === 'pending' 
+                        ? `<div style="background: rgba(251, 188, 4, 0.1); border: 1px solid rgba(251, 188, 4, 0.3); padding: 15px; border-radius: 8px; margin-top: 20px;">
+                            <div style="color: var(--warning); font-weight: 600; margin-bottom: 8px;">
+                                <i class="fas fa-info-circle"></i> Payment Required
+                            </div>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.9rem;">
+                                Please make payment by the due date to avoid late fees.
+                            </p>
+                        </div>`
+                        : ''
+                    }
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Bill Details',
+                showFooter: true,
+                submitText: billData.status === 'pending' ? 'Pay Now' : 'Close',
+                cancelText: 'Back',
+                onSubmit: () => {
+                    if (billData.status === 'pending') {
+                        ModalManager.closeModal(modal);
+                        this.showTenantPaymentModal(billId);
+                    } else {
+                        ModalManager.closeModal(modal);
+                    }
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error loading bill details:', error);
+            this.showNotification('Failed to load bill details', 'error');
+        }
+    }
+
+    async showTenantPaymentModal(billId) {
+        console.log('💳 Opening tenant payment modal for bill:', billId);
+        
+        try {
+            const bill = await firebaseDb.collection('bills').doc(billId).get();
+            
+            if (!bill.exists) {
+                throw new Error('Bill not found');
+            }
+            
+            const billData = { id: bill.id, ...bill.data() };
+            const paymentMethods = await DataManager.getPaymentMethods();
+            
+            const methodOptions = paymentMethods.map(method => 
+                `<option value="${method.id}">${method.name}</option>`
+            ).join('');
+            
+            const modalContent = `
+                <div style="max-width: 500px;">
+                    <!-- Bill Summary -->
+                    <div style="background: rgba(22, 38, 96, 0.05); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--royal-blue);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <div>
+                                <div style="color: var(--dark-gray); font-size: 0.9rem;">Total Amount Due</div>
+                                <div style="font-size: 2rem; font-weight: 700; color: var(--royal-blue);">
+                                    ₱${(billData.totalAmount || 0).toLocaleString()}
+                                </div>
+                            </div>
+                            <i class="fas fa-credit-card" style="font-size: 2rem; color: var(--royal-blue); opacity: 0.5;"></i>
+                        </div>
+                        <div style="color: var(--dark-gray); font-size: 0.85rem;">
+                            Due: ${new Date(billData.dueDate).toLocaleDateString()}
+                        </div>
+                    </div>
+
+                    <!-- Payment Form -->
+                    <form id="tenantPaymentForm">
+                        <div class="form-group">
+                            <label class="form-label">Payment Method</label>
+                            <select id="paymentMethod" class="form-input" required>
+                                <option value="">-- Select Payment Method --</option>
+                                ${methodOptions}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Amount</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 1.2rem; color: var(--dark-gray);">₱</span>
+                                <input 
+                                    type="number" 
+                                    id="paymentAmount" 
+                                    class="form-input" 
+                                    value="${billData.totalAmount || 0}"
+                                    readonly
+                                    style="background: #f8f9fa;"
+                                >
+                            </div>
+                            <small style="color: var(--dark-gray);">* Full payment required</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Reference/Check Number (Optional)</label>
+                            <input 
+                                type="text" 
+                                id="paymentReference" 
+                                class="form-input" 
+                                placeholder="e.g., CHK-12345 or GCash Ref"
+                            >
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">Notes (Optional)</label>
+                            <textarea 
+                                id="paymentNotes" 
+                                class="form-input" 
+                                rows="3" 
+                                placeholder="Add any payment notes..."
+                                style="resize: vertical;"
+                            ></textarea>
+                        </div>
+
+                        <div style="background: rgba(22, 38, 96, 0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                            <div style="display: flex; align-items: flex-start; gap: 10px;">
+                                <i class="fas fa-info-circle" style="color: var(--royal-blue); margin-top: 3px;"></i>
+                                <div style="font-size: 0.9rem; color: var(--dark-gray); line-height: 1.5;">
+                                    <strong>Payment Instructions:</strong><br>
+                                    Please note that payment submission is recorded. Your landlord will verify the payment and update the status accordingly.
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Record Payment',
+                showFooter: true,
+                submitText: 'Submit Payment',
+                cancelText: 'Cancel',
+                onSubmit: async () => {
+                    await this.processTenantPayment(billId, modal);
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error opening payment modal:', error);
+            this.showNotification('Failed to open payment form', 'error');
+        }
+    }
+
+    async processTenantPayment(billId, modal) {
+        console.log('💳 Processing tenant payment for bill:', billId);
+        
+        try {
+            const method = document.getElementById('paymentMethod').value;
+            const amount = parseFloat(document.getElementById('paymentAmount').value);
+            const reference = document.getElementById('paymentReference').value;
+            const notes = document.getElementById('paymentNotes').value;
+            
+            if (!method) {
+                alert('Please select a payment method');
+                return;
+            }
+            
+            if (!amount || amount <= 0) {
+                alert('Invalid payment amount');
+                return;
+            }
+            
+            // Get bill details
+            const billDoc = await firebaseDb.collection('bills').doc(billId).get();
+            if (!billDoc.exists) {
+                throw new Error('Bill not found');
+            }
+            
+            const billData = billDoc.data();
+            
+            // Create payment record
+            const paymentData = {
+                billId: billId,
+                tenantId: this.currentUser.id,
+                tenantName: this.currentUser.name,
+                landlordId: billData.landlordId,
+                roomNumber: billData.roomNumber || 'N/A',
+                paymentMethod: method,
+                amount: amount,
+                reference: reference || null,
+                notes: notes || null,
+                paymentDate: new Date().toISOString(),
+                status: 'pending_verification',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Save payment record
+            const paymentRef = await firebaseDb.collection('payments').add(paymentData);
+            console.log('✅ Payment record created:', paymentRef.id);
+            
+            // Update bill status to pending_payment (waiting for landlord verification)
+            await firebaseDb.collection('bills').doc(billId).update({
+                status: 'pending_verification',
+                paymentSubmittedAt: new Date().toISOString(),
+                paymentSubmittedBy: this.currentUser.id,
+                updatedAt: new Date().toISOString()
+            });
+            
+            console.log('✅ Bill status updated to pending_verification');
+            
+            // Close modal
+            ModalManager.closeModal(modal);
+            
+            // Show success message
+            this.showNotification('Payment submitted successfully! Your landlord will verify it shortly.', 'success');
+            
+            // Refresh billing page
+            setTimeout(() => {
+                this.showPage('tenantBilling');
+            }, 1500);
+            
+        } catch (error) {
+            console.error('❌ Error processing payment:', error);
+            this.showNotification('Failed to submit payment: ' + error.message, 'error');
+        }
     }
 
     async getTenantMaintenancePage() {
