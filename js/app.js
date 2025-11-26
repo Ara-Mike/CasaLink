@@ -4089,52 +4089,86 @@ class CasaLink {
     }
 
     showTenantMaintenanceRequestForm() {
-        // Build form HTML
+        // Get current tenant user data
+        const tenant = this.currentUser || {};
+        const tenantId = tenant.id || tenant.uid || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.uid);
+        const tenantName = tenant.name || tenant.email || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.email) || 'Tenant';
+        const roomNumber = tenant.roomNumber || '';
+
+        // Build the landlord-style form for tenants
         const content = `
             <div style="max-width:700px;">
                 <div class="form-group">
-                    <label class="form-label">Title</label>
-                    <input id="maintTitle" class="form-input" placeholder="e.g. Leaky faucet in bathroom" />
+                    <label class="form-label">Tenant *</label>
+                    <input class="form-input" value="${this.escapeHtml(tenantName)}${roomNumber ? ` - Room ${roomNumber}` : ''}" readonly />
+                    <small class="text-muted">Your information is automatically filled</small>
                 </div>
+                
                 <div class="form-group">
-                    <label class="form-label">Description</label>
-                    <textarea id="maintDescription" class="form-input" rows="6" placeholder="Describe the issue and location"></textarea>
+                    <label class="form-label">Request Type *</label>
+                    <select id="maintType" class="form-input" required>
+                        <option value="">Select type</option>
+                        <option value="plumbing">Plumbing</option>
+                        <option value="electrical">Electrical</option>
+                        <option value="hvac">HVAC</option>
+                        <option value="appliance">Appliance</option>
+                        <option value="structural">Structural</option>
+                        <option value="pest_control">Pest Control</option>
+                        <option value="general">General</option>
+                        <option value="other">Other</option>
+                    </select>
                 </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Priority *</label>
+                    <select id="maintPriority" class="form-input" required>
+                        <option value="">Select priority</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="emergency">Emergency</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Title *</label>
+                    <input id="maintTitle" class="form-input" placeholder="Brief description of the issue" required />
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Detailed Description *</label>
+                    <textarea id="maintDescription" class="form-input" rows="6" placeholder="Please provide detailed information about the maintenance issue..." required></textarea>
+                </div>
+                
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Type</label>
-                        <select id="maintType" class="form-input">
-                            <option value="general">General</option>
-                            <option value="plumbing">Plumbing</option>
-                            <option value="electrical">Electrical</option>
-                            <option value="hvac">HVAC</option>
-                            <option value="appliance">Appliance</option>
-                            <option value="structural">Structural</option>
-                            <option value="pest_control">Pest Control</option>
-                            <option value="other">Other</option>
-                        </select>
+                        <label class="form-label">Preferred Date</label>
+                        <input id="maintPreferredDate" type="date" class="form-input" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Priority</label>
-                        <select id="maintPriority" class="form-input">
-                            <option value="low">Low</option>
-                            <option value="medium" selected>Medium</option>
-                            <option value="high">High</option>
-                            <option value="emergency">Emergency</option>
-                        </select>
+                        <label class="form-label">Estimated Cost (₱)</label>
+                        <input id="maintEstimatedCost" type="number" min="0" step="0.01" class="form-input" placeholder="0" />
                     </div>
                 </div>
+                
                 <div class="form-group">
-                    <label class="form-label">Attach images (optional)</label>
+                    <label class="form-label">Upload Photos (Optional)</label>
                     <input id="maintImages" type="file" accept="image/*" multiple class="form-input" />
+                    <small class="text-muted">You can upload multiple photos</small>
                 </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Special Instructions</label>
+                    <textarea id="maintInstructions" class="form-input" rows="3" placeholder="Any special instructions for maintenance staff..."></textarea>
+                </div>
+                
                 <div id="maintFormError" class="text-muted" style="display:none;color:var(--danger);margin-top:8px;"></div>
             </div>
         `;
 
         const modal = ModalManager.openModal(content, {
-            title: 'New Maintenance Request',
-            submitText: 'Submit Request',
+            title: 'Create Maintenance Request',
+            submitText: 'Create Request',
             cancelText: 'Cancel',
             showFooter: true,
             onSubmit: async () => {
@@ -4142,19 +4176,31 @@ class CasaLink {
                 const description = document.getElementById('maintDescription')?.value.trim();
                 const type = document.getElementById('maintType')?.value;
                 const priority = document.getElementById('maintPriority')?.value;
+                const preferredDate = document.getElementById('maintPreferredDate')?.value;
+                const estimatedCost = document.getElementById('maintEstimatedCost')?.value;
+                const specialInstructions = document.getElementById('maintInstructions')?.value.trim();
                 const filesInput = document.getElementById('maintImages');
                 const errorEl = document.getElementById('maintFormError');
 
+                // Validation
                 if (!title) {
                     if (errorEl) { errorEl.textContent = 'Please enter a title for the request.'; errorEl.style.display = 'block'; }
                     return;
                 }
+                if (!type) {
+                    if (errorEl) { errorEl.textContent = 'Please select a request type.'; errorEl.style.display = 'block'; }
+                    return;
+                }
+                if (!priority) {
+                    if (errorEl) { errorEl.textContent = 'Please select a priority level.'; errorEl.style.display = 'block'; }
+                    return;
+                }
+                if (!description) {
+                    if (errorEl) { errorEl.textContent = 'Please provide a detailed description.'; errorEl.style.display = 'block'; }
+                    return;
+                }
 
                 // Prepare request payload
-                const tenant = this.currentUser || {};
-                const tenantId = tenant.id || tenant.uid || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.uid);
-                const tenantName = tenant.name || tenant.email || (firebaseAuth && firebaseAuth.currentUser && firebaseAuth.currentUser.email) || 'Tenant';
-
                 const requestData = {
                     title,
                     description,
@@ -4163,23 +4209,26 @@ class CasaLink {
                     tenantId,
                     tenantName,
                     landlordId: tenant.landlordId || tenant.landlord || null,
-                    roomNumber: tenant.roomNumber || '',
+                    roomNumber: roomNumber,
                     status: 'open',
-                    images: [], // we'll attempt to upload images (optional)
+                    images: [],
+                    estimatedCost: estimatedCost ? parseFloat(estimatedCost) : 0,
+                    preferredDate: preferredDate || null,
+                    specialInstructions: specialInstructions || '',
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 };
 
-                // Show loading state on submit button
+                // Show loading state
                 const submitBtn = document.getElementById('modalSubmit');
                 const originalText = submitBtn ? submitBtn.innerHTML : null;
                 if (submitBtn) {
-                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Request...';
                     submitBtn.disabled = true;
                 }
 
                 try {
-                    // If images provided, try uploading to firebase storage (best-effort, non-blocking fallback)
+                    // Upload images if provided
                     if (filesInput && filesInput.files && filesInput.files.length > 0 && window.firebase && firebase.storage) {
                         const storageRef = firebase.storage().ref();
                         const uploadPromises = Array.from(filesInput.files).map(async (file) => {
@@ -4205,19 +4254,25 @@ class CasaLink {
 
                     const createdId = await DataManager.createMaintenanceRequest(requestData);
 
-                    // Close modal, refresh list
+                    // Close modal and refresh
                     ModalManager.closeModal(modal);
                     await this.loadTenantMaintenanceData();
 
+                    // Show success notification
                     if (window.NotificationManager && typeof NotificationManager.showNotification === 'function') {
-                        NotificationManager.showNotification('Maintenance request submitted', { body: 'Your request has been sent to your landlord.' });
+                        NotificationManager.showNotification('Maintenance request submitted', { 
+                            body: 'Your request has been sent to your landlord.' 
+                        });
                     } else {
-                        this.showNotification('Maintenance request submitted', 'success');
+                        this.showNotification('Maintenance request submitted successfully!', 'success');
                     }
 
                 } catch (err) {
                     console.error('Error submitting maintenance request:', err);
-                    if (errorEl) { errorEl.textContent = 'Failed to submit request. Please try again.'; errorEl.style.display = 'block'; }
+                    if (errorEl) { 
+                        errorEl.textContent = 'Failed to submit request. Please try again.'; 
+                        errorEl.style.display = 'block'; 
+                    }
                 } finally {
                     if (submitBtn) {
                         submitBtn.disabled = false;
@@ -4226,6 +4281,16 @@ class CasaLink {
                 }
             }
         });
+    }
+
+    // Add helper method for HTML escaping
+    escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
     async loadTenantMaintenanceData() {
