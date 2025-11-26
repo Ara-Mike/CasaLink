@@ -49,6 +49,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-functions-compat.js"></script>
     
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
 </head>
 <body>
 
@@ -58,6 +60,169 @@
             <i class="fas fa-spinner fa-spin"></i>
             <p>Loading CasaLink...</p>
         </div>
+        
+        <!-- Reports Section (initially hidden) -->
+        <section id="reportsSection" class="dashboard-section" style="display: none;">
+            <div class="page-header">
+                <div class="page-title">Reports & Analytics</div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" id="exportReportBtn">
+                        <i class="fas fa-download"></i> Export Report
+                    </button>
+                    <button class="btn btn-primary" id="refreshDataBtn">
+                        <i class="fas fa-sync-alt"></i> Refresh Data
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quick Stats Overview -->
+            <div class="quick-stats-row">
+                <div class="quick-stat-card">
+                    <div class="quick-stat-value">₱84,500</div>
+                    <div class="quick-stat-label">Monthly Revenue</div>
+                </div>
+                <div class="quick-stat-card">
+                    <div class="quick-stat-value">94%</div>
+                    <div class="quick-stat-label">Occupancy Rate</div>
+                </div>
+                <div class="quick-stat-card">
+                    <div class="quick-stat-value">97%</div>
+                    <div class="quick-stat-label">Collection Rate</div>
+                </div>
+                <div class="quick-stat-card">
+                    <div class="quick-stat-value">₱2,150</div>
+                    <div class="quick-stat-label">Avg. Maintenance/Month</div>
+                </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="charts-grid">
+                <!-- Row 1 -->
+                <div class="chart-card large">
+                    <div class="chart-header">
+                        <h3>Monthly Revenue Trend</h3>
+                        <div class="chart-actions">
+                            <select class="filter-select" id="revenueTrendFilter">
+                                <option>Last 6 Months</option>
+                                <option>Last 12 Months</option>
+                                <option>Year to Date</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="revenueTrendChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Payment Methods</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="paymentMethodsChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Row 2 -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Revenue per Unit</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="revenuePerUnitChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Occupancy Status</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="occupancyChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Late Payments</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="latePaymentsChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Row 3 - Additional Metrics -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Maintenance Costs</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="maintenanceCostsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Tenant Retention</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="retentionChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Rent vs Market</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="rentComparisonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Metrics Summary -->
+            <div class="metrics-summary">
+                <div class="section-title">Key Performance Indicators</div>
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <div class="metric-icon success">
+                            <i class="fas fa-trend-up"></i>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value">+12.5%</div>
+                            <div class="metric-label">Revenue Growth</div>
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-icon warning">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value">4.2%</div>
+                            <div class="metric-label">Late Payment Rate</div>
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-icon info">
+                            <i class="fas fa-home"></i>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value">18/20</div>
+                            <div class="metric-label">Units Occupied</div>
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-icon primary">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <div class="metric-content">
+                            <div class="metric-value">78%</div>
+                            <div class="metric-label">Lease Renewal Rate</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
 
     <!-- PWA Install Prompt -->
@@ -102,13 +267,16 @@
             const scripts = [
                 'js/sendpulseService.js',
                 'config/firebase.js', 
-                'js/auth.js',
                 'js/dataManager.js',
+                'js/auth.js',
                 'js/modalManager.js',
                 'js/notificationManager.js',
                 'js/pwaManager.js',
                 'js/analytics.js',
                 'js/performance.js',
+                'js/chartsManager.js', 
+                'js/sectionManager.js',
+                'js/reportsManager.js',
                 'js/app.js'
             ];
 
@@ -143,6 +311,22 @@
                             try {
                                 window.casaLink = new CasaLink();
                                 console.log('✅ CasaLink app initialized');
+                                
+                                // Initialize Charts Manager
+                                window.chartsManager = new ChartsManager();
+                                console.log('✅ Charts Manager initialized');
+                                
+                                // Initialize Reports Manager
+                                if (window.dataManager && window.casaLink.currentUser) {
+                                    window.reportsManager = new ReportsManager(window.dataManager);
+                                    window.reportsManager.initialize(window.casaLink.currentUser);
+                                    console.log('✅ Reports Manager initialized');
+                                }
+                                
+                                // Initialize Section Manager
+                                window.sectionManager = new SectionManager();
+                                console.log('✅ Section Manager initialized');
+                                
                             } catch (appError) {
                                 console.error('❌ CasaLink initialization failed:', appError);
                                 showAppError();
@@ -187,6 +371,9 @@
                     }
                     if (window.PerformanceOptimizer) {
                         PerformanceOptimizer.init();
+                    }
+                    if (window.ReportsManager) {
+                        ReportsManager.init();
                     }
                     
                     // Hide loading spinner after a delay
@@ -283,6 +470,340 @@
             loadScripts();
         })();
     </script>
+    
+    <!-- Reports Manager Script -->
+    <script>
+        // Reports Manager for handling reports functionality
+        window.ReportsManager = {
+            init: function() {
+                console.log('📊 Initializing Reports Manager...');
+                
+                // Set up event listeners for reports section
+                this.setupEventListeners();
+                
+                // Initialize charts when the reports section is shown
+                this.initializeCharts();
+            },
+            
+            setupEventListeners: function() {
+                // Export report button
+                const exportBtn = document.getElementById('exportReportBtn');
+                if (exportBtn) {
+                    exportBtn.addEventListener('click', this.exportReport);
+                }
+                
+                // Refresh data button
+                const refreshBtn = document.getElementById('refreshDataBtn');
+                if (refreshBtn) {
+                    refreshBtn.addEventListener('click', this.refreshData);
+                }
+                
+                // Revenue trend filter
+                const trendFilter = document.getElementById('revenueTrendFilter');
+                if (trendFilter) {
+                    trendFilter.addEventListener('change', this.updateRevenueTrend);
+                }
+            },
+            
+            initializeCharts: function() {
+                // Initialize all charts
+                this.createRevenueTrendChart();
+                this.createPaymentMethodsChart();
+                this.createRevenuePerUnitChart();
+                this.createOccupancyChart();
+                this.createLatePaymentsChart();
+                this.createMaintenanceCostsChart();
+                this.createRetentionChart();
+                this.createRentComparisonChart();
+            },
+            
+            createRevenueTrendChart: function() {
+                const ctx = document.getElementById('revenueTrendChart');
+                if (!ctx) return;
+                
+                // Sample data - replace with real data from Firebase
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                        datasets: [{
+                            label: 'Monthly Revenue',
+                            data: [75000, 82000, 78000, 85000, 92000, 84500],
+                            borderColor: '#1A73E8',
+                            backgroundColor: 'rgba(26, 115, 232, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                grid: {
+                                    color: 'rgba(0,0,0,0.05)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createPaymentMethodsChart: function() {
+                const ctx = document.getElementById('paymentMethodsChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Bank Transfer', 'Cash', 'Credit Card', 'GCash'],
+                        datasets: [{
+                            data: [45, 25, 20, 10],
+                            backgroundColor: [
+                                '#1A73E8',
+                                '#34A853',
+                                '#FBBC04',
+                                '#EA4335'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createRevenuePerUnitChart: function() {
+                const ctx = document.getElementById('revenuePerUnitChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Unit 101', 'Unit 102', 'Unit 103', 'Unit 201', 'Unit 202'],
+                        datasets: [{
+                            label: 'Monthly Revenue',
+                            data: [15000, 12000, 18000, 16000, 14000],
+                            backgroundColor: '#1A73E8'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createOccupancyChart: function() {
+                const ctx = document.getElementById('occupancyChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Occupied', 'Vacant'],
+                        datasets: [{
+                            data: [18, 2],
+                            backgroundColor: [
+                                '#34A853',
+                                '#EA4335'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createLatePaymentsChart: function() {
+                const ctx = document.getElementById('latePaymentsChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                        datasets: [{
+                            label: 'Late Payments',
+                            data: [3, 2, 1, 2, 1, 1],
+                            backgroundColor: '#FBBC04'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createMaintenanceCostsChart: function() {
+                const ctx = document.getElementById('maintenanceCostsChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                        datasets: [{
+                            label: 'Maintenance Costs',
+                            data: [1800, 2200, 1500, 3000, 2500, 2150],
+                            borderColor: '#EA4335',
+                            backgroundColor: 'rgba(234, 67, 53, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createRetentionChart: function() {
+                const ctx = document.getElementById('retentionChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Renewed', 'Moved Out'],
+                        datasets: [{
+                            data: [78, 22],
+                            backgroundColor: [
+                                '#1A73E8',
+                                '#EA4335'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            },
+            
+            createRentComparisonChart: function() {
+                const ctx = document.getElementById('rentComparisonChart');
+                if (!ctx) return;
+                
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Studio', '1BR', '2BR', '3BR'],
+                        datasets: [{
+                            label: 'Your Rent',
+                            data: [12000, 15000, 20000, 25000],
+                            backgroundColor: '#1A73E8'
+                        }, {
+                            label: 'Market Average',
+                            data: [11500, 14500, 19500, 24500],
+                            backgroundColor: '#FBBC04'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            },
+            
+            exportReport: function() {
+                // Implement export functionality
+                console.log('📤 Exporting report...');
+                // This would typically generate a PDF or CSV file
+                alert('Report export functionality would be implemented here');
+            },
+            
+            refreshData: function() {
+                // Implement data refresh
+                console.log('🔄 Refreshing reports data...');
+                // This would typically fetch fresh data from Firebase
+                alert('Data refresh functionality would be implemented here');
+            },
+            
+            updateRevenueTrend: function(event) {
+                // Update chart based on selected time period
+                const period = event.target.value;
+                console.log(`📈 Updating revenue trend for: ${period}`);
+                // This would typically fetch new data based on the selected period
+            },
+            
+            showReportsSection: function() {
+                // Show the reports section
+                const reportsSection = document.getElementById('reportsSection');
+                if (reportsSection) {
+                    reportsSection.style.display = 'block';
+                }
+            },
+            
+            hideReportsSection: function() {
+                // Hide the reports section
+                const reportsSection = document.getElementById('reportsSection');
+                if (reportsSection) {
+                    reportsSection.style.display = 'none';
+                }
+            }
+        };
+    </script>
+
+    <!-- Rest of the diagnostic and PWA scripts remain unchanged -->
     <script>
         // Check PWA requirements
         function checkPWARequirements() {
@@ -596,6 +1117,53 @@ function checkManifestRequirements(manifest) {
             console.log('✅ Cache is up to date');
         }
     })();
+    </script>
+
+
+    <script>
+    // Main App Initialization
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🚀 DOM loaded, initializing app...');
+        
+        // Show main app after loading (2 second delay for demo)
+        setTimeout(() => {
+            // Hide loading spinner
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const mainApp = document.getElementById('mainApp');
+            
+            if (loadingSpinner) {
+                loadingSpinner.style.display = 'none';
+                console.log('✅ Loading spinner hidden');
+            }
+            
+            if (mainApp) {
+                mainApp.style.display = 'block';
+                console.log('✅ Main app displayed');
+            }
+            
+            // Initialize section manager if not already done
+            if (window.sectionManager) {
+                console.log('✅ Section Manager already initialized');
+            } else {
+                console.log('🔄 Initializing Section Manager...');
+                try {
+                    window.sectionManager = new SectionManager();
+                    console.log('✅ Section Manager initialized successfully');
+                } catch (error) {
+                    console.error('❌ Failed to initialize Section Manager:', error);
+                }
+            }
+            
+            // Ensure dashboard is active
+            if (window.sectionManager) {
+                window.sectionManager.showSection('dashboardSection');
+                console.log('✅ Dashboard section activated');
+            } else {
+                console.error('❌ Section Manager not available');
+            }
+            
+        }, 2000); // 2 second delay
+    });
     </script>
 
 </body>

@@ -25,6 +25,258 @@
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
 
+/* Reports Section Styles */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.chart-card {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 25px;
+    transition: var(--transition);
+}
+
+.chart-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.chart-card.large {
+    grid-column: span 2;
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 15px;
+}
+
+.chart-header h3 {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-dark);
+}
+
+.chart-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+.chart-card .chart-container {
+    height: 250px;
+}
+
+.chart-card.large .chart-container {
+    height: 350px;
+}
+
+/* Metrics Summary */
+.metrics-summary {
+    background: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    padding: 30px;
+    margin-top: 20px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+}
+
+.metric-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+}
+
+.metric-item:hover {
+    background: #e9ecef;
+    transform: translateX(5px);
+}
+
+.metric-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: white;
+}
+
+.metric-icon.success { background: var(--success); }
+.metric-icon.warning { background: var(--warning); }
+.metric-icon.info { background: var(--info); }
+.metric-icon.primary { background: var(--royal-blue); }
+
+.metric-content {
+    flex: 1;
+}
+
+.metric-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 5px;
+}
+
+.metric-label {
+    font-size: 0.9rem;
+    color: var(--dark-gray);
+    font-weight: 500;
+}
+
+/* Responsive Charts */
+@media (max-width: 1200px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .chart-card.large {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .chart-card {
+        padding: 20px;
+    }
+    
+    .chart-container {
+        height: 250px;
+    }
+    
+    .chart-card .chart-container {
+        height: 200px;
+    }
+    
+    .chart-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .metric-item {
+        padding: 15px;
+    }
+}
+
+/* Quick Stats Row Styles */
+.quick-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.quick-stat-card {
+    background: white;
+    border-radius: var(--border-radius);
+    padding: 25px;
+    box-shadow: var(--box-shadow);
+    transition: var(--transition);
+    text-align: center;
+    border: 1px solid #e9ecef;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.quick-stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    border-color: var(--royal-blue);
+}
+
+.quick-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--royal-blue);
+    margin-bottom: 10px;
+    line-height: 1;
+}
+
+.quick-stat-label {
+    font-size: 0.95rem;
+    color: var(--dark-gray);
+    font-weight: 500;
+}
+
+/* Responsive Quick Stats */
+@media (max-width: 768px) {
+    .quick-stats-row {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+    }
+    
+    .quick-stat-value {
+        font-size: 1.5rem;
+    }
+    
+    .quick-stat-label {
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .quick-stats-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Chart.js Customizations */
+.chartjs-tooltip {
+    background: rgba(0, 0, 0, 0.8) !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    color: white !important;
+    font-size: 12px !important;
+}
+
+/* Custom chart colors that match your theme */
+:root {
+    --chart-primary: #162660;
+    --chart-secondary: #3498db;
+    --chart-success: #34A853;
+    --chart-warning: #FBBC04;
+    --chart-danger: #EA4335;
+    --chart-info: #17a2b8;
+    --chart-purple: #9334E6;
+    --chart-teal: #4ECDC4;
+}
+
 /* Lease Management Styles */
 .lease-section {
     padding: 20px;

@@ -547,17 +547,170 @@ class CasaLink {
 
 
     async getReportsPage() {
+        console.log('📊 Loading reports page content...');
+        
         return `
-        <div class="page-content">
-            <div class="page-header">
-                <h1 class="page-title">Reports</h1>
+            <div class="reports-dashboard">
+                <div class="page-header">
+                    <div class="page-title">Reports & Analytics</div>
+                    <div class="header-actions">
+                        <button class="btn btn-secondary" id="exportReportBtn">
+                            <i class="fas fa-download"></i> Export Report
+                        </button>
+                        <button class="btn btn-primary" id="refreshReportsBtn">
+                            <i class="fas fa-sync-alt"></i> Refresh Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Stats Overview -->
+                <div class="quick-stats-row">
+                    <div class="quick-stat-card">
+                        <div class="quick-stat-value">₱84,500</div>
+                        <div class="quick-stat-label">Monthly Revenue</div>
+                    </div>
+                    <div class="quick-stat-card">
+                        <div class="quick-stat-value">94%</div>
+                        <div class="quick-stat-label">Occupancy Rate</div>
+                    </div>
+                    <div class="quick-stat-card">
+                        <div class="quick-stat-value">97%</div>
+                        <div class="quick-stat-label">Collection Rate</div>
+                    </div>
+                    <div class="quick-stat-card">
+                        <div class="quick-stat-value">₱2,150</div>
+                        <div class="quick-stat-label">Avg. Maintenance/Month</div>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="charts-grid">
+                    <!-- Row 1 -->
+                    <div class="chart-card large">
+                        <div class="chart-header">
+                            <h3>Monthly Revenue Trend</h3>
+                            <div class="chart-actions">
+                                <select class="filter-select" id="revenuePeriod">
+                                    <option>Last 6 Months</option>
+                                    <option>Last 12 Months</option>
+                                    <option>Year to Date</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="revenueTrendChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Payment Methods</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="paymentMethodsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Row 2 -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Revenue per Unit</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="revenuePerUnitChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Occupancy Status</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="occupancyChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Late Payments</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="latePaymentsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Row 3 - Additional Metrics -->
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Maintenance Costs</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="maintenanceCostsChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Tenant Retention</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="retentionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3>Rent vs Market</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="rentComparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Key Metrics Summary -->
+                <div class="metrics-summary">
+                    <div class="section-title">Key Performance Indicators</div>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-icon success">
+                                <i class="fas fa-trend-up"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value">+12.5%</div>
+                                <div class="metric-label">Revenue Growth</div>
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-icon warning">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value">4.2%</div>
+                                <div class="metric-label">Late Payment Rate</div>
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-icon info">
+                                <i class="fas fa-home"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value">18/20</div>
+                                <div class="metric-label">Units Occupied</div>
+                            </div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-icon primary">
+                                <i class="fas fa-sync-alt"></i>
+                            </div>
+                            <div class="metric-content">
+                                <div class="metric-value">78%</div>
+                                <div class="metric-label">Lease Renewal Rate</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="text-align: center; padding: 40px;">
-                <h3>Reports & Analytics</h3>
-                <p>View detailed reports and analytics for your properties.</p>
-                <p><em>Reports feature coming soon!</em></p>
-            </div>
-        </div>
         `;
     }
 
@@ -3245,6 +3398,90 @@ class CasaLink {
         }
     }
 
+    setupReportsEvents() {
+        console.log('📊 Setting up reports page events...');
+        
+        // Refresh reports button
+        const refreshBtn = document.getElementById('refreshReportsBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', () => {
+                this.refreshReportsData();
+            });
+        }
+        
+        // Export report button
+        const exportBtn = document.getElementById('exportReportBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                this.exportReports();
+            });
+        }
+        
+        // Period filter
+        const periodFilter = document.getElementById('revenuePeriod');
+        if (periodFilter) {
+            periodFilter.addEventListener('change', (e) => {
+                this.filterReportsByPeriod(e.target.value);
+            });
+        }
+        
+        // Initialize charts
+        this.initializeReportsCharts();
+    }
+
+    initializeReportsCharts() {
+        console.log('🎨 Initializing reports charts...');
+        
+        // Wait a bit for DOM to be fully ready
+        setTimeout(() => {
+            if (window.chartsManager) {
+                // Destroy any existing charts first
+                window.chartsManager.destroyAllCharts();
+                // Create new charts
+                window.chartsManager.initializeAllCharts();
+                console.log('✅ Reports charts initialized successfully');
+            } else {
+                console.error('❌ Charts manager not available');
+            }
+        }, 200);
+    }
+
+    refreshReportsData() {
+        console.log('🔄 Refreshing reports data...');
+        
+        // Show loading state
+        const refreshBtn = document.getElementById('refreshReportsBtn');
+        if (refreshBtn) {
+            const originalText = refreshBtn.innerHTML;
+            refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Refreshing...';
+            refreshBtn.disabled = true;
+            
+            // Simulate data refresh
+            setTimeout(() => {
+                // Re-initialize charts with "new" data
+                this.initializeReportsCharts();
+                
+                // Restore button
+                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+                refreshBtn.disabled = false;
+                
+                // Show success message
+                this.showNotification('Reports data refreshed successfully!', 'success');
+            }, 1500);
+        }
+    }
+
+    exportReports() {
+        console.log('📤 Exporting reports...');
+        this.showNotification('Export feature coming soon!', 'info');
+    }
+
+    filterReportsByPeriod(period) {
+        console.log('📅 Filtering reports by period:', period);
+        // In a real app, this would reload data based on the period
+        this.showNotification(`Showing data for: ${period}`, 'info');
+    }
+
     setupPageEvents(page) {
         switch (page) {
             case 'dashboard':
@@ -3268,6 +3505,9 @@ class CasaLink {
                 setTimeout(() => {
                     this.switchBillingTab('payments');
                 }, 300);
+                break;
+            case 'reports':
+                this.setupReportsEvents();
                 break;
         }
     }
@@ -9088,9 +9328,9 @@ class CasaLink {
                         </div>
                         <div class="card-body">
                             <p style="margin: 0; color: var(--dark-gray);">
-                                Bills are automatically generated on the 1st of each month. 
-                                Default payment due day: <strong>${settings.defaultPaymentDay}${DataManager.getOrdinalSuffix(settings.defaultPaymentDay)}</strong>
-                                ${settings.autoLateFees ? `<br>Auto late fees: ₱${settings.lateFeeAmount} after ${settings.lateFeeAfterDays} days` : ''}
+                                <strong>Rental Bills</strong> are automatically generated on the <strong>1st</strong> of each month. <br>
+                                If app is <strong>not opened</strong> on the <strong>1st</strong> of the month, <strong>Manually Click</strong> the <strong>"Generate Monthly Bills"</strong> and <strong>"Apply Late Fees"</strong> button to create bills for the month.
+                                ${settings.autoLateFees ? `<br><strong>Auto late fees: ₱${settings.lateFeeAmount} ${settings.lateFeeAfterDays}</strong> days after due date` : ''}
                             </p>
                         </div>
                     </div>
@@ -10850,11 +11090,48 @@ class CasaLink {
         if (element) element.textContent = value;
     }
 
+    async notifyLandlordOfPayment(paymentData) {
+        try {
+            const notification = {
+                type: 'payment_submitted',
+                title: 'New Payment Submitted',
+                message: `${paymentData.tenantName} from Room ${paymentData.roomNumber} submitted a payment of ₱${paymentData.amount.toLocaleString()}`,
+                paymentId: paymentData.id,
+                billId: paymentData.billId,
+                tenantId: paymentData.tenantId,
+                landlordId: paymentData.landlordId,
+                read: false,
+                createdAt: new Date().toISOString(),
+                actionRequired: true
+            };
+            
+            await firebaseDb.collection('notifications').add(notification);
+            
+            // You can also integrate with sendpulseService here if needed
+            if (typeof sendpulseService !== 'undefined' && sendpulseService.notifyLandlord) {
+                await sendpulseService.notifyLandlord(paymentData.landlordId, {
+                    subject: 'New Payment Submission - Verification Required',
+                    message: `Tenant ${paymentData.tenantName} has submitted a payment for verification. Please review the payment details in your CasaLink dashboard.`
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error notifying landlord:', error);
+            // Don't throw error here as it shouldn't block the payment process
+        }
+    }
+
     showPaymentError(message) {
         const errorElement = document.getElementById('paymentError');
         if (errorElement) {
             errorElement.textContent = message;
             errorElement.style.display = 'block';
+            
+            // Scroll to error message
+            errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            // Fallback if error element doesn't exist
+            this.showNotification(message, 'error');
         }
     }
 
@@ -10903,7 +11180,7 @@ class CasaLink {
     }
 
     async processPayment(billId, bill) {
-        const paymentMethod = document.querySelector('.payment-method-option.selected')?.getAttribute('data-method');
+        const paymentMethod = document.getElementById('selectedPaymentMethod')?.value;
         const referenceNumber = document.getElementById('paymentReference')?.value;
         const paymentDate = document.getElementById('paymentDate')?.value;
         const paymentAmount = parseFloat(document.getElementById('paymentAmount')?.value);
@@ -10932,9 +11209,10 @@ class CasaLink {
             return;
         }
         
-        // Validate reference number for electronic payments
-        if (['gcash', 'maya', 'bank_transfer'].includes(paymentMethod) && !referenceNumber) {
-            this.showPaymentError('Reference number is required for this payment method');
+        // Validate reference number for digital payment methods
+        const digitalMethods = ['gcash', 'maya', 'bank_transfer'];
+        if (digitalMethods.includes(paymentMethod) && (!referenceNumber || referenceNumber.trim() === '')) {
+            this.showPaymentError('Reference number is required for ' + paymentMethod.toUpperCase() + ' payments');
             return;
         }
         
@@ -10945,31 +11223,90 @@ class CasaLink {
                 submitBtn.disabled = true;
             }
             
+            // Check if user is tenant or landlord
+            const isTenant = this.currentUser.userType === 'tenant';
+            
             const paymentData = {
                 billId: billId,
                 tenantId: bill.tenantId,
-                landlordId: this.currentUser.uid,
+                landlordId: bill.landlordId || this.currentUser.uid,
                 tenantName: bill.tenantName,
                 roomNumber: bill.roomNumber,
                 amount: paymentAmount,
                 paymentMethod: paymentMethod,
-                referenceNumber: referenceNumber,
+                referenceNumber: referenceNumber?.trim() || '',
                 paymentDate: paymentDate,
-                notes: notes,
+                notes: notes?.trim() || '',
                 billAmount: bill.totalAmount,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                // Add new fields for tenant payment workflow
+                status: isTenant ? 'pending_verification' : 'completed',
+                submittedBy: this.currentUser.uid,
+                userType: this.currentUser.userType,
+                // Store the original bill details for reference
+                billDetails: {
+                    description: bill.description,
+                    dueDate: bill.dueDate,
+                    period: bill.period
+                }
             };
             
+            // Save payment
             await DataManager.recordPayment(paymentData);
             
+            // Update bill status based on who is making the payment
+            if (isTenant) {
+                // For tenant payments, set bill status to pending verification
+                await firebaseDb.collection('bills').doc(billId).update({
+                    status: 'payment_pending',
+                    lastUpdated: new Date().toISOString(),
+                    pendingPaymentAmount: paymentAmount,
+                    pendingPaymentDate: paymentDate
+                });
+                
+                // Send notification to landlord
+                await this.notifyLandlordOfPayment(paymentData);
+            } else {
+                // For landlord payments, mark as paid immediately
+                await firebaseDb.collection('bills').doc(billId).update({
+                    status: 'paid',
+                    lastUpdated: new Date().toISOString(),
+                    paidAmount: paymentAmount,
+                    paidDate: paymentDate
+                });
+            }
+            
+            // Close modal and notify user
             ModalManager.closeModal(document.querySelector('.modal-overlay'));
-            this.showNotification('Payment recorded successfully!', 'success');
             
-            // Refresh bills data
+            // Show appropriate success message
+            if (isTenant) {
+                this.showNotification('Payment submitted successfully! Your landlord will verify it shortly.', 'success');
+            } else {
+                this.showNotification('Payment recorded successfully!', 'success');
+            }
+            
+            // Refresh data based on user type and current view
             setTimeout(() => {
-                this.loadBillsData();
+                if (isTenant) {
+                    // Refresh tenant bills view
+                    if (typeof this.loadTenantBills === 'function') {
+                        this.loadTenantBills();
+                    }
+                } else {
+                    // Refresh landlord views
+                    if (this.currentBillingTab === 'bills') {
+                        this.loadBillsData();
+                    } else {
+                        this.loadPaymentsData();
+                    }
+                    
+                    // Update the metrics for both tabs
+                    this.loadBillingStats();
+                    this.loadPaymentStats();
+                }
             }, 1000);
-            
+
         } catch (error) {
             console.error('Error processing payment:', error);
             this.showPaymentError('Failed to record payment: ' + error.message);
@@ -10983,32 +11320,32 @@ class CasaLink {
     }
 
     setupPaymentMethodSelection() {
-        const methodOptions = document.querySelectorAll('.payment-method-option');
-        let selectedMethod = null;
+        const paymentOptions = document.querySelectorAll('.payment-method-option');
+        const hiddenInput = document.getElementById('selectedPaymentMethod');
         
-        methodOptions.forEach(option => {
-            option.addEventListener('click', () => {
-                methodOptions.forEach(opt => opt.classList.remove('selected'));
-                option.classList.add('selected');
-                selectedMethod = option.getAttribute('data-method');
+        paymentOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove selected class from all options
+                paymentOptions.forEach(opt => opt.classList.remove('selected'));
                 
-                // Show/hide reference number requirement
-                const referenceInput = document.getElementById('paymentReference');
-                if (referenceInput) {
-                    if (['gcash', 'maya', 'bank_transfer'].includes(selectedMethod)) {
-                        referenceInput.required = true;
-                        referenceInput.parentElement.querySelector('small').style.color = 'var(--danger)';
-                    } else {
-                        referenceInput.required = false;
-                        referenceInput.parentElement.querySelector('small').style.color = 'var(--dark-gray)';
-                    }
+                // Add selected class to clicked option
+                this.classList.add('selected');
+                
+                // Set hidden input value
+                if (hiddenInput) {
+                    hiddenInput.value = this.getAttribute('data-method');
+                }
+                
+                // Toggle reference number field
+                if (typeof this.toggleReferenceNumberField === 'function') {
+                    this.toggleReferenceNumberField(this.getAttribute('data-method'));
                 }
             });
         });
         
-        // Auto-select first method
-        if (methodOptions.length > 0) {
-            methodOptions[0].click();
+        // Select first option by default if none selected
+        if (paymentOptions.length > 0 && (!hiddenInput || !hiddenInput.value)) {
+            paymentOptions[0].click();
         }
     }
 
@@ -14640,114 +14977,160 @@ class CasaLink {
         }
     }
 
-    async showTenantPaymentModal(billId) {
-        console.log('💳 Opening tenant payment modal for bill:', billId);
+    toggleReferenceNumberField(paymentMethod) {
+        const referenceNumberGroup = document.getElementById('referenceNumberGroup');
+        const referenceNumberInput = document.getElementById('paymentReference');
         
-        try {
-            const bill = await firebaseDb.collection('bills').doc(billId).get();
-            
-            if (!bill.exists) {
-                throw new Error('Bill not found');
+        if (!referenceNumberGroup || !referenceNumberInput) return;
+        
+        // Show reference number field for digital payment methods
+        if (['gcash', 'maya', 'bank_transfer'].includes(paymentMethod)) {
+            referenceNumberGroup.style.display = 'block';
+            referenceNumberInput.required = true;
+        } else {
+            referenceNumberGroup.style.display = 'none';
+            referenceNumberInput.required = false;
+        }
+    }
+
+    async showTenantPaymentModal(billId) {
+            try {
+            const billDoc = await firebaseDb.collection('bills').doc(billId).get();
+            if (!billDoc.exists) {
+                this.showNotification('Bill not found', 'error');
+                return;
             }
             
-            const billData = { id: bill.id, ...bill.data() };
+            const bill = { id: billDoc.id, ...billDoc.data() };
             const paymentMethods = await DataManager.getPaymentMethods();
             
-            const methodOptions = paymentMethods.map(method => 
-                `<option value="${method.id}">${method.name}</option>`
-            ).join('');
+            const paymentMethodsHTML = paymentMethods.map(method => `
+                <div class="payment-method-option" data-method="${method.id}">
+                    <i class="${method.icon}"></i>
+                    <span>${method.name}</span>
+                </div>
+            `).join('');
             
             const modalContent = `
-                <div style="max-width: 500px;">
-                    <!-- Bill Summary -->
-                    <div style="background: rgba(22, 38, 96, 0.05); padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid var(--royal-blue);">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <div>
-                                <div style="color: var(--dark-gray); font-size: 0.9rem;">Total Amount Due</div>
-                                <div style="font-size: 2rem; font-weight: 700; color: var(--royal-blue);">
-                                    ₱${(billData.totalAmount || 0).toLocaleString()}
-                                </div>
+                <div class="payment-modal">
+                    <div class="payment-header" style="text-align: center; margin-bottom: 20px;">
+                        <i class="fas fa-credit-card" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                        <h3 style="margin-bottom: 10px;">Record Payment</h3>
+                        <p>Record payment for <strong>${bill.tenantName}</strong></p>
+                    </div>
+                    
+                    <!-- Bill Details Section -->
+                    <div class="bill-details-section" style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <h4 style="margin: 0 0 10px 0; color: var(--royal-blue);">Bill Details</h4>
+                        <div class="bill-details-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div class="bill-detail-item">
+                                <span class="label"><strong>Amount Due:</strong></span>
+                                <span class="value">₱${(bill.totalAmount || 0).toLocaleString()}</span>
                             </div>
-                            <i class="fas fa-credit-card" style="font-size: 2rem; color: var(--royal-blue); opacity: 0.5;"></i>
-                        </div>
-                        <div style="color: var(--dark-gray); font-size: 0.85rem;">
-                            Due: ${new Date(billData.dueDate).toLocaleDateString()}
+                            <div class="bill-detail-item">
+                                <span class="label"><strong>Due Date:</strong></span>
+                                <span class="value">${new Date(bill.dueDate).toLocaleDateString()}</span>
+                            </div>
+                            <div class="bill-detail-item">
+                                <span class="label"><strong>Room:</strong></span>
+                                <span class="value">${bill.roomNumber || 'N/A'}</span>
+                            </div>
+                            <div class="bill-detail-item">
+                                <span class="label"><strong>Description:</strong></span>
+                                <span class="value">${bill.description || 'Monthly Rent'}</span>
+                            </div>
                         </div>
                     </div>
-
+                    
                     <!-- Payment Form -->
-                    <form id="tenantPaymentForm">
+                    <form id="paymentForm">
+                        <!-- Payment Method -->
                         <div class="form-group">
-                            <label class="form-label">Payment Method</label>
-                            <select id="paymentMethod" class="form-input" required>
-                                <option value="">-- Select Payment Method --</option>
-                                ${methodOptions}
-                            </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">Amount</label>
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span style="font-size: 1.2rem; color: var(--dark-gray);">₱</span>
-                                <input 
-                                    type="number" 
-                                    id="paymentAmount" 
-                                    class="form-input" 
-                                    value="${billData.totalAmount || 0}"
-                                    readonly
-                                    style="background: #f8f9fa;"
-                                >
+                            <label class="form-label">Payment Method *</label>
+                            <div class="payment-methods-grid">
+                                ${paymentMethodsHTML}
                             </div>
-                            <small style="color: var(--dark-gray);">* Full payment required</small>
+                            <input type="hidden" id="selectedPaymentMethod" required>
                         </div>
-
+                        
+                        <!-- Reference Number (Conditional) -->
+                        <div class="form-group" id="referenceNumberGroup" style="display: none;">
+                            <label class="form-label">Reference Number *</label>
+                            <input type="text" id="paymentReference" class="form-input" 
+                                placeholder="Transaction ID, receipt number, etc.">
+                            <small class="field-note" style="color: #6c757d; font-size: 0.875rem;">
+                                Required for GCash, Maya, and Bank Transfer
+                            </small>
+                        </div>
+                        
+                        <!-- Payment Date -->
                         <div class="form-group">
-                            <label class="form-label">Reference/Check Number (Optional)</label>
-                            <input 
-                                type="text" 
-                                id="paymentReference" 
-                                class="form-input" 
-                                placeholder="e.g., CHK-12345 or GCash Ref"
-                            >
+                            <label class="form-label">Payment Date *</label>
+                            <input type="date" id="paymentDate" class="form-input" 
+                                value="${new Date().toISOString().split('T')[0]}" required>
                         </div>
-
+                        
+                        <!-- Amount Paid -->
+                        <div class="form-group">
+                            <label class="form-label">Amount Paid *</label>
+                            <div style="position: relative;">
+                                <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #666;">₱</span>
+                                <input type="number" id="paymentAmount" class="form-input" 
+                                    style="padding-left: 30px;"
+                                    value="${bill.totalAmount || 0}" 
+                                    step="0.01" min="0" required>
+                            </div>
+                            <small class="field-note" style="color: #6c757d; font-size: 0.875rem;">
+                                Enter the actual amount received
+                            </small>
+                        </div>
+                        
+                        <!-- Notes -->
                         <div class="form-group">
                             <label class="form-label">Notes (Optional)</label>
-                            <textarea 
-                                id="paymentNotes" 
-                                class="form-input" 
-                                rows="3" 
-                                placeholder="Add any payment notes..."
-                                style="resize: vertical;"
-                            ></textarea>
+                            <textarea id="paymentNotes" class="form-input" 
+                                    placeholder="Additional notes about this payment" 
+                                    rows="3"></textarea>
                         </div>
-
-                        <div style="background: rgba(22, 38, 96, 0.05); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                            <div style="display: flex; align-items: flex-start; gap: 10px;">
-                                <i class="fas fa-info-circle" style="color: var(--royal-blue); margin-top: 3px;"></i>
-                                <div style="font-size: 0.9rem; color: var(--dark-gray); line-height: 1.5;">
-                                    <strong>Payment Instructions:</strong><br>
-                                    Please note that payment submission is recorded. Your landlord will verify the payment and update the status accordingly.
-                                </div>
-                            </div>
+                        
+                        <!-- Payment Instructions -->
+                        <div class="payment-instructions" style="background: #e7f3ff; border-left: 4px solid #007bff; padding: 12px; border-radius: 4px; margin: 20px 0;">
+                            <p style="margin: 0 0 8px 0; font-weight: 600; color: #495057;">Payment Instructions:</p>
+                            <p style="margin: 0; font-size: 0.9rem; color: #495057;">
+                                Please note that payment submission is recorded. Your landlord will verify the payment and update the status accordingly.
+                            </p>
                         </div>
                     </form>
+                    
+                    <div id="paymentError" style="color: var(--danger); display: none; margin-bottom: 15px; padding: 10px; background: #f8d7da; border-radius: 4px;"></div>
                 </div>
             `;
             
             const modal = ModalManager.openModal(modalContent, {
                 title: 'Record Payment',
-                showFooter: true,
-                submitText: 'Submit Payment',
-                cancelText: 'Cancel',
-                onSubmit: async () => {
-                    await this.processTenantPayment(billId, modal);
-                }
+                submitText: 'Record Payment',
+                onSubmit: () => this.processPayment(billId, bill)
             });
             
+            this.setupPaymentMethodSelection();
+            
+            // Add event listener for payment method changes
+            const paymentMethodOptions = modal.querySelectorAll('.payment-method-option');
+            paymentMethodOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    this.toggleReferenceNumberField(option.dataset.method);
+                });
+            });
+            
+            // Initialize reference number field state
+            const selectedMethod = modal.querySelector('.payment-method-option.selected');
+            if (selectedMethod) {
+                this.toggleReferenceNumberField(selectedMethod.dataset.method);
+            }
+            
         } catch (error) {
-            console.error('❌ Error opening payment modal:', error);
-            this.showNotification('Failed to open payment form', 'error');
+            console.error('Error showing payment modal:', error);
+            this.showNotification('Failed to load payment form', 'error');
         }
     }
 
@@ -15446,21 +15829,25 @@ class CasaLink {
 
     // ===== UTILITY METHODS =====
     showNotification(message, type = 'info') {
+        console.log(`📢 ${type.toUpperCase()}: ${message}`);
+        
+        // Create notification element
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.innerHTML = `
-            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-            ${message}
+            <i class="fas fa-${this.getNotificationIcon(type)}"></i>
+            <span>${message}</span>
         `;
-
+        
+        // Add to page
         document.body.appendChild(notification);
-
-        // Auto remove after 5 seconds
+        
+        // Remove after 3 seconds
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
             }
-        }, 5000);
+        }, 3000);
     }
 
     getErrorDashboard(page, error) {
@@ -15499,9 +15886,21 @@ class CasaLink {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('🏠 DOM Content Loaded - Initializing CasaLink...');
     if (typeof CasaLink !== 'undefined') {
-        window.casaLink = new CasaLink();
-        console.log('✅ CasaLink initialized via DOMContentLoaded');
-    } else {
-        console.error('❌ CasaLink class not available');
+        try {
+            window.casaLink = new CasaLink();
+            console.log('✅ CasaLink app initialized');
+            
+            // Initialize Charts Manager
+            window.chartsManager = new ChartsManager();
+            console.log('✅ Charts Manager initialized');
+            
+            // Initialize Section Manager
+            window.sectionManager = new SectionManager();
+            console.log('✅ Section Manager initialized');
+            
+        } catch (appError) {
+            console.error('❌ CasaLink initialization failed:', appError);
+            showAppError();
+        }
     }
 });
