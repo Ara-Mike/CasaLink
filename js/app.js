@@ -14827,30 +14827,153 @@ class CasaLink {
     }
 
     async getTenantMaintenancePage() {
-        // Simple tenant maintenance page: list + create button
-        return `
-        <div class="page-content">
-            <div class="page-header">
-                <h1 class="page-title">Maintenance Requests</h1>
-                <div>
-                    <button class="btn btn-primary" onclick="casaLink.showTenantMaintenanceRequestForm()">
-                        <i class="fas fa-plus-circle"></i> New Request
-                    </button>
-                </div>
-            </div>
+        console.log('📋 Loading tenant maintenance page...');
+        
+        if (!this.currentUser) {
+            return this.getErrorDashboard('tenantMaintenance', 'User not authenticated');
+        }
 
-            <div class="content-card">
-                <div style="padding:20px;">
-                    <p class="text-muted">Submit maintenance requests to your landlord and track status here.</p>
-                </div>
-                <div class="table-container" style="padding:20px;">
-                    <div id="tenantMaintenanceList">
-                        <div class="data-loading"><i class="fas fa-spinner fa-spin"></i> Loading maintenance requests...</div>
+        try {
+            // Fetch maintenance requests for this tenant
+            const maintenanceSnapshot = await firebaseDb.collection('maintenance')
+                .where('tenantId', '==', this.currentUser.uid)
+                .orderBy('createdAt', 'desc')
+                .get();
+
+            const maintenanceRequests = maintenanceSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+
+            console.log('✅ Fetched maintenance requests:', maintenanceRequests.length);
+
+            // Build the page HTML
+            let pageHTML = `
+                <div class="page-content">
+                    <div class="page-header">
+                        <h1 class="page-title">Maintenance Requests</h1>
+                        <button class="btn btn-primary" onclick="casaLink.showTenantMaintenanceRequestForm()">
+                            <i class="fas fa-plus"></i> New Request
+                        </button>
+                    </div>
+
+                    <div class="maintenance-container">
+                        <div class="maintenance-stats">
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-wrench"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>${maintenanceRequests.length}</h3>
+                                    <p>Total Requests</p>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-hourglass-start"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>${maintenanceRequests.filter(r => r.status === 'open' || r.status === 'in-progress').length}</h3>
+                                    <p>In Progress</p>
+                                </div>
+                            </div>
+                            
+                            <div class="stat-card">
+                                <div class="stat-icon">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <div class="stat-content">
+                                    <h3>${maintenanceRequests.filter(r => r.status === 'completed').length}</h3>
+                                    <p>Completed</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="content-card">
+                            <div class="card-header">
+                                <h3>Your Maintenance Requests</h3>
+                            </div>
+                            <div id="maintenanceTableContainer">
+            `;
+
+            // Check if there are any maintenance requests
+            if (maintenanceRequests.length === 0) {
+                // Show empty state message
+                pageHTML += `
+                                <div class="empty-state" style="padding: 60px 20px;">
+                                    <i class="fas fa-tools" style="font-size: 3rem; margin-bottom: 15px; opacity: 0.5;"></i>
+                                    <h3 style="color: #2c3e50; margin-bottom: 10px;">No Existing Maintenance Requests</h3>
+                                    <p style="color: #7f8c8d; margin-bottom: 20px;">You haven't submitted any maintenance requests yet.</p>
+                                    <button class="btn btn-primary" onclick="casaLink.showTenantMaintenanceRequestForm()">
+                                        <i class="fas fa-plus"></i> Submit Your First Request
+                                    </button>
+                                </div>
+                `;
+            } else {
+                // Build the maintenance table with requests
+                pageHTML += `
+                                <div class="table-container">
+                                    <table class="data-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Type</th>
+                                                <th>Title</th>
+                                                <th>Priority</th>
+                                                <th>Status</th>
+                                                <th>Created</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                `;
+
+                maintenanceRequests.forEach(request => {
+                    const priorityBadge = this.getPriorityBadge(request.priority);
+                    const statusBadge = this.getStatusBadge(request.status);
+                    const createdDate = request.createdAt 
+                        ? new Date(request.createdAt).toLocaleDateString() 
+                        : 'N/A';
+
+                    pageHTML += `
+                                            <tr class="maintenance-row" data-request-id="${request.id}">
+                                                <td>
+                                                    <strong>${request.type || 'N/A'}</strong>
+                                                </td>
+                                                <td>${request.title || request.description || 'No title'}</td>
+                                                <td>${priorityBadge}</td>
+                                                <td>${statusBadge}</td>
+                                                <td>${createdDate}</td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-secondary" 
+                                                        onclick="casaLink.viewTenantMaintenanceRequest('${request.id}')">
+                                                        <i class="fas fa-eye"></i> View
+                                                    </button>
+                                                </td>
+                                            </tr>
+                    `;
+                });
+
+                pageHTML += `
+                                        </tbody>
+                                    </table>
+                                </div>
+                `;
+            }
+
+            pageHTML += `
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </div>
-        `;
+            `;
+
+            return pageHTML;
+
+        } catch (error) {
+            console.error('❌ Error loading tenant maintenance page:', error);
+            return this.getErrorDashboard('tenantMaintenance', 'Failed to load maintenance requests: ' + error.message);
+        }
     }
 
     // Password Change for Tenants
