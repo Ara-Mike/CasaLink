@@ -10,6 +10,17 @@
     <link rel="stylesheet" href="../css/admin.css"> <!-- Changed from "css/admin.css" -->
     <link rel="manifest" href="../manifest.json">
 
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
     <script>
         // Session check to prevent infinite redirect
         (function() {
@@ -24,7 +35,7 @@
                 console.log('No admin session found, redirecting to login...');
                 // Small delay to prevent race condition
                 setTimeout(() => {
-                    window.location.href = 'index.html';
+                    window.location.href = 'index.html?session_required=true';
                 }, 100);
             } else if (isLoginPage && adminSession) {
                 console.log('Already have admin session, redirecting to dashboard...');
@@ -33,18 +44,51 @@
                 }, 100);
             }
         })();
+
+        // Dashboard page initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Admin page loaded, checking authentication...');
+            
+            // Check for admin session
+            const session = localStorage.getItem('admin_session');
+            if (!session) {
+                console.log('No session found, redirecting to login...');
+                setTimeout(() => {
+                    window.location.href = 'index.html?session_required=true';
+                }, 500);
+                return;
+            }
+            
+            // Verify session is recent
+            try {
+                const sessionData = JSON.parse(session);
+                const isRecent = Date.now() - sessionData.timestamp < (24 * 60 * 60 * 1000);
+                
+                if (!isRecent) {
+                    console.log('Session expired, redirecting...');
+                    localStorage.removeItem('admin_session');
+                    window.location.href = 'index.html?session_expired=true';
+                    return;
+                }
+            } catch (error) {
+                console.error('Invalid session data:', error);
+                localStorage.removeItem('admin_session');
+                window.location.href = 'index.html?invalid_session=true';
+                return;
+            }
+            
+            // Update admin name in navigation
+            const adminNameElement = document.getElementById('adminName');
+            if (adminNameElement) {
+                try {
+                    const sessionData = JSON.parse(session);
+                    adminNameElement.textContent = sessionData.email.split('@')[0];
+                } catch (error) {
+                    adminNameElement.textContent = 'Admin';
+                }
+            }
+        });
     </script>
-    
-    <!-- Chart.js for analytics -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
 <body class="admin-dashboard">
     <!-- Admin Navigation -->
@@ -238,14 +282,21 @@
                 }
             }
             
-            // Logout button
-            document.getElementById('adminLogout').addEventListener('click', function() {
-                if (window.adminAuthInstance) {
-                    adminAuthInstance.logout();
-                } else {
-                    window.location.href = 'index.html';
-                }
-            });
+            // Setup logout button
+            const logoutBtn = document.getElementById('adminLogout');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    if (window.adminAuthInstance && adminAuthInstance.logout) {
+                        adminAuthInstance.logout();
+                    } else {
+                        // Fallback logout
+                        localStorage.removeItem('admin_session');
+                        window.location.href = 'index.html?logout=true';
+                    }
+                });
+            }
             
             // Refresh button
             document.getElementById('refreshData').addEventListener('click', function() {

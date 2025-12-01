@@ -11,31 +11,58 @@ class AdminUsers {
             status: 'all',
             sortBy: 'newest'
         };
+        
+        // Track initialization state
+        this.isInitialized = false;
+        this.initAttempts = 0;
+        this.maxInitAttempts = 10;
+        
         this.init();
     }
 
     async init() {
         console.log('👥 AdminUsers initializing...');
         
-        // Wait for adminAuth
-        if (!window.adminAuthInstance) {
-            setTimeout(() => this.init(), 1000);
-            return;
-        }
+        // Increment attempt counter
+        this.initAttempts++;
         
         // Check session
         if (!this.checkSession()) {
+            console.log('No valid session found');
+            return;
+        }
+        
+        // Wait for adminAuth to be fully initialized
+        if (!window.adminAuthInstance || !adminAuthInstance.isInitialized) {
+            console.log('Waiting for adminAuth initialization...');
+            
+            if (this.initAttempts < this.maxInitAttempts) {
+                setTimeout(() => this.init(), 500);
+            } else {
+                console.error('Failed to initialize AdminUsers after multiple attempts');
+                this.showError('Failed to initialize user management system');
+                this.showDemoUsers();
+            }
             return;
         }
         
         // Setup event listeners
         this.setupEventListeners();
         
-        // Load initial data
-        await this.loadUsers();
-        
-        // Load stats
-        await this.loadUserStats();
+        try {
+            // Load initial data
+            await this.loadUsers();
+            
+            // Load stats
+            await this.loadUserStats();
+            
+            this.isInitialized = true;
+            console.log('✅ AdminUsers initialized successfully');
+            
+        } catch (error) {
+            console.error('Error during initialization:', error);
+            this.showDemoUsers();
+        }
     }
     
     checkSession() {
@@ -44,7 +71,26 @@ class AdminUsers {
             window.location.href = 'index.html';
             return false;
         }
-        return true;
+        
+        // Check if session is expired
+        try {
+            const sessionData = JSON.parse(session);
+            const isRecent = Date.now() - sessionData.timestamp < (24 * 60 * 60 * 1000);
+            
+            if (!isRecent) {
+                console.log('Session expired');
+                localStorage.removeItem('admin_session');
+                window.location.href = 'index.html';
+                return false;
+            }
+            
+            return true;
+        } catch (e) {
+            console.log('Invalid session data');
+            localStorage.removeItem('admin_session');
+            window.location.href = 'index.html';
+            return false;
+        }
     }
 
     setupEventListeners() {
@@ -105,14 +151,55 @@ class AdminUsers {
             // Show loading
             this.showLoading(true);
             
-            // Get database connection
-            const adminDb = adminAuthInstance.adminDb;
-            if (!adminDb) {
-                throw new Error('Database not connected');
+            // Try multiple ways to get database connection
+            let db = null;
+            
+            // First try: Use adminAuthInstance
+            if (window.adminAuthInstance && adminAuthInstance.adminDb) {
+                db = adminAuthInstance.adminDb;
+                console.log('✅ Using adminAuthInstance database connection');
+            } 
+            // Second try: Try to get default Firebase app
+            else if (window.firebase && firebase.firestore) {
+                try {
+                    const defaultApp = firebase.app();
+                    db = firebase.firestore(defaultApp);
+                    console.log('✅ Using default Firebase app database connection');
+                } catch (e) {
+                    console.log('No default Firebase app:', e.message);
+                }
+            }
+            // Third try: Try to initialize new Firebase app
+            else if (window.firebase && firebase.initializeApp) {
+                try {
+                    // Use the global config if available
+                    const config = window.firebaseConfig || {
+                        apiKey: "AIzaSyC-FvYHTes2lAU3AkMJ6kGIEk4HjioP_HQ",
+                        authDomain: "casalink-246fd.firebaseapp.com",
+                        projectId: "casalink-246fd",
+                        storageBucket: "casalink-246fd.firebasestorage.app",
+                        messagingSenderId: "1089375490593",
+                        appId: "1:1089375490593:web:a26cc91e15877b04bb0960"
+                    };
+                    
+                    const firebaseApp = firebase.initializeApp(config, 'AdminUsersApp');
+                    db = firebase.firestore(firebaseApp);
+                    console.log('✅ Created new Firebase app for database connection');
+                } catch (e) {
+                    console.log('Failed to create Firebase app:', e.message);
+                }
             }
             
-            // Get all users from Firestore
-            const usersSnapshot = await adminDb.collection('users').get();
+            // If no database connection found, use demo data
+            if (!db) {
+                console.warn('No database connection available, using demo data');
+                this.showDemoUsers();
+                this.showLoading(false);
+                return;
+            }
+            
+            // Fetch users from Firestore
+            const usersSnapshot = await db.collection('users').get();
             this.users = [];
             
             usersSnapshot.forEach(doc => {
@@ -131,19 +218,56 @@ class AdminUsers {
                 });
             });
             
-            console.log(`Loaded ${this.users.length} users`);
+            console.log(`Loaded ${this.users.length} users from Firestore`);
             
             // Apply filters and render
             this.applyFilters();
             
         } catch (error) {
             console.error('Error loading users:', error);
-            this.showError('Failed to load users');
-            // Show demo data
+            this.showError('Failed to load users. Using demo data.');
+            // Show demo data as fallback
             this.showDemoUsers();
         } finally {
             this.showLoading(false);
         }
+    }
+
+    async fetchUsersFromFirestore(db) {
+        try {
+            // Get all users from Firestore
+            const usersSnapshot = await db.collection('users').get();
+            this.users = [];
+            
+            usersSnapshot.forEach(doc => {
+                const userData = doc.data();
+                this.users.push({
+                    id: doc.id,
+                    name: userData.name || 'Unknown',
+                    email: userData.email || 'No email',
+                    role: userData.role || 'unknown',
+                    status: this.getUserStatus(userData),
+                    createdAt: userData.createdAt || new Date().toISOString(),
+                    lastLogin: userData.lastLogin || 'Never',
+                    properties: userData.properties || userData.property_count || 0,
+                    // Additional fields
+                    landlordId: userData.landlordId,
+                    roomNumber: userData.roomNumber,
+                    loginCount: userData.loginCount || 0
+                });
+            });
+            
+        } catch (error) {
+            console.error('Error fetching from Firestore:', error);
+            throw error;
+        }
+    }
+
+    getUserStatus(userData) {
+        if (userData.status) return userData.status;
+        if (userData.isActive !== undefined) return userData.isActive ? 'active' : 'inactive';
+        if (userData.is_active !== undefined) return userData.is_active ? 'active' : 'inactive';
+        return 'active'; // Default
     }
 
     async loadUserStats() {

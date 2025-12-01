@@ -4,11 +4,117 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CasaLink - Admin Login</title>
+    <!-- Add cache control headers to prevent redirect loops -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    
+    
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/admin.css">
     <link rel="manifest" href="../manifest.json">
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* Add a loading indicator */
+        .login-loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            backdrop-filter: blur(5px);
+        }
+        
+        .login-loading.active {
+            display: flex;
+        }
+        
+        .login-loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1A73E8;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Logout protection overlay */
+        .logout-protection {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .logout-protection.active {
+            display: flex;
+        }
+        
+        .protection-message {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        .protection-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+    </style>
 </head>
 <body class="admin-login-page">
+    <!-- Logout protection overlay -->
+    <div class="logout-protection" id="logoutProtection">
+        <div class="protection-message">
+            <h3 style="margin-top: 0; color: #dc2626;">
+                <i class="fas fa-exclamation-triangle"></i> Logout in Progress
+            </h3>
+            <p>Please wait while we securely log you out...</p>
+            <div class="login-loading-spinner" style="margin: 20px auto;"></div>
+            <p><small>If this takes more than 10 seconds, please refresh the page.</small></p>
+            <div class="protection-buttons">
+                <button class="btn btn-outline" onclick="forceCleanup()">
+                    <i class="fas fa-broom"></i> Force Cleanup
+                </button>
+                <button class="btn btn-primary" onclick="refreshPage()">
+                    <i class="fas fa-sync-alt"></i> Refresh Page
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading overlay -->
+    <div class="login-loading" id="loginLoading">
+        <div class="login-loading-spinner"></div>
+        <p>Processing login...</p>
+    </div>
+    
     <div class="login-container">
         <div class="login-card">
             <div class="login-header">
@@ -20,13 +126,13 @@
                 <div class="form-group">
                     <label for="adminEmail">Admin Email</label>
                     <input type="email" id="adminEmail" required 
-                           placeholder="admin@casalink.com">
+                           placeholder="admin@casalink.com" autocomplete="username">
                 </div>
                 
                 <div class="form-group">
                     <label for="adminPassword">Password</label>
                     <input type="password" id="adminPassword" required 
-                           placeholder="Enter your password">
+                           placeholder="Enter your password" autocomplete="current-password">
                 </div>
                 
                 <div class="form-group">
@@ -35,7 +141,7 @@
                            placeholder="Additional security key">
                 </div>
                 
-                <button type="submit" class="btn btn-primary btn-block">
+                <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn">
                     Sign In as Admin
                 </button>
                 
@@ -51,6 +157,11 @@
             <h3>Admin Access Only</h3>
             <p>This portal is restricted to authorized administrators only.</p>
             <p>Unauthorized access is prohibited.</p>
+            
+            <!-- Status indicator -->
+            <div id="loginStatus" style="margin-top: 20px; padding: 10px; border-radius: 6px; background: #f8f9fa; display: none;">
+                <small id="statusText"></small>
+            </div>
         </div>
     </div>
     
@@ -59,41 +170,583 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
     
-    <!-- Admin Auth Script - FIXED PATH -->
+    <!-- Admin Auth Script -->
     <script src="../js/admin/adminAuth.js"></script>
     
-    <!-- Add debug script to check if file loads -->
     <script>
-        // Debug script to check if adminAuth.js loads
+        // Add the force logout function
+        function forceLogout() {
+            console.log('🔴 Force logout initiated');
+            
+            // Show protection overlay
+            showLogoutProtection();
+            
+            // Set a flag to prevent auto-login
+            sessionStorage.setItem('force_logout', 'true');
+            localStorage.setItem('logout_timestamp', Date.now().toString());
+            
+            // Clear all storage
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear all Firebase instances
+            if (typeof firebase !== 'undefined' && firebase.apps) {
+                try {
+                    const apps = firebase.apps;
+                    apps.forEach(app => {
+                        try {
+                            app.delete();
+                            console.log('Deleted Firebase app');
+                        } catch (e) {
+                            console.log('Could not delete app:', e.message);
+                        }
+                    });
+                } catch (e) {
+                    console.log('Firebase cleanup error:', e.message);
+                }
+            }
+            
+            // Delete any adminAuth instance
+            if (window.adminAuthInstance) {
+                try {
+                    if (window.adminAuthInstance.authStateUnsubscribe) {
+                        window.adminAuthInstance.authStateUnsubscribe();
+                    }
+                    delete window.adminAuthInstance;
+                    console.log('Admin auth instance removed');
+                } catch (e) {
+                    console.log('Error removing auth instance:', e.message);
+                }
+            }
+            
+            // Clear all timeouts and intervals
+            const maxId = setTimeout(() => {}, 0);
+            for (let i = 0; i < maxId; i++) {
+                clearTimeout(i);
+                clearInterval(i);
+            }
+            
+            // Force redirect with cache busting
+            setTimeout(() => {
+                window.location.replace('index.html?force_logout=true&t=' + Date.now());
+            }, 500);
+        }
+        
+        function showLogoutProtection() {
+            document.getElementById('logoutProtection').classList.add('active');
+        }
+        
+        function hideLogoutProtection() {
+            document.getElementById('logoutProtection').classList.remove('active');
+        }
+        
+        function forceCleanup() {
+            console.log('Force cleanup initiated');
+            
+            // Clear everything
+            localStorage.clear();
+            sessionStorage.clear();
+            
+            // Clear cookies
+            document.cookie.split(";").forEach(function(c) {
+                document.cookie = c.replace(/^ +/, "")
+                    .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+            });
+            
+            // Redirect
+            window.location.replace('index.html?cleanup=true&t=' + Date.now());
+        }
+        
+        function refreshPage() {
+            window.location.reload();
+        }
+        
+        function clearAllStorage() {
+            if (confirm('Clear all browser storage? This will log you out from all sessions.')) {
+                localStorage.clear();
+                sessionStorage.clear();
+                alert('Storage cleared. Refreshing page...');
+                window.location.reload();
+            }
+        }
+        
+        // Main initialization
+        (function() {
+            console.log('🔐 Admin login page loading...');
+            
+            // Check for force logout parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('force_logout') || urlParams.has('cleanup')) {
+                console.log('Force logout/cleanup detected');
+                
+                // Clear everything
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                // Clean URL
+                urlParams.delete('force_logout');
+                urlParams.delete('cleanup');
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+                
+                // Show success message
+                const statusDiv = document.getElementById('loginStatus');
+                const statusText = document.getElementById('statusText');
+                if (statusDiv && statusText) {
+                    statusDiv.style.display = 'block';
+                    statusText.innerHTML = '<i class="fas fa-check-circle"></i> Successfully logged out. All sessions cleared.';
+                    statusDiv.style.background = '#d1fae5';
+                    statusDiv.style.borderLeft = '3px solid #10b981';
+                }
+                
+                // Prevent Firebase initialization
+                window.preventFirebaseInit = true;
+            }
+            
+            // Check for logout parameter
+            if (urlParams.has('logout')) {
+                console.log('Normal logout detected');
+                
+                // Clear session
+                localStorage.removeItem('admin_session');
+                sessionStorage.setItem('logout_flag', Date.now().toString());
+                
+                // Show logout message
+                const statusDiv = document.getElementById('loginStatus');
+                const statusText = document.getElementById('statusText');
+                if (statusDiv && statusText) {
+                    statusDiv.style.display = 'block';
+                    statusText.innerHTML = '<i class="fas fa-check-circle"></i> Successfully logged out.';
+                    statusDiv.style.background = '#d1fae5';
+                    statusDiv.style.borderLeft = '3px solid #10b981';
+                    
+                    // Remove after 5 seconds
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 5000);
+                }
+                
+                // Clean URL
+                urlParams.delete('logout');
+                const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+            
+            // Clear any pending redirect timeouts
+            if (window.redirectTimeout) {
+                clearTimeout(window.redirectTimeout);
+                delete window.redirectTimeout;
+            }
+            
+            // Check for recent logout to prevent auto-redirect
+            const logoutFlag = sessionStorage.getItem('logout_flag');
+            if (logoutFlag) {
+                const logoutTime = parseInt(logoutFlag);
+                const timeSinceLogout = Date.now() - logoutTime;
+                
+                // If logout was less than 10 seconds ago, prevent auto-redirect
+                if (timeSinceLogout < 10000) {
+                    console.log('Recent logout detected, preventing auto-redirect');
+                    sessionStorage.setItem('prevent_redirect', 'true');
+                    
+                    // Clear flag after 10 seconds
+                    setTimeout(() => {
+                        sessionStorage.removeItem('logout_flag');
+                        sessionStorage.removeItem('prevent_redirect');
+                    }, 10000);
+                } else {
+                    sessionStorage.removeItem('logout_flag');
+                    sessionStorage.removeItem('prevent_redirect');
+                }
+            }
+            
+            // Check for existing session (for display only)
+            const session = localStorage.getItem('admin_session');
+            if (session) {
+                try {
+                    const sessionData = JSON.parse(session);
+                    const statusDiv = document.getElementById('loginStatus');
+                    const statusText = document.getElementById('statusText');
+                    
+                    if (statusDiv && statusText) {
+                        statusDiv.style.display = 'block';
+                        statusText.innerHTML = `<i class="fas fa-info-circle"></i> Detected previous session for ${sessionData.email}. Click login to continue.`;
+                        statusDiv.style.background = '#e3f2fd';
+                        statusDiv.style.borderLeft = '3px solid #1A73E8';
+                    }
+                } catch (e) {
+                    // Invalid session data
+                    localStorage.removeItem('admin_session');
+                }
+            }
+        })();
+        
+        // Form submission handler
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Checking adminAuth.js load status...');
+            const loginForm = document.getElementById('adminLoginForm');
+            const loginLoading = document.getElementById('loginLoading');
+            const loginSubmitBtn = document.getElementById('loginSubmitBtn');
             
-            // Create a script element to check if file exists
-            const testScript = document.createElement('script');
-            testScript.src = '../js/admin/adminAuth.js';
-            testScript.onload = function() {
-                console.log('✅ adminAuth.js loaded successfully');
-            };
-            testScript.onerror = function() {
-                console.error('❌ Failed to load adminAuth.js');
-                console.log('Trying to load from:', testScript.src);
-                
-                // Try alternative paths
-                const paths = [
-                    'js/admin/adminAuth.js',
-                    '/js/admin/adminAuth.js',
-                    './../js/admin/adminAuth.js',
-                    'adminAuth.js'
-                ];
-                
-                paths.forEach(path => {
-                    console.log('Checking:', path);
+            if (loginForm) {
+                loginForm.addEventListener('submit', async function(e) {
+                    e.preventDefault();
+                    
+                    // Show loading
+                    if (loginLoading) {
+                        loginLoading.classList.add('active');
+                    }
+                    if (loginSubmitBtn) {
+                        loginSubmitBtn.disabled = true;
+                        loginSubmitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+                    }
+                    
+                    // Clear any previous errors
+                    const errorElement = document.getElementById('adminLoginError');
+                    if (errorElement) {
+                        errorElement.textContent = '';
+                        errorElement.classList.add('hidden');
+                    }
+                    
+                    // Wait a moment to ensure adminAuth is loaded
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                    // Check if adminAuthInstance exists
+                    if (!window.adminAuthInstance) {
+                        // Try to initialize it
+                        try {
+                            window.adminAuthInstance = new window.AdminAuthClass();
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        } catch (error) {
+                            showError('Authentication system not loaded. Please refresh the page.');
+                            hideLoading();
+                            return;
+                        }
+                    }
+                    
+                    // Submit the form through adminAuth
+                    if (window.adminAuthInstance && typeof window.adminAuthInstance.handleLogin === 'function') {
+                        try {
+                            await window.adminAuthInstance.handleLogin(e);
+                        } catch (error) {
+                            console.error('Login error:', error);
+                            showError(error.message || 'Login failed');
+                            hideLoading();
+                        }
+                    } else {
+                        showError('Login system not available');
+                        hideLoading();
+                    }
                 });
-            };
+            }
             
-            // Add to document briefly to test
-            document.head.appendChild(testScript);
-            setTimeout(() => document.head.removeChild(testScript), 100);
+            function showError(message) {
+                const errorElement = document.getElementById('adminLoginError');
+                if (errorElement) {
+                    errorElement.textContent = message;
+                    errorElement.classList.remove('hidden');
+                    
+                    // Scroll to error
+                    errorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    alert('Login Error: ' + message);
+                }
+            }
+            
+            function hideLoading() {
+                if (loginLoading) {
+                    loginLoading.classList.remove('active');
+                }
+                if (loginSubmitBtn) {
+                    loginSubmitBtn.disabled = false;
+                    loginSubmitBtn.innerHTML = 'Sign In as Admin';
+                }
+            }
+            
+            // Auto-hide loading after timeout (safety)
+            setTimeout(() => {
+                hideLoading();
+            }, 10000);
+            
+            // Debug: Log adminAuth status
+            console.log('adminAuthInstance status:', window.adminAuthInstance ? 'Loaded' : 'Not loaded');
+        });
+        
+        // Prevent form autofill issues
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                console.log('Page loaded from cache, refreshing form state');
+                document.getElementById('adminLoginForm')?.reset();
+                
+                // Clear any potential stale auth state
+                if (sessionStorage.getItem('logout_flag')) {
+                    console.log('Cache reload after logout, preventing auto-redirect');
+                }
+            }
+        });
+        
+        // Add global keyboard shortcut for force logout (Ctrl+Alt+L)
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.altKey && e.key === 'l') {
+                e.preventDefault();
+                if (confirm('Force logout and clear all sessions?')) {
+                    forceLogout();
+                }
+            }
+        });
+    </script>
+
+    <script>
+        // Enhanced login page initialization
+        (function() {
+            console.log('Login page initialization...');
+            
+            // Clear any logout flags from sessionStorage
+            sessionStorage.removeItem('admin_logout');
+            
+            // Check for logout parameter in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('logout')) {
+                console.log('Logout detected, performing cleanup...');
+                
+                // Clear any remaining data
+                localStorage.removeItem('admin_session');
+                
+                // Remove logout parameter from URL for cleaner appearance
+                urlParams.delete('logout');
+                urlParams.delete('t');
+                const cleanUrl = window.location.pathname + 
+                    (urlParams.toString() ? '?' + urlParams.toString() : '');
+                window.history.replaceState({}, document.title, cleanUrl);
+                
+                // Show logout message
+                const statusDiv = document.getElementById('loginStatus');
+                const statusText = document.getElementById('statusText');
+                if (statusDiv && statusText) {
+                    statusDiv.style.display = 'block';
+                    statusText.innerHTML = '<i class="fas fa-check-circle"></i> Successfully logged out.';
+                    statusDiv.style.background = '#d1fae5';
+                    statusDiv.style.borderLeft = '3px solid #10b981';
+                    
+                    setTimeout(() => {
+                        statusDiv.style.display = 'none';
+                    }, 5000);
+                }
+            }
+            
+            // Force reinitialize adminAuth if needed
+            setTimeout(() => {
+                if (window.adminAuthInstance) {
+                    console.log('Checking adminAuth status...');
+                    // Check if getStatus method exists
+                    if (typeof adminAuthInstance.getDatabaseStatus === 'function') {
+                        const status = adminAuthInstance.getDatabaseStatus();
+                        console.log('AdminAuth status:', status);
+                        
+                        // If not initialized, try to reinitialize Firebase
+                        if (!status || !status.initialized) {
+                            console.log('AdminAuth not initialized, trying to fix...');
+                            if (typeof adminAuthInstance.init === 'function') {
+                                adminAuthInstance.init().catch(err => {
+                                    console.error('Reinit failed:', err);
+                                });
+                            }
+                        }
+                    }
+                }
+            }, 1500);
+            
+            // Add form validation
+            const loginForm = document.getElementById('adminLoginForm');
+            if (loginForm) {
+                // Already has event listener, but add client-side validation
+                const originalSubmit = loginForm.onsubmit;
+                loginForm.addEventListener('submit', function(e) {
+                    const email = document.getElementById('adminEmail').value.trim();
+                    const password = document.getElementById('adminPassword').value;
+                    
+                    if (!email) {
+                        e.preventDefault();
+                        showValidationError('Please enter your email address');
+                        document.getElementById('adminEmail').focus();
+                        return false;
+                    }
+                    
+                    if (!password) {
+                        e.preventDefault();
+                        showValidationError('Please enter your password');
+                        document.getElementById('adminPassword').focus();
+                        return false;
+                    }
+                    
+                    if (!isValidEmail(email)) {
+                        e.preventDefault();
+                        showValidationError('Please enter a valid email address');
+                        document.getElementById('adminEmail').focus();
+                        return false;
+                    }
+                    
+                    return true;
+                }, false);
+                
+                function showValidationError(message) {
+                    const errorElement = document.getElementById('adminLoginError');
+                    if (errorElement) {
+                        errorElement.textContent = message;
+                        errorElement.classList.remove('hidden');
+                        
+                        // Scroll to error
+                        errorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        
+                        // Auto-hide after 5 seconds
+                        setTimeout(() => {
+                            errorElement.classList.add('hidden');
+                        }, 5000);
+                    } else {
+                        alert(message);
+                    }
+                }
+                
+                function isValidEmail(email) {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    return emailRegex.test(email);
+                }
+            }
+            
+            // Auto-focus email field
+            setTimeout(() => {
+                const emailField = document.getElementById('adminEmail');
+                if (emailField) {
+                    emailField.focus();
+                }
+            }, 300);
+            
+            // Monitor adminAuth initialization
+            let authCheckCount = 0;
+            const maxAuthChecks = 10;
+            
+            function checkAuthInitialization() {
+                if (authCheckCount >= maxAuthChecks) {
+                    console.log('Max auth checks reached');
+                    return;
+                }
+                
+                authCheckCount++;
+                
+                if (!window.adminAuthInstance) {
+                    console.log(`Auth check ${authCheckCount}: adminAuthInstance not found`);
+                    setTimeout(checkAuthInitialization, 500);
+                } else if (!adminAuthInstance.isInitialized) {
+                    console.log(`Auth check ${authCheckCount}: adminAuthInstance not initialized`);
+                    setTimeout(checkAuthInitialization, 500);
+                } else {
+                    console.log('✅ adminAuth fully initialized');
+                    updateLoginStatus('Authentication system ready', 'success');
+                }
+            }
+            
+            // Start checking
+            setTimeout(checkAuthInitialization, 1000);
+            
+            function updateLoginStatus(message, type) {
+                const statusDiv = document.getElementById('loginStatus');
+                const statusText = document.getElementById('statusText');
+                
+                if (statusDiv && statusText) {
+                    statusDiv.style.display = 'block';
+                    
+                    const icon = type === 'success' ? 
+                        '<i class="fas fa-check-circle"></i>' : 
+                        '<i class="fas fa-info-circle"></i>';
+                    
+                    statusText.innerHTML = `${icon} ${message}`;
+                    
+                    if (type === 'success') {
+                        statusDiv.style.background = '#d1fae5';
+                        statusDiv.style.borderLeft = '3px solid #10b981';
+                    } else {
+                        statusDiv.style.background = '#e3f2fd';
+                        statusDiv.style.borderLeft = '3px solid #1A73E8';
+                    }
+                    
+                    // Auto-hide success messages after 3 seconds
+                    if (type === 'success') {
+                        setTimeout(() => {
+                            statusDiv.style.display = 'none';
+                        }, 3000);
+                    }
+                }
+            }
+            
+            // Add logout cleanup on page unload
+            window.addEventListener('beforeunload', function() {
+                // If we're navigating away from login page (likely to dashboard),
+                // clear any logout flags
+                sessionStorage.removeItem('logout_flag');
+                sessionStorage.removeItem('prevent_redirect');
+            });
+            
+            // Add real-time form validation
+            const emailField = document.getElementById('adminEmail');
+            const passwordField = document.getElementById('adminPassword');
+            
+            if (emailField) {
+                emailField.addEventListener('input', function() {
+                    const errorElement = document.getElementById('adminLoginError');
+                    if (errorElement && !errorElement.classList.contains('hidden')) {
+                        errorElement.classList.add('hidden');
+                    }
+                });
+            }
+            
+            if (passwordField) {
+                passwordField.addEventListener('input', function() {
+                    const errorElement = document.getElementById('adminLoginError');
+                    if (errorElement && !errorElement.classList.contains('hidden')) {
+                        errorElement.classList.add('hidden');
+                    }
+                });
+            }
+            
+            // Add enter key support (submit form when pressing enter in password field)
+            const adminKeyField = document.getElementById('adminKey');
+            if (passwordField) {
+                passwordField.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loginForm.dispatchEvent(new Event('submit'));
+                    }
+                });
+            }
+            
+            if (adminKeyField) {
+                adminKeyField.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loginForm.dispatchEvent(new Event('submit'));
+                    }
+                });
+            }
+        })();
+        
+        // Force reinitialization on login page if needed
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if we're on the login page
+            if (window.location.pathname.includes('index.html')) {
+                // Clear any logout flags
+                sessionStorage.removeItem('logout_in_progress');
+                
+                // Force reinitialize adminAuth if it exists
+                if (window.adminAuthInstance) {
+                    console.log('Force reinitializing adminAuth for login page...');
+                    setTimeout(() => {
+                        if (adminAuthInstance && typeof adminAuthInstance.init === 'function') {
+                            adminAuthInstance.init().catch(err => {
+                                console.error('Reinitialization failed:', err);
+                            });
+                        }
+                    }, 500);
+                }
+            }
         });
     </script>
 </body>

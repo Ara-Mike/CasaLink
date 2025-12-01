@@ -430,6 +430,70 @@
     </script>
     
     <script src="../js/admin/adminAuth.js"></script>
+    
+    <!-- Authentication Script -->
+    <script>
+        // Dashboard page initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Admin page loaded, checking authentication...');
+            
+            // Check for admin session
+            const session = localStorage.getItem('admin_session');
+            if (!session) {
+                console.log('No session found, redirecting to login...');
+                setTimeout(() => {
+                    window.location.href = 'index.html?session_required=true';
+                }, 500);
+                return;
+            }
+            
+            // Verify session is recent
+            try {
+                const sessionData = JSON.parse(session);
+                const isRecent = Date.now() - sessionData.timestamp < (24 * 60 * 60 * 1000);
+                
+                if (!isRecent) {
+                    console.log('Session expired, redirecting...');
+                    localStorage.removeItem('admin_session');
+                    window.location.href = 'index.html?session_expired=true';
+                    return;
+                }
+            } catch (error) {
+                console.error('Invalid session data:', error);
+                localStorage.removeItem('admin_session');
+                window.location.href = 'index.html?invalid_session=true';
+                return;
+            }
+            
+            // Setup logout button
+            const logoutBtn = document.getElementById('adminLogout');
+            if (logoutBtn) {
+                logoutBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    if (window.adminAuthInstance && adminAuthInstance.logout) {
+                        adminAuthInstance.logout();
+                    } else {
+                        // Fallback logout
+                        localStorage.removeItem('admin_session');
+                        window.location.href = 'index.html?logout=true';
+                    }
+                });
+            }
+            
+            // Update admin name in navigation
+            const adminNameElement = document.getElementById('adminName');
+            if (adminNameElement) {
+                try {
+                    const sessionData = JSON.parse(session);
+                    adminNameElement.textContent = sessionData.email.split('@')[0];
+                } catch (error) {
+                    adminNameElement.textContent = 'Admin';
+                }
+            }
+        });
+    </script>
+    
     <script src="../js/admin/adminSupport.js"></script>
     
     <script>
