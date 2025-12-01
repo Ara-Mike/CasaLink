@@ -1,8 +1,9 @@
-// js/admin/adminDashboard.js - FIXED VERSION
+// js/admin/adminDashboard.js - UPDATED VERSION
 console.log('AdminDashboard loading...');
 
 class AdminDashboard {
     constructor() {
+        this.charts = {}; // Store chart instances
         this.init();
     }
 
@@ -84,7 +85,15 @@ class AdminDashboard {
         // Logout button
         const logoutBtn = document.getElementById('adminLogout');
         if (logoutBtn) {
-            logoutBtn.addEventListener('click', () => {
+            // Remove existing event listeners
+            const newLogoutBtn = logoutBtn.cloneNode(true);
+            logoutBtn.parentNode.replaceChild(newLogoutBtn, logoutBtn);
+            
+            newLogoutBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                // Clean up charts before logout
+                this.destroyAllCharts();
+                
                 if (window.adminAuthInstance) {
                     adminAuthInstance.logout();
                 } else {
@@ -100,6 +109,9 @@ class AdminDashboard {
         
         // Show loading state
         this.showLoading(true);
+        
+        // Destroy any existing charts first
+        this.destroyAllCharts();
         
         // Load demo data for now
         setTimeout(() => {
@@ -218,10 +230,14 @@ class AdminDashboard {
     }
 
     initCharts() {
+        // Destroy existing charts first
+        this.destroyChart('userGrowthChart');
+        this.destroyChart('activityChart');
+        
         // User Growth Chart
         const userGrowthCtx = document.getElementById('userGrowthChart')?.getContext('2d');
         if (userGrowthCtx) {
-            new Chart(userGrowthCtx, {
+            this.charts.userGrowthChart = new Chart(userGrowthCtx, {
                 type: 'line',
                 data: {
                     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
@@ -253,7 +269,7 @@ class AdminDashboard {
         // Activity Chart
         const activityCtx = document.getElementById('activityChart')?.getContext('2d');
         if (activityCtx) {
-            new Chart(activityCtx, {
+            this.charts.activityChart = new Chart(activityCtx, {
                 type: 'bar',
                 data: {
                     labels: ['Logins', 'Payments', 'Requests', 'Messages'],
@@ -277,12 +293,60 @@ class AdminDashboard {
             });
         }
     }
+    
+    destroyChart(chartId) {
+        if (this.charts[chartId]) {
+            try {
+                this.charts[chartId].destroy();
+                console.log(`Destroyed chart: ${chartId}`);
+            } catch (error) {
+                console.warn(`Error destroying chart ${chartId}:`, error);
+            }
+            delete this.charts[chartId];
+        }
+        
+        // Also check Chart.js registry
+        if (Chart && Chart.registry && Chart.registry.items) {
+            const chart = Chart.registry.getItem(chartId);
+            if (chart) {
+                try {
+                    chart.destroy();
+                } catch (error) {
+                    console.warn(`Error destroying chart from registry:`, error);
+                }
+            }
+        }
+    }
+    
+    destroyAllCharts() {
+        console.log('Destroying all charts...');
+        
+        // Destroy stored charts
+        Object.keys(this.charts).forEach(chartId => {
+            this.destroyChart(chartId);
+        });
+        
+        // Also destroy any charts in Chart.js registry
+        if (Chart && Chart.registry && Chart.registry.items) {
+            Chart.registry.items.forEach(chart => {
+                try {
+                    chart.destroy();
+                } catch (error) {
+                    console.warn('Error destroying chart from registry:', error);
+                }
+            });
+        }
+    }
 
     setupEventListeners() {
         // Refresh button
         const refreshBtn = document.getElementById('refreshData');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', () => {
+            // Remove existing listeners
+            const newRefreshBtn = refreshBtn.cloneNode(true);
+            refreshBtn.parentNode.replaceChild(newRefreshBtn, refreshBtn);
+            
+            newRefreshBtn.addEventListener('click', () => {
                 this.loadDashboardData();
             });
         }
@@ -301,10 +365,39 @@ class AdminDashboard {
             dateElement.textContent = now.toLocaleDateString('en-US', options);
         }
     }
+    
+    // Clean up when navigating away
+    cleanup() {
+        this.destroyAllCharts();
+    }
 }
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded, initializing AdminDashboard...');
     window.adminDashboard = new AdminDashboard();
+    
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        if (window.adminDashboard && window.adminDashboard.cleanup) {
+            window.adminDashboard.cleanup();
+        }
+    });
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            // Page is hidden, could be navigating away
+            if (window.adminDashboard && window.adminDashboard.cleanup) {
+                window.adminDashboard.cleanup();
+            }
+        }
+    });
 });
+
+// Add global chart cleanup function
+window.cleanupAllCharts = function() {
+    if (window.adminDashboard && window.adminDashboard.destroyAllCharts) {
+        window.adminDashboard.destroyAllCharts();
+    }
+};

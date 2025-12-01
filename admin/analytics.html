@@ -180,6 +180,10 @@
                 flex-direction: column;
                 align-items: flex-start;
             }
+            
+            .chart-card {
+                padding: 15px;
+            }
         }
     </style>
 </head>
@@ -434,75 +438,14 @@
     
     <script src="../js/admin/adminAuth.js"></script>
     
-    <!-- Authentication Script -->
-    <script>
-        // Dashboard page initialization
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('Admin page loaded, checking authentication...');
-            
-            // Check for admin session
-            const session = localStorage.getItem('admin_session');
-            if (!session) {
-                console.log('No session found, redirecting to login...');
-                setTimeout(() => {
-                    window.location.href = 'index.html?session_required=true';
-                }, 500);
-                return;
-            }
-            
-            // Verify session is recent
-            try {
-                const sessionData = JSON.parse(session);
-                const isRecent = Date.now() - sessionData.timestamp < (24 * 60 * 60 * 1000);
-                
-                if (!isRecent) {
-                    console.log('Session expired, redirecting...');
-                    localStorage.removeItem('admin_session');
-                    window.location.href = 'index.html?session_expired=true';
-                    return;
-                }
-            } catch (error) {
-                console.error('Invalid session data:', error);
-                localStorage.removeItem('admin_session');
-                window.location.href = 'index.html?invalid_session=true';
-                return;
-            }
-            
-            // Setup logout button
-            const logoutBtn = document.getElementById('adminLogout');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    
-                    if (window.adminAuthInstance && adminAuthInstance.logout) {
-                        adminAuthInstance.logout();
-                    } else {
-                        // Fallback logout
-                        localStorage.removeItem('admin_session');
-                        window.location.href = 'index.html?logout=true';
-                    }
-                });
-            }
-            
-            // Update admin name in navigation
-            const adminNameElement = document.getElementById('adminName');
-            if (adminNameElement) {
-                try {
-                    const sessionData = JSON.parse(session);
-                    adminNameElement.textContent = sessionData.email.split('@')[0];
-                } catch (error) {
-                    adminNameElement.textContent = 'Admin';
-                }
-            }
-        });
-    </script>
-    
-    <script src="../js/admin/adminAnalytics.js"></script>
-    
+    <!-- Analytics JavaScript -->
     <script>
         // Initialize page
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Analytics page loaded');
+            
+            // Store chart instances
+            window.analyticsCharts = {};
             
             // Update admin name
             if (window.adminAuthInstance) {
@@ -515,6 +458,16 @@
             
             // Logout button
             document.getElementById('adminLogout').addEventListener('click', function() {
+                // Clean up analytics charts
+                if (window.analyticsCharts) {
+                    Object.values(window.analyticsCharts).forEach(chart => {
+                        if (chart && chart.destroy) {
+                            chart.destroy();
+                        }
+                    });
+                    window.analyticsCharts = {};
+                }
+                
                 if (window.adminAuthInstance) {
                     adminAuthInstance.logout();
                 } else {
@@ -543,13 +496,26 @@
             
             // Initialize charts
             initializeCharts();
+            
+            // Setup action buttons
+            setupActionButtons();
         });
         
         function initializeCharts() {
+            // Clean up any existing charts first
+            if (window.analyticsCharts) {
+                Object.values(window.analyticsCharts).forEach(chart => {
+                    if (chart && chart.destroy) {
+                        chart.destroy();
+                    }
+                });
+                window.analyticsCharts = {};
+            }
+            
             // Revenue Chart
             const revenueCtx = document.getElementById('revenueChart')?.getContext('2d');
             if (revenueCtx) {
-                new Chart(revenueCtx, {
+                window.analyticsCharts.revenueChart = new Chart(revenueCtx, {
                     type: 'line',
                     data: {
                         labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
@@ -584,7 +550,7 @@
             // User Growth Chart
             const userGrowthCtx = document.getElementById('userGrowthChart')?.getContext('2d');
             if (userGrowthCtx) {
-                new Chart(userGrowthCtx, {
+                window.analyticsCharts.userGrowthChart = new Chart(userGrowthCtx, {
                     type: 'line',
                     data: {
                         labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
@@ -609,7 +575,7 @@
             // Usage Chart
             const usageCtx = document.getElementById('usageChart')?.getContext('2d');
             if (usageCtx) {
-                new Chart(usageCtx, {
+                window.analyticsCharts.usageChart = new Chart(usageCtx, {
                     type: 'bar',
                     data: {
                         labels: ['Dashboard', 'Payments', 'Maintenance', 'Messages', 'Reports'],
@@ -637,7 +603,7 @@
             // Geo Chart
             const geoCtx = document.getElementById('geoChart')?.getContext('2d');
             if (geoCtx) {
-                new Chart(geoCtx, {
+                window.analyticsCharts.geoChart = new Chart(geoCtx, {
                     type: 'pie',
                     data: {
                         labels: ['Metro Manila', 'Cebu', 'Davao', 'Baguio', 'Others'],
@@ -666,15 +632,28 @@
             // Chart type switchers
             document.getElementById('revenueChartType')?.addEventListener('change', function(e) {
                 console.log('Switching revenue chart type:', e.target.value);
+                // In a real app, you would update the chart type here
             });
             
             document.getElementById('userChartType')?.addEventListener('change', function(e) {
                 console.log('Switching user chart type:', e.target.value);
+                // In a real app, you would update the chart type here
             });
-            
+        }
+        
+        function setupActionButtons() {
             // Action buttons
             document.getElementById('refreshAnalytics')?.addEventListener('click', function() {
-                location.reload();
+                // Clean up and reinitialize charts
+                if (window.analyticsCharts) {
+                    Object.values(window.analyticsCharts).forEach(chart => {
+                        if (chart && chart.destroy) {
+                            chart.destroy();
+                        }
+                    });
+                    window.analyticsCharts = {};
+                }
+                initializeCharts();
             });
             
             document.getElementById('exportAnalytics')?.addEventListener('click', function() {
@@ -685,6 +664,18 @@
                 alert('Report generation would start');
             });
         }
+
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (window.analyticsCharts) {
+                Object.values(window.analyticsCharts).forEach(chart => {
+                    if (chart && chart.destroy) {
+                        chart.destroy();
+                    }
+                });
+                window.analyticsCharts = {};
+            }
+        });
     </script>
 </body>
 </html>
