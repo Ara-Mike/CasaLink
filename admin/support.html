@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink Admin - Support Tickets</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        .ticket-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group {
+            flex: 1;
+            min-width: 180px;
+        }
+        
+        .ticket-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .ticket-stat {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        
+        .ticket-stat-value {
+            font-size: 28px;
+            font-weight: 600;
+            margin: 10px 0;
+        }
+        
+        .ticket-stat.open { border-top: 4px solid #f59e0b; }
+        .ticket-stat.in-progress { border-top: 4px solid #1d4ed8; }
+        .ticket-stat.resolved { border-top: 4px solid #10b981; }
+        .ticket-stat.closed { border-top: 4px solid #6b7280; }
+        
+        .priority-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .priority-low { background: #d1fae5; color: #10b981; }
+        .priority-medium { background: #fef3c7; color: #d97706; }
+        .priority-high { background: #fde68a; color: #b45309; }
+        .priority-urgent { background: #fecaca; color: #dc2626; }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-open { background: #fef3c7; color: #d97706; }
+        .status-in-progress { background: #dbeafe; color: #1d4ed8; }
+        .status-resolved { background: #d1fae5; color: #047857; }
+        .status-closed { background: #f3f4f6; color: #6b7280; }
+        
+        .ticket-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .ticket-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border-left: 4px solid #ddd;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .ticket-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .ticket-card.open { border-left-color: #f59e0b; }
+        .ticket-card.in-progress { border-left-color: #1d4ed8; }
+        .ticket-card.resolved { border-left-color: #10b981; }
+        .ticket-card.closed { border-left-color: #6b7280; }
+        
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+        
+        .ticket-id {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .ticket-subject {
+            font-size: 16px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .ticket-meta {
+            display: flex;
+            gap: 15px;
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+        
+        .ticket-preview {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+        
+        .ticket-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        .ticket-user {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: #e0e7ff;
+            color: #1A73E8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+        
+        .ticket-detail-modal {
+            max-width: 800px;
+        }
+        
+        .ticket-conversation {
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 3px solid #ddd;
+        }
+        
+        .message.admin { border-left-color: #1A73E8; }
+        .message.user { border-left-color: #10b981; }
+        
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        
+        .message-sender {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .message-time {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .message-content {
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        .reply-form {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body class="admin-dashboard">
+    <!-- Admin Navigation -->
+    <nav class="admin-nav">
+        <div class="nav-header">
+            <h2>CasaLink Admin</h2>
+            <p>Platform Management</p>
+        </div>
+        
+        <ul class="nav-menu">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="users.html">User Management</a></li>
+            <li><a href="analytics.html">Analytics</a></li>
+            <li class="active"><a href="support.html">Support Tickets</a></li>
+            <li><a href="settings.html">Settings</a></li>
+        </ul>
+        
+        <div class="nav-footer">
+            <div class="admin-profile">
+                <span id="adminName">Loading...</span>
+                <button id="adminLogout" class="btn btn-sm btn-outline">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="admin-content">
+        <header class="admin-header">
+            <h1>Support Tickets</h1>
+            <div class="header-actions">
+                <button id="refreshTickets" class="btn btn-sm">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- Ticket Stats -->
+        <div class="ticket-stats">
+            <div class="ticket-stat open">
+                <div style="font-size: 14px; color: #666;">Open</div>
+                <div class="ticket-stat-value" id="openTickets">7</div>
+            </div>
+            <div class="ticket-stat in-progress">
+                <div style="font-size: 14px; color: #666;">In Progress</div>
+                <div class="ticket-stat-value" id="inProgressTickets">3</div>
+            </div>
+            <div class="ticket-stat resolved">
+                <div style="font-size: 14px; color: #666;">Resolved</div>
+                <div class="ticket-stat-value" id="resolvedTickets">24</div>
+            </div>
+            <div class="ticket-stat closed">
+                <div style="font-size: 14px; color: #666;">Closed</div>
+                <div class="ticket-stat-value" id="closedTickets">156</div>
+            </div>
+            <div class="ticket-stat">
+                <div style="font-size: 14px; color: #666;">Avg. Response</div>
+                <div class="ticket-stat-value" id="avgResponseTime">2.4h</div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="ticket-filters">
+            <div class="filter-group">
+                <label for="searchTickets">Search</label>
+                <input type="text" id="searchTickets" placeholder="Search tickets...">
+            </div>
+            
+            <div class="filter-group">
+                <label for="filterStatus">Status</label>
+                <select id="filterStatus">
+                    <option value="all">All Status</option>
+                    <option value="open">Open</option>
+                    <option value="in-progress">In Progress</option>
+                    <option value="resolved">Resolved</option>
+                    <option value="closed">Closed</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="filterPriority">Priority</label>
+                <select id="filterPriority">
+                    <option value="all">All Priorities</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="filterCategory">Category</label>
+                <select id="filterCategory">
+                    <option value="all">All Categories</option>
+                    <option value="technical">Technical</option>
+                    <option value="billing">Billing</option>
+                    <option value="feature">Feature Request</option>
+                    <option value="bug">Bug Report</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Ticket Actions -->
+        <div class="ticket-actions">
+            <button id="newTicketBtn" class="btn btn-primary">
+                <i class="fas fa-plus"></i> New Ticket
+            </button>
+            <button id="assignTickets" class="btn btn-outline">
+                <i class="fas fa-user-check"></i> Assign to Me
+            </button>
+            <button id="bulkClose" class="btn btn-outline">
+                <i class="fas fa-check-circle"></i> Bulk Close
+            </button>
+        </div>
+
+        <!-- Tickets List -->
+        <div id="ticketsList">
+            <!-- Tickets will be loaded here -->
+            <div class="loading-text">
+                <i class="fas fa-spinner fa-spin"></i> Loading tickets...
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="ticketPagination" style="margin-top: 20px; display: none;">
+            <button class="btn btn-sm btn-outline" disabled>
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <span class="page-info">Page 1 of 1</span>
+            <button class="btn btn-sm btn-outline" disabled>
+                Next <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </main>
+
+    <!-- Ticket Detail Modal -->
+    <div class="modal" id="ticketDetailModal" style="display: none;">
+        <div class="modal-content ticket-detail-modal">
+            <div class="modal-header">
+                <h3 id="ticketDetailTitle">Ticket Details</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="ticketDetailContent">
+                <!-- Content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- New Ticket Modal -->
+    <div class="modal" id="newTicketModal" style="display: none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Create New Ticket</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="ticketForm">
+                    <div class="form-group">
+                        <label for="ticketSubject">Subject *</label>
+                        <input type="text" id="ticketSubject" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="ticketCategory">Category *</label>
+                            <select id="ticketCategory" required>
+                                <option value="technical">Technical Issue</option>
+                                <option value="billing">Billing/Payment</option>
+                                <option value="feature">Feature Request</option>
+                                <option value="bug">Bug Report</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="ticketPriority">Priority *</label>
+                            <select id="ticketPriority" required>
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ticketUser">Assign to User</label>
+                        <select id="ticketUser">
+                            <option value="">Unassigned</option>
+                            <!-- Users will be loaded here -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ticketDescription">Description *</label>
+                        <textarea id="ticketDescription" rows="6" required></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="ModalManager.closeModal('newTicketModal')">
+                    Cancel
+                </button>
+                <button type="submit" form="ticketForm" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i> Create Ticket
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Load Firebase config
+        window.firebaseConfig = {
+            apiKey: "AIzaSyC-FvYHTes2lAU3AkMJ6kGIEk4HjioP_HQ",
+            authDomain: "casalink-246fd.firebaseapp.com",
+            projectId: "casalink-246fd",
+            storageBucket: "casalink-246fd.firebasestorage.app",
+            messagingSenderId: "1089375490593",
+            appId: "1:1089375490593:web:a26cc91e15877b04bb0960"
+        };
+    </script>
+    
+    <script src="../js/admin/adminAuth.js"></script>
+    <script src="../js/admin/adminSupport.js"></script>
+    
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Support Tickets page loaded');
+            
+            // Update admin name
+            if (window.adminAuthInstance) {
+                const admin = adminAuthInstance.getCurrentAdmin();
+                if (admin) {
+                    document.getElementById('adminName').textContent = 
+                        admin.name || admin.email.split('@')[0];
+                }
+            }
+            
+            // Logout button
+            document.getElementById('adminLogout').addEventListener('click', function() {
+                if (window.adminAuthInstance) {
+                    adminAuthInstance.logout();
+                } else {
+                    localStorage.removeItem('admin_session');
+                    window.location.href = 'index.html';
+                }
+            });
+            
+            // Load demo tickets
+            loadDemoTickets();
+            
+            // Setup event listeners
+            setupEventListeners();
+        });
+        
+        function loadDemoTickets() {
+            const tickets = [
+                {
+                    id: 'TKT-2024-001',
+                    subject: 'Payment not processing',
+                    category: 'billing',
+                    priority: 'high',
+                    status: 'open',
+                    description: 'When I try to make a payment, it says "Transaction failed" but the amount is deducted from my account.',
+                    user: { name: 'John Tenant', email: 'john@example.com' },
+                    createdAt: '2024-01-15T10:30:00Z',
+                    updatedAt: '2024-01-15T10:30:00Z',
+                    assignedTo: null,
+                    messages: [
+                        {
+                            sender: 'John Tenant',
+                            content: 'Having issues with payment processing.',
+                            timestamp: '2024-01-15T10:30:00Z',
+                            type: 'user'
+                        }
+                    ]
+                },
+                {
+                    id: 'TKT-2024-002',
+                    subject: 'Maintenance request feature not working',
+                    category: 'technical',
+                    priority: 'medium',
+                    status: 'in-progress',
+                    description: 'Cannot submit maintenance requests from mobile app.',
+                    user: { name: 'Maria Landlord', email: 'maria@example.com' },
+                    createdAt: '2024-01-14T14:20:00Z',
+                    updatedAt: '2024-01-15T09:15:00Z',
+                    assignedTo: 'Admin User',
+                    messages: [
+                        {
+                            sender: 'Maria Landlord',
+                            content: 'The maintenance request button is not responding.',
+                            timestamp: '2024-01-14T14:20:00Z',
+                            type: 'user'
+                        },
+                        {
+                            sender: 'Admin User',
+                            content: 'Looking into this issue. Which mobile OS are you using?',
+                            timestamp: '2024-01-15T09:15:00Z',
+                            type: 'admin'
+                        }
+                    ]
+                },
+                {
+                    id: 'TKT-2024-003',
+                    subject: 'Feature request: Export reports to PDF',
+                    category: 'feature',
+                    priority: 'low',
+                    status: 'resolved',
+                    description: 'Would be great to have PDF export for financial reports.',
+                    user: { name: 'Robert Chen', email: 'robert@example.com' },
+                    createdAt: '2024-01-10T11:45:00Z',
+                    updatedAt: '2024-01-12T16:30:00Z',
+                    assignedTo: 'Admin User',
+                    messages: [
+                        {
+                            sender: 'Robert Chen',
+                            content: 'Requesting PDF export feature for reports.',
+                            timestamp: '2024-01-10T11:45:00Z',
+                            type: 'user'
+                        },
+                        {
+                            sender: 'Admin User',
+                            content: 'Thank you for the suggestion! This feature is planned for Q2 2024.',
+                            timestamp: '2024-01-12T16:30:00Z',
+                            type: 'admin'
+                        }
+                    ]
+                }
+            ];
+            
+            const ticketsList = document.getElementById('ticketsList');
+            ticketsList.innerHTML = '';
+            
+            tickets.forEach(ticket => {
+                const ticketCard = createTicketCard(ticket);
+                ticketsList.appendChild(ticketCard);
+            });
+            
+            // Show pagination
+            document.getElementById('ticketPagination').style.display = 'flex';
+        }
+        
+        function createTicketCard(ticket) {
+            const card = document.createElement('div');
+            card.className = `ticket-card ${ticket.status}`;
+            card.dataset.ticketId = ticket.id;
+            
+            const priorityClass = `priority-${ticket.priority}`;
+            const statusClass = `status-${ticket.status.replace('-', '-')}`;
+            
+            const createdAt = new Date(ticket.createdAt).toLocaleDateString();
+            const updatedAt = new Date(ticket.updatedAt).toLocaleDateString();
+            
+            card.innerHTML = `
+                <div class="ticket-header">
+                    <div>
+                        <div class="ticket-id">${ticket.id}</div>
+                        <div class="ticket-subject">${ticket.subject}</div>
+                    </div>
+                    <div>
+                        <span class="priority-badge ${priorityClass}">${ticket.priority}</span>
+                        <span class="status-badge ${statusClass}">${ticket.status}</span>
+                    </div>
+                </div>
+                
+                <div class="ticket-meta">
+                    <span><i class="fas fa-user"></i> ${ticket.user.name}</span>
+                    <span><i class="fas fa-tag"></i> ${ticket.category}</span>
+                    <span><i class="fas fa-calendar"></i> ${createdAt}</span>
+                    <span><i class="fas fa-clock"></i> Last updated: ${updatedAt}</span>
+                </div>
+                
+                <div class="ticket-preview">
+                    ${ticket.description.substring(0, 150)}...
+                </div>
+                
+                <div class="ticket-footer">
+                    <div class="ticket-user">
+                        <div class="user-avatar">${ticket.user.name.charAt(0)}</div>
+                        <div>
+                            <div style="font-weight: 500;">${ticket.user.name}</div>
+                            <div style="font-size: 12px; color: #666;">${ticket.user.email}</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${ticket.assignedTo ? 
+                            `<span style="font-size: 13px; color: #666;">Assigned to: ${ticket.assignedTo}</span>` : 
+                            `<span style="font-size: 13px; color: #999;">Unassigned</span>`
+                        }
+                    </div>
+                </div>
+            `;
+            
+            // Add click event
+            card.addEventListener('click', () => {
+                showTicketDetails(ticket);
+            });
+            
+            return card;
+        }
+        
+        function showTicketDetails(ticket) {
+            const modalContent = document.getElementById('ticketDetailContent');
+            const priorityClass = `priority-${ticket.priority}`;
+            const statusClass = `status-${ticket.status.replace('-', '-')}`;
+            
+            let messagesHtml = '';
+            ticket.messages.forEach(msg => {
+                const time = new Date(msg.timestamp).toLocaleString();
+                const messageClass = msg.type === 'admin' ? 'admin' : 'user';
+                messagesHtml += `
+                    <div class="message ${messageClass}">
+                        <div class="message-header">
+                            <div class="message-sender">${msg.sender}</div>
+                            <div class="message-time">${time}</div>
+                        </div>
+                        <div class="message-content">${msg.content}</div>
+                    </div>
+                `;
+            });
+            
+            modalContent.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+                        <div>
+                            <h4 style="margin: 0 0 10px 0;">${ticket.subject}</h4>
+                            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                                <span class="priority-badge ${priorityClass}">${ticket.priority}</span>
+                                <span class="status-badge ${statusClass}">${ticket.status}</span>
+                                <span style="background: #e0e7ff; color: #1A73E8; padding: 4px 8px; border-radius: 12px; font-size: 12px;">
+                                    ${ticket.category}
+                                </span>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 12px; color: #666;">Ticket ID</div>
+                            <div style="font-weight: 600;">${ticket.id}</div>
+                        </div>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Description</div>
+                        <div>${ticket.description}</div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                        <div>
+                            <div style="font-size: 12px; color: #666;">Submitted by</div>
+                            <div style="font-weight: 500;">${ticket.user.name}</div>
+                            <div style="font-size: 13px; color: #666;">${ticket.user.email}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #666;">Created</div>
+                            <div>${new Date(ticket.createdAt).toLocaleString()}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #666;">Last Updated</div>
+                            <div>${new Date(ticket.updatedAt).toLocaleString()}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: #666;">Assigned to</div>
+                            <div>${ticket.assignedTo || 'Unassigned'}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h4 style="margin: 0 0 15px 0;">Conversation</h4>
+                <div class="ticket-conversation">
+                    ${messagesHtml}
+                </div>
+                
+                <div class="reply-form">
+                    <div class="form-group">
+                        <label for="replyMessage">Add Reply</label>
+                        <textarea id="replyMessage" rows="4" placeholder="Type your reply here..."></textarea>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button class="btn btn-outline" onclick="ModalManager.closeModal('ticketDetailModal')">
+                            Close
+                        </button>
+                        <button class="btn btn-primary" onclick="sendReply('${ticket.id}')">
+                            <i class="fas fa-paper-plane"></i> Send Reply
+                        </button>
+                        <button class="btn btn-outline" onclick="changeTicketStatus('${ticket.id}', '${ticket.status}')">
+                            <i class="fas fa-edit"></i> Change Status
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('ticketDetailTitle').textContent = `Ticket: ${ticket.id}`;
+            document.getElementById('ticketDetailModal').style.display = 'block';
+        }
+        
+        function setupEventListeners() {
+            // Filter event listeners
+            ['searchTickets', 'filterStatus', 'filterPriority', 'filterCategory'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('change', filterTickets);
+                }
+            });
+            
+            // Action buttons
+            document.getElementById('refreshTickets')?.addEventListener('click', () => {
+                location.reload();
+            });
+            
+            document.getElementById('newTicketBtn')?.addEventListener('click', () => {
+                document.getElementById('newTicketModal').style.display = 'block';
+            });
+            
+            document.getElementById('assignTickets')?.addEventListener('click', () => {
+                alert('Assigning all open tickets to you (demo)');
+            });
+            
+            document.getElementById('bulkClose')?.addEventListener('click', () => {
+                if (confirm('Close all selected tickets?')) {
+                    alert('Tickets closed (demo)');
+                }
+            });
+            
+            // Modal close handlers
+            document.querySelectorAll('.modal-close').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+            
+            // Close modal on outside click
+            window.addEventListener('click', function(e) {
+                if (e.target.classList.contains('modal')) {
+                    e.target.style.display = 'none';
+                }
+            });
+            
+            // Ticket form submission
+            document.getElementById('ticketForm')?.addEventListener('submit', function(e) {
+                e.preventDefault();
+                createNewTicket();
+            });
+        }
+        
+        function filterTickets() {
+            // In a real app, this would filter the tickets
+            console.log('Filtering tickets...');
+        }
+        
+        function createNewTicket() {
+            const subject = document.getElementById('ticketSubject').value;
+            const category = document.getElementById('ticketCategory').value;
+            const priority = document.getElementById('ticketPriority').value;
+            const description = document.getElementById('ticketDescription').value;
+            
+            alert(`New ticket created:\n\nSubject: ${subject}\nCategory: ${category}\nPriority: ${priority}\n\n(Simulated - in real app would save to database)`);
+            
+            document.getElementById('newTicketModal').style.display = 'none';
+            document.getElementById('ticketForm').reset();
+        }
+        
+        function sendReply(ticketId) {
+            const message = document.getElementById('replyMessage').value;
+            if (!message.trim()) {
+                alert('Please enter a message');
+                return;
+            }
+            
+            alert(`Reply sent for ticket ${ticketId}:\n\n${message}\n\n(Simulated - in real app would save to database)`);
+            document.getElementById('replyMessage').value = '';
+        }
+        
+        function changeTicketStatus(ticketId, currentStatus) {
+            const newStatus = prompt(`Current status: ${currentStatus}\n\nEnter new status (open, in-progress, resolved, closed):`);
+            if (newStatus && ['open', 'in-progress', 'resolved', 'closed'].includes(newStatus)) {
+                alert(`Ticket ${ticketId} status changed from ${currentStatus} to ${newStatus}\n\n(Simulated)`);
+            }
+        }
+    </script>
+</body>
+</html>

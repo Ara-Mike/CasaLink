@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink - Admin Dashboard</title>
+    
+    <!-- FIXED CSS PATHS -->
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/admin.css"> <!-- Changed from "css/admin.css" -->
+    <link rel="manifest" href="../manifest.json">
+
+    <script>
+        // Session check to prevent infinite redirect
+        (function() {
+            console.log('Checking admin session...');
+            
+            // Check if we have a valid session in localStorage
+            const adminSession = localStorage.getItem('admin_session');
+            const isLoginPage = window.location.pathname.includes('index.html');
+            const isDashboardPage = window.location.pathname.includes('dashboard.html');
+            
+            if (isDashboardPage && !adminSession) {
+                console.log('No admin session found, redirecting to login...');
+                // Small delay to prevent race condition
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 100);
+            } else if (isLoginPage && adminSession) {
+                console.log('Already have admin session, redirecting to dashboard...');
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 100);
+            }
+        })();
+    </script>
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body class="admin-dashboard">
+    <!-- Admin Navigation -->
+    <nav class="admin-nav">
+        <div class="nav-header">
+            <h2>CasaLink Admin</h2>
+            <p>Platform Management</p>
+        </div>
+        
+        <ul class="nav-menu">
+            <li class="active"><a href="dashboard.html">Dashboard</a></li>
+            <li><a href="users.html">User Management</a></li>
+            <li><a href="analytics.html">Analytics</a></li>
+            <li><a href="support.html">Support Tickets</a></li>
+            <li><a href="settings.html">Settings</a></li>
+        </ul>
+        
+        <div class="nav-footer">
+            <div class="admin-profile">
+                <span id="adminName">Loading...</span>
+                <button id="adminLogout" class="btn btn-sm btn-outline">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="admin-content">
+        <header class="admin-header">
+            <h1>Platform Dashboard</h1>
+            <div class="header-actions">
+                <span id="currentDate"></span>
+                <button id="refreshData" class="btn btn-sm">Refresh Data</button>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon primary">👥</div>
+                <div class="stat-info">
+                    <h3 id="totalLandlords">0</h3>
+                    <p>Total Landlords</p>
+                </div>
+                <div class="stat-trend" id="landlordTrend">+0%</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon success">🏠</div>
+                <div class="stat-info">
+                    <h3 id="totalProperties">0</h3>
+                    <p>Properties Managed</p>
+                </div>
+                <div class="stat-trend" id="propertyTrend">+0%</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon warning">💰</div>
+                <div class="stat-info">
+                    <h3 id="monthlyRevenue">₱0</h3>
+                    <p>Monthly Revenue</p>
+                </div>
+                <div class="stat-trend" id="revenueTrend">+0%</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon danger">⚠️</div>
+                <div class="stat-info">
+                    <h3 id="openTickets">0</h3>
+                    <p>Open Support Tickets</p>
+                </div>
+                <div class="stat-trend" id="ticketTrend">+0%</div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="charts-row">
+            <div class="chart-container">
+                <h3>User Growth</h3>
+                <canvas id="userGrowthChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Platform Activity</h3>
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Activity & Quick Actions -->
+        <div class="content-row">
+            <div class="content-col">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Recent Sign-ups</h3>
+                        <a href="users.html" class="btn-link">View All</a>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentSignups" class="table-container">
+                            <p class="loading-text">Loading recent sign-ups...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-col">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Recent Support Tickets</h3>
+                        <a href="support.html" class="btn-link">View All</a>
+                    </div>
+                    <div class="card-body">
+                        <div id="recentTickets" class="table-container">
+                            <p class="loading-text">Loading recent tickets...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Health -->
+        <div class="card">
+            <div class="card-header">
+                <h3>System Health</h3>
+            </div>
+            <div class="card-body">
+                <div class="health-grid">
+                    <div class="health-item">
+                        <span class="health-indicator good"></span>
+                        <span>Database</span>
+                        <span class="health-status">Online</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="health-indicator good"></span>
+                        <span>Authentication</span>
+                        <span class="health-status">Online</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="health-indicator good"></span>
+                        <span>Storage</span>
+                        <span class="health-status">Online</span>
+                    </div>
+                    <div class="health-item">
+                        <span class="health-indicator warning"></span>
+                        <span>Backup</span>
+                        <span class="health-status">Pending</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- FIXED: Load Firebase config -->
+    <script>
+        // Load Firebase config
+        (function() {
+            if (window.firebaseConfig) {
+                console.log('Firebase config already loaded');
+                return;
+            }
+            
+            // Use your actual Firebase config
+            window.firebaseConfig = {
+                apiKey: "AIzaSyC-FvYHTes2lAU3AkMJ6kGIEk4HjioP_HQ",
+                authDomain: "casalink-246fd.firebaseapp.com",
+                projectId: "casalink-246fd",
+                storageBucket: "casalink-246fd.firebasestorage.app",
+                messagingSenderId: "1089375490593",
+                appId: "1:1089375490593:web:a26cc91e15877b04bb0960"
+            };
+        })();
+    </script>
+    
+    <!-- FIXED: Use regular scripts, NOT modules -->
+    <script src="../js/admin/adminAuth.js"></script>
+    <script src="../js/admin/adminDashboard.js"></script>
+    
+    <!-- Inline initialization -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Admin dashboard loaded');
+            
+            // Set current date
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('currentDate').textContent = 
+                new Date().toLocaleDateString('en-US', options);
+            
+            // Update admin info
+            if (window.adminAuthInstance) {
+                const admin = adminAuthInstance.getCurrentAdmin();
+                if (admin) {
+                    document.getElementById('adminName').textContent = admin.name || admin.email;
+                }
+            }
+            
+            // Logout button
+            document.getElementById('adminLogout').addEventListener('click', function() {
+                if (window.adminAuthInstance) {
+                    adminAuthInstance.logout();
+                } else {
+                    window.location.href = 'index.html';
+                }
+            });
+            
+            // Refresh button
+            document.getElementById('refreshData').addEventListener('click', function() {
+                location.reload();
+            });
+            
+            // Load demo data if adminDashboard.js fails
+            setTimeout(function() {
+                if (!window.AdminDashboard) {
+                    console.warn('AdminDashboard not loaded, showing demo data');
+                    loadDemoData();
+                }
+            }, 2000);
+        });
+        
+        function loadDemoData() {
+            // Demo stats
+            document.getElementById('totalLandlords').textContent = '18';
+            document.getElementById('totalProperties').textContent = '42';
+            document.getElementById('monthlyRevenue').textContent = '₱378,500';
+            document.getElementById('openTickets').textContent = '3';
+            
+            // Demo trends
+            document.getElementById('landlordTrend').textContent = '+12%';
+            document.getElementById('propertyTrend').textContent = '+8%';
+            document.getElementById('revenueTrend').textContent = '+15%';
+            document.getElementById('ticketTrend').textContent = '-25%';
+            
+            // Demo charts
+            const growthCtx = document.getElementById('userGrowthChart')?.getContext('2d');
+            if (growthCtx) {
+                new Chart(growthCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                        datasets: [{
+                            label: 'Users',
+                            data: [50, 65, 80, 95, 110, 125],
+                            borderColor: '#1A73E8',
+                            backgroundColor: 'rgba(26, 115, 232, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+            
+            const activityCtx = document.getElementById('activityChart')?.getContext('2d');
+            if (activityCtx) {
+                new Chart(activityCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Logins', 'Payments', 'Requests', 'Messages'],
+                        datasets: [{
+                            label: 'Activity',
+                            data: [65, 59, 80, 81],
+                            backgroundColor: [
+                                'rgba(75, 192, 192, 0.6)',
+                                'rgba(54, 162, 235, 0.6)',
+                                'rgba(255, 206, 86, 0.6)',
+                                'rgba(153, 102, 255, 0.6)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>

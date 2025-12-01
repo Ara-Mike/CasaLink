@@ -25,6 +25,37 @@
     background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
 }
 
+/* Admin Portal Link */
+.admin-portal-link {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.admin-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(26, 115, 232, 0.1);
+    color: #1A73E8;
+    padding: 10px 16px;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid rgba(26, 115, 232, 0.2);
+    transition: all 0.3s;
+    backdrop-filter: blur(10px);
+}
+
+.admin-link:hover {
+    background: #1A73E8;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+}
+
 /* Reports Section Styles */
 .charts-grid {
     display: grid;

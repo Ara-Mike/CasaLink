@@ -1,6 +1,12 @@
 // js/auth.js - FIXED VERSION
 class AuthManager {
     static currentAuthUnsubscribe = null;
+
+    static adminEmails = [
+        'admin@casalink.com',
+        'superadmin@casalink.com'
+        // Add more admin emails as needed
+    ];
     
 
     static async login(email, password, role) {
@@ -116,6 +122,316 @@ class AuthManager {
             console.error('Login error details:', error);
             // SYNC NULL TO DATA MANAGER ON ERROR - ADD THIS LINE
             this.syncUserToDataManager(null);
+            await firebaseAuth.signOut();
+            throw error;
+        }
+    }
+
+     static async checkAdminStatus(userId) {
+        try {
+            if (!userId) return false;
+            
+            console.log('🛡️ Checking admin status for user:', userId);
+            
+            // First check against hardcoded admin emails (for development)
+            const currentUser = firebaseAuth.currentUser;
+            if (currentUser && currentUser.email) {
+                const userEmail = currentUser.email.toLowerCase();
+                if (this.adminEmails.includes(userEmail)) {
+                    console.log('✅ User is admin (email in admin list):', userEmail);
+                    return true;
+                }
+            }
+            
+            // Then check Firestore admin_users collection
+            try {
+                const adminDoc = await firebaseDb
+                    .collection('admin_users')
+                    .doc(userId)
+                    .get();
+                
+                if (adminDoc.exists) {
+                    const adminData = adminDoc.data();
+                    if (adminData.is_active !== false) {
+                        console.log('✅ User is admin (Firestore record):', userId);
+                        return true;
+                    }
+                }
+            } catch (firestoreError) {
+                console.warn('⚠️ Could not check Firestore admin status:', firestoreError);
+                // Continue with email check only
+            }
+            
+            console.log('❌ User is not admin:', userId);
+            return false;
+            
+        } catch (error) {
+            console.error('❌ Error checking admin status:', error);
+            return false;
+        }
+    }
+
+    static async getUserWithAdminStatus(firebaseUser) {
+        try {
+            if (!firebaseUser) return null;
+            
+            // First get the user document
+            const userDoc = await firebaseDb
+                .collection('users')
+                .doc(firebaseUser.uid)
+                .get();
+            
+            if (!userDoc.exists) {
+                return null;
+            }
+            
+            const userData = userDoc.data();
+            
+            // Check admin status
+            const isAdmin = await this.checkAdminStatus(firebaseUser.uid);
+            
+            // Enhanced user data with admin status
+            const enhancedUserData = {
+                id: userDoc.id,
+                uid: firebaseUser.uid,
+                email: userData.email,
+                name: userData.name || userData.email.split('@')[0],
+                role: userData.role,
+                isActive: userData.isActive !== false,
+                hasTemporaryPassword: userData.hasTemporaryPassword || false,
+                passwordChanged: userData.passwordChanged || false,
+                requiresPasswordChange: userData.requiresPasswordChange || false,
+                status: userData.status || 'active',
+                loginCount: userData.loginCount || 0,
+                lastLogin: userData.lastLogin,
+                createdAt: userData.createdAt,
+                updatedAt: userData.updatedAt,
+                // Tenant specific fields
+                landlordId: userData.landlordId,
+                roomNumber: userData.roomNumber,
+                // Landlord specific fields
+                properties: userData.properties || [],
+                // NEW: Admin status
+                isAdmin: isAdmin,
+                adminRole: isAdmin ? 'admin' : null
+            };
+            
+            console.log('👤 User with admin status:', {
+                email: enhancedUserData.email,
+                role: enhancedUserData.role,
+                isAdmin: enhancedUserData.isAdmin
+            });
+            
+            return enhancedUserData;
+            
+        } catch (error) {
+            console.error('❌ Error getting user with admin status:', error);
+            return null;
+        }
+    }
+
+     static toggleAdminLink(user) {
+        const adminLink = document.getElementById('adminFloatingBtn');
+        if (!adminLink) return;
+        
+        if (user && user.isAdmin) {
+            console.log('🔓 Showing admin link for:', user.email);
+            adminLink.style.display = 'block';
+        } else {
+            console.log('🔒 Hiding admin link');
+            adminLink.style.display = 'none';
+        }
+    }
+
+     static async getCurrentUserWithAdminStatus() {
+        try {
+            const currentUser = firebaseAuth.currentUser;
+            if (!currentUser) return null;
+            
+            return await this.getUserWithAdminStatus(currentUser);
+        } catch (error) {
+            console.error('❌ Error getting current user with admin status:', error);
+            return null;
+        }
+    }
+
+     static onAuthChange(callback) {
+        if (!window.firebaseAuth) {
+            console.error('Firebase Auth not available for auth state listener');
+            return () => {};
+        }
+        
+        // Enhanced auth state listener with admin status
+        return firebaseAuth.onAuthStateChanged(async (firebaseUser) => {
+            console.log('🔄 Firebase auth state changed:', firebaseUser ? `User: ${firebaseUser.uid}` : 'No user');
+            
+            if (firebaseUser) {
+                try {
+                    // Use the new method that includes admin status
+                    const userData = await this.getUserWithAdminStatus(firebaseUser);
+                    
+                    if (userData) {
+                        console.log('✅ User data with admin status loaded:', {
+                            email: userData.email,
+                            role: userData.role,
+                            isAdmin: userData.isAdmin
+                        });
+                        
+                        // Sync to DataManager
+                        this.syncUserToDataManager(userData);
+                        
+                        // Toggle admin link visibility
+                        this.toggleAdminLink(userData);
+                        
+                        callback(userData);
+                    } else {
+                        console.error('❌ User document not found in Firestore');
+                        this.syncUserToDataManager(null);
+                        this.toggleAdminLink(null);
+                        await this.logout();
+                        callback(null);
+                    }
+                } catch (error) {
+                    console.error('❌ Error fetching user data in auth listener:', error);
+                    this.syncUserToDataManager(null);
+                    this.toggleAdminLink(null);
+                    callback(null);
+                }
+            } else {
+                console.log('👤 No Firebase user');
+                this.syncUserToDataManager(null);
+                this.toggleAdminLink(null);
+                callback(null);
+            }
+        });
+    }
+
+     static async login(email, password, role) {
+        try {
+            if (!window.firebaseAuth) {
+                throw new Error('Firebase Auth not initialized');
+            }
+            
+            console.log('🔄 Login process started...', { email, role });
+            
+            // Clear any existing session first
+            await firebaseAuth.signOut();
+            
+            const userCredential = await firebaseAuth.signInWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+            
+            console.log('Firebase auth success, user:', user.uid);
+            
+            // Check if user exists in Firestore
+            const userDoc = await firebaseDb.collection('users').doc(user.uid).get();
+            
+            if (userDoc.exists) {
+                // Existing user - normal login
+                const userData = userDoc.data();
+                
+                console.log('📊 User login stats:', { 
+                    loginCount: userData.loginCount, 
+                    hasTemporaryPassword: userData.hasTemporaryPassword,
+                    passwordChanged: userData.passwordChanged 
+                });
+                
+                // Role verification
+                if (userData.role !== role) {
+                    await firebaseAuth.signOut();
+                    throw new Error(`This account is registered as a ${userData.role}. Please select "${userData.role}" when logging in.`);
+                }
+                
+                // Check for password change requirement
+                let requiresPasswordChange = false;
+                if (userData.role === 'tenant' && userData.hasTemporaryPassword && !userData.passwordChanged) {
+                    if (userData.loginCount === 0) {
+                        requiresPasswordChange = true;
+                        console.log('🔐 FIRST real tenant login - password change REQUIRED');
+                    } else {
+                        console.log('✅ Subsequent login - no password change required');
+                    }
+                }
+                
+                // Check admin status
+                const isAdmin = await this.checkAdminStatus(user.uid);
+                
+                // Update login count
+                const newLoginCount = (userData.loginCount || 0) + 1;
+                const updates = {
+                    loginCount: newLoginCount,
+                    lastLogin: new Date().toISOString()
+                };
+                
+                console.log('🔄 Updated login count:', newLoginCount);
+                
+                // Update the user document
+                await firebaseDb.collection('users').doc(user.uid).update(updates);
+                
+                // Prepare response with admin status
+                const responseData = {
+                    id: userDoc.id,
+                    ...userData,
+                    uid: user.uid,
+                    requiresPasswordChange: requiresPasswordChange,
+                    isAdmin: isAdmin,
+                    adminRole: isAdmin ? 'admin' : null
+                };
+                
+                // Sync to DataManager
+                this.syncUserToDataManager(responseData);
+                
+                // Toggle admin link visibility
+                this.toggleAdminLink(responseData);
+                
+                return responseData;
+                
+            } else {
+                // NEW USER - Auto-create tenant account
+                console.log('New user detected, auto-creating tenant account...');
+                
+                // Check if this email is in admin list
+                const isAdminEmail = this.adminEmails.includes(email.toLowerCase());
+                
+                // Create user data
+                const newUserData = {
+                    email: email,
+                    name: email.split('@')[0],
+                    role: isAdminEmail ? 'admin' : 'tenant', // Set role based on email
+                    createdAt: new Date().toISOString(),
+                    isActive: true,
+                    hasTemporaryPassword: true,
+                    loginCount: 1,
+                    passwordChanged: false,
+                    lastLogin: new Date().toISOString(),
+                    isAdmin: isAdminEmail // Add admin flag
+                };
+                
+                await firebaseDb.collection('users').doc(user.uid).set(newUserData);
+                
+                console.log('Auto-created account with first login, isAdmin:', isAdminEmail);
+                
+                const userResponse = {
+                    id: user.uid,
+                    ...newUserData,
+                    uid: user.uid,
+                    requiresPasswordChange: true,
+                    isAdmin: isAdminEmail,
+                    adminRole: isAdminEmail ? 'admin' : null
+                };
+                
+                // Sync to DataManager
+                this.syncUserToDataManager(userResponse);
+                
+                // Toggle admin link visibility
+                this.toggleAdminLink(userResponse);
+                
+                return userResponse;
+            }
+            
+        } catch (error) {
+            console.error('Login error details:', error);
+            this.syncUserToDataManager(null);
+            this.toggleAdminLink(null);
             await firebaseAuth.signOut();
             throw error;
         }
@@ -469,7 +785,10 @@ class AuthManager {
 
     static async logout() {
         try {
-            // SYNC NULL TO DATA MANAGER FIRST - ADD THIS LINE
+            // Hide admin link
+            this.toggleAdminLink(null);
+            
+            // Sync null to DataManager
             this.syncUserToDataManager(null);
             
             if (window.firebaseAuth) {
@@ -477,6 +796,63 @@ class AuthManager {
             }
         } catch (error) {
             console.error('Logout error:', error);
+        }
+    }
+
+     static async createAdminAccount(adminData) {
+        try {
+            console.log('🛡️ Creating admin account...', adminData.email);
+            
+            // Create Firebase Auth account
+            const userCredential = await firebaseAuth.createUserWithEmailAndPassword(
+                adminData.email,
+                adminData.password
+            );
+            
+            const user = userCredential.user;
+            
+            // Create user document
+            const userDoc = {
+                email: adminData.email,
+                name: adminData.name || 'System Administrator',
+                role: 'admin',
+                createdAt: new Date().toISOString(),
+                isActive: true,
+                hasTemporaryPassword: false,
+                loginCount: 0,
+                passwordChanged: true,
+                lastLogin: null,
+                isAdmin: true
+            };
+            
+            await firebaseDb.collection('users').doc(user.uid).set(userDoc);
+            
+            // Create admin_users document
+            const adminDoc = {
+                email: adminData.email,
+                name: adminData.name || 'System Administrator',
+                role: 'super_admin',
+                created_at: new Date().toISOString(),
+                last_login: null,
+                is_active: true
+            };
+            
+            await firebaseDb.collection('admin_users').doc(user.uid).set(adminDoc);
+            
+            console.log('✅ Admin account created successfully:', adminData.email);
+            
+            // Sign out admin (since we're probably running as landlord)
+            await firebaseAuth.signOut();
+            
+            return {
+                success: true,
+                email: adminData.email,
+                userId: user.uid
+            };
+            
+        } catch (error) {
+            console.error('❌ Error creating admin account:', error);
+            throw error;
         }
     }
 }

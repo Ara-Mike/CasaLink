@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CasaLink Admin - User Management</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <link rel="stylesheet" href="../css/admin.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <style>
+        .user-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .user-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .user-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .user-stat {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .user-stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: #1A73E8;
+        }
+        
+        .user-stat-label {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .role-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .role-landlord { background: #e0e7ff; color: #1A73E8; }
+        .role-tenant { background: #d1fae5; color: #10b981; }
+        .role-admin { background: #fef3c7; color: #d97706; }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-active { background: #d1fae5; color: #10b981; }
+        .status-inactive { background: #fee2e2; color: #dc2626; }
+        .status-pending { background: #fef3c7; color: #d97706; }
+        
+        .action-buttons {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .btn-icon {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .user-detail-modal {
+            max-width: 600px;
+        }
+        
+        .user-detail-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .user-detail-section h4 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .detail-row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        
+        .detail-label {
+            width: 120px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .detail-value {
+            flex: 1;
+            color: #333;
+        }
+    </style>
+</head>
+<body class="admin-dashboard">
+    <!-- Admin Navigation -->
+    <nav class="admin-nav">
+        <div class="nav-header">
+            <h2>CasaLink Admin</h2>
+            <p>Platform Management</p>
+        </div>
+        
+        <ul class="nav-menu">
+            <li><a href="dashboard.html">Dashboard</a></li>
+            <li class="active"><a href="users.html">User Management</a></li>
+            <li><a href="analytics.html">Analytics</a></li>
+            <li><a href="support.html">Support Tickets</a></li>
+            <li><a href="settings.html">Settings</a></li>
+        </ul>
+        
+        <div class="nav-footer">
+            <div class="admin-profile">
+                <span id="adminName">Loading...</span>
+                <button id="adminLogout" class="btn btn-sm btn-outline">Logout</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="admin-content">
+        <header class="admin-header">
+            <h1>User Management</h1>
+            <div class="header-actions">
+                <button id="exportUsers" class="btn btn-sm btn-outline">
+                    <i class="fas fa-download"></i> Export
+                </button>
+                <button id="refreshUsers" class="btn btn-sm">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- User Stats -->
+        <div class="user-stats">
+            <div class="user-stat">
+                <div class="user-stat-value" id="totalUsers">0</div>
+                <div class="user-stat-label">Total Users</div>
+            </div>
+            <div class="user-stat">
+                <div class="user-stat-value" id="landlordCount">0</div>
+                <div class="user-stat-label">Landlords</div>
+            </div>
+            <div class="user-stat">
+                <div class="user-stat-value" id="tenantCount">0</div>
+                <div class="user-stat-label">Tenants</div>
+            </div>
+            <div class="user-stat">
+                <div class="user-stat-value" id="adminCount">0</div>
+                <div class="user-stat-label">Admins</div>
+            </div>
+            <div class="user-stat">
+                <div class="user-stat-value" id="activeUsers">0</div>
+                <div class="user-stat-label">Active Users</div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="user-filters">
+            <div class="filter-group">
+                <label for="searchUsers">Search</label>
+                <input type="text" id="searchUsers" placeholder="Search by name or email...">
+            </div>
+            
+            <div class="filter-group">
+                <label for="filterRole">Role</label>
+                <select id="filterRole">
+                    <option value="all">All Roles</option>
+                    <option value="landlord">Landlords</option>
+                    <option value="tenant">Tenants</option>
+                    <option value="admin">Admins</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="filterStatus">Status</label>
+                <select id="filterStatus">
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="pending">Pending</option>
+                </select>
+            </div>
+            
+            <div class="filter-group">
+                <label for="sortBy">Sort By</label>
+                <select id="sortBy">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="name">Name A-Z</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- User Actions -->
+        <div class="user-actions">
+            <button id="addUserBtn" class="btn btn-primary">
+                <i class="fas fa-user-plus"></i> Add User
+            </button>
+            <button id="bulkActions" class="btn btn-outline">
+                <i class="fas fa-cog"></i> Bulk Actions
+            </button>
+        </div>
+
+        <!-- Users Table -->
+        <div class="card">
+            <div class="card-header">
+                <h3>All Users</h3>
+                <div class="pagination-info" id="paginationInfo">
+                    Showing 0 of 0 users
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-container">
+                    <table class="data-table" id="usersTable">
+                        <thead>
+                            <tr>
+                                <th width="50">
+                                    <input type="checkbox" id="selectAll">
+                                </th>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Joined</th>
+                                <th>Properties</th>
+                                <th>Last Login</th>
+                                <th width="120">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr>
+                                <td colspan="9" class="text-center">
+                                    <div class="loading-text">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading users...
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Pagination -->
+                <div class="pagination" id="pagination">
+                    <button class="btn btn-sm btn-outline" disabled>
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </button>
+                    <span class="page-info">Page 1 of 1</span>
+                    <button class="btn btn-sm btn-outline" disabled>
+                        Next <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- User Detail Modal -->
+    <div class="modal" id="userDetailModal" style="display: none;">
+        <div class="modal-content user-detail-modal">
+            <div class="modal-header">
+                <h3 id="modalUserTitle">User Details</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body" id="userDetailContent">
+                <!-- Content will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="ModalManager.closeModal('userDetailModal')">
+                    Close
+                </button>
+                <button class="btn btn-primary" id="editUserBtn">
+                    <i class="fas fa-edit"></i> Edit User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit User Modal -->
+    <div class="modal" id="userFormModal" style="display: none;">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 id="userFormTitle">Add New User</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <div class="form-group">
+                        <label for="userName">Full Name *</label>
+                        <input type="text" id="userName" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userEmail">Email Address *</label>
+                        <input type="email" id="userEmail" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userRole">User Role *</label>
+                        <select id="userRole" required>
+                            <option value="landlord">Landlord</option>
+                            <option value="tenant">Tenant</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userStatus">Account Status</label>
+                        <select id="userStatus">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                            <option value="pending">Pending Verification</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="userPassword">Password</label>
+                        <input type="password" id="userPassword" 
+                               placeholder="Leave blank to generate auto password">
+                        <small class="form-text">Minimum 8 characters</small>
+                    </div>
+                    
+                    <div id="tenantFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="tenantLandlord">Assigned Landlord</label>
+                            <select id="tenantLandlord">
+                                <option value="">Select Landlord</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="tenantProperty">Property/Room</label>
+                            <input type="text" id="tenantProperty" placeholder="e.g., Unit 101">
+                        </div>
+                    </div>
+                    
+                    <div id="landlordFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="landlordProperties">Properties Count</label>
+                            <input type="number" id="landlordProperties" min="0" value="0">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="ModalManager.closeModal('userFormModal')">
+                    Cancel
+                </button>
+                <button type="submit" form="userForm" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save User
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal" id="confirmModal" style="display: none;">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 id="confirmTitle">Confirm Action</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Are you sure you want to perform this action?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="ModalManager.closeModal('confirmModal')">
+                    Cancel
+                </button>
+                <button class="btn btn-primary" id="confirmActionBtn">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Load Firebase config
+        window.firebaseConfig = {
+            apiKey: "AIzaSyC-FvYHTes2lAU3AkMJ6kGIEk4HjioP_HQ",
+            authDomain: "casalink-246fd.firebaseapp.com",
+            projectId: "casalink-246fd",
+            storageBucket: "casalink-246fd.firebasestorage.app",
+            messagingSenderId: "1089375490593",
+            appId: "1:1089375490593:web:a26cc91e15877b04bb0960"
+        };
+    </script>
+    
+    <script src="../js/admin/adminAuth.js"></script>
+    <script src="../js/admin/adminUsers.js"></script>
+    
+    <script>
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('User Management page loaded');
+            
+            // Update admin name
+            if (window.adminAuthInstance) {
+                const admin = adminAuthInstance.getCurrentAdmin();
+                if (admin) {
+                    document.getElementById('adminName').textContent = 
+                        admin.name || admin.email.split('@')[0];
+                }
+            }
+            
+            // Logout button
+            document.getElementById('adminLogout').addEventListener('click', function() {
+                if (window.adminAuthInstance) {
+                    adminAuthInstance.logout();
+                } else {
+                    localStorage.removeItem('admin_session');
+                    window.location.href = 'index.html';
+                }
+            });
+            
+            // Role field toggle
+            document.getElementById('userRole').addEventListener('change', function() {
+                const role = this.value;
+                document.getElementById('tenantFields').style.display = 
+                    role === 'tenant' ? 'block' : 'none';
+                document.getElementById('landlordFields').style.display = 
+                    role === 'landlord' ? 'block' : 'none';
+            });
+            
+            // Modal close handlers
+            document.querySelectorAll('.modal-close').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const modal = this.closest('.modal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
+                });
+            });
+            
+            // Close modal on outside click
+            window.addEventListener('click', function(e) {
+                if (e.target.classList.contains('modal')) {
+                    e.target.style.display = 'none';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
