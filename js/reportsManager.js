@@ -11,6 +11,20 @@ class ReportsManager {
         return this;
     }
 
+    async getPredictiveData() {
+        const [revenueForecast, occupancyTrend, maintenanceCosts] = await Promise.all([
+            this.predictiveAnalytics.predictRevenueForecast(6),
+            this.predictiveAnalytics.predictOccupancyTrend(6),
+            this.predictiveAnalytics.predictMaintenanceCosts(6)
+        ]);
+       
+        return {
+            revenueForecast,
+            occupancyTrend,
+            maintenanceCosts
+        };
+    }
+
     // Financial Reports
     async getFinancialReports(period = 'last6months') {
         console.log('💰 Generating financial reports for:', period);

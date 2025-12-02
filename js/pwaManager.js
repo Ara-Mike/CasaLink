@@ -1,10 +1,20 @@
-// js/pwaManager.js - FIXED VERSION
+// js/pwaManager.js - COMPLETE FIXED VERSION
 class PWAManager {
     static deferredPrompt = null;
     static isInstalled = false;
+    static isAdminPage = false;
 
     static init() {
         console.log('🚀 PWA Manager initializing...');
+        
+        // Check if we're on an admin page FIRST
+        this.detectAdminPage();
+        
+        // Skip PWA features on admin pages
+        if (this.isAdminPage) {
+            console.log('🔒 PWA features disabled on admin pages');
+            return;
+        }
         
         this.setupInstallPrompt();
         this.setupOfflineDetection();
@@ -19,10 +29,51 @@ class PWAManager {
         }, 3000);
     }
 
+    static detectAdminPage() {
+        // Check if we're on an admin page
+        const path = window.location.pathname || '';
+        this.isAdminPage = path.includes('/admin/') || 
+                          path.includes('/admin/') ||
+                          path.endsWith('/admin') ||
+                          path.includes('admin_');
+        
+        if (this.isAdminPage) {
+            console.log('🔐 Admin page detected - PWA features disabled');
+            
+            // Also unregister any existing service workers that might control admin pages
+            this.unregisterServiceWorkersForAdminPages();
+        }
+    }
+
+    static async unregisterServiceWorkersForAdminPages() {
+        if ('serviceWorker' in navigator) {
+            try {
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                for (let registration of registrations) {
+                    // If service worker is controlling admin pages, unregister it
+                    if (registration.active && 
+                        (registration.scope.includes('/admin/') || 
+                         registration.active.scriptURL.includes('/admin/'))) {
+                        console.log('🗑️ Unregistering service worker for admin page:', registration.scope);
+                        await registration.unregister();
+                    }
+                }
+            } catch (error) {
+                console.warn('Error unregistering service workers:', error);
+            }
+        }
+    }
+
     static setupInstallPrompt() {
         console.log('🔧 Setting up install prompt listeners...');
         
         window.addEventListener('beforeinstallprompt', (e) => {
+            // Skip on admin pages
+            if (this.isAdminPage) {
+                console.log('🔒 Skipping install prompt on admin page');
+                return;
+            }
+            
             console.log('🎯 beforeinstallprompt EVENT FIRED!', {
                 platforms: e.platforms,
                 canInstall: true
@@ -54,13 +105,16 @@ class PWAManager {
         });
         
         // Check if we already have install capability from previous page load
-        if (sessionStorage.getItem('pwa_install_available') === 'true') {
+        if (sessionStorage.getItem('pwa_install_available') === 'true' && !this.isAdminPage) {
             console.log('🔄 Install capability persisted from previous page load');
             this.updateInstallUI(true);
         }
     }
 
     static async showInstallPromptIfEligible() {
+        // Skip on admin pages
+        if (this.isAdminPage) return;
+        
         // Wait a bit for the service worker to be ready
         await new Promise(resolve => setTimeout(resolve, 2000));
         
@@ -70,45 +124,44 @@ class PWAManager {
         }
     }
 
-    static async showInstallPromptIfEligible() {
-        if (this.deferredPrompt && !this.isInstalled && !this.userDismissedPrompt()) {
-            console.log('🎯 Showing install prompt automatically');
-            this.showPersistentInstallPromotion();
+    static async installPWA() {
+        // Skip on admin pages
+        if (this.isAdminPage) {
+            console.log('🔒 PWA installation disabled on admin pages');
+            return;
+        }
+        
+        console.log('🔄 Install PWA method called');
+        
+        if (this.deferredPrompt) {
+            try {
+                console.log('🎯 Showing browser install prompt...');
+                
+                // This is the critical line that was missing
+                await this.deferredPrompt.prompt();
+                
+                const choiceResult = await this.deferredPrompt.userChoice;
+                console.log(`✅ User response: ${choiceResult.outcome}`);
+                
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('🎉 User accepted PWA installation');
+                    this.handleSuccessfulInstallation();
+                } else {
+                    console.log('❌ User dismissed PWA installation');
+                    this.setPromptDismissed();
+                }
+                
+                this.deferredPrompt = null;
+                
+            } catch (error) {
+                console.error('❌ Error showing install prompt:', error);
+                this.showManualInstallInstructions();
+            }
+        } else {
+            console.log('📋 No install prompt available');
+            this.showManualInstallInstructions();
         }
     }
-
-    static async installPWA() {
-      console.log('🔄 Install PWA method called');
-      
-      if (this.deferredPrompt) {
-          try {
-              console.log('🎯 Showing browser install prompt...');
-              
-              // 🆕 THIS IS THE CRITICAL LINE THAT WAS MISSING
-              await this.deferredPrompt.prompt();
-              
-              const choiceResult = await this.deferredPrompt.userChoice;
-              console.log(`✅ User response: ${choiceResult.outcome}`);
-              
-              if (choiceResult.outcome === 'accepted') {
-                  console.log('🎉 User accepted PWA installation');
-                  this.handleSuccessfulInstallation();
-              } else {
-                  console.log('❌ User dismissed PWA installation');
-                  this.setPromptDismissed();
-              }
-              
-              this.deferredPrompt = null;
-              
-          } catch (error) {
-              console.error('❌ Error showing install prompt:', error);
-              this.showManualInstallInstructions();
-          }
-      } else {
-          console.log('📋 No install prompt available');
-          this.showManualInstallInstructions();
-      }
-  }
 
     static handleSuccessfulInstallation() {
         this.deferredPrompt = null;
@@ -122,6 +175,9 @@ class PWAManager {
     }
 
     static showPersistentInstallPromotion() {
+        // Skip on admin pages
+        if (this.isAdminPage) return;
+        
         if (this.isInstalled || this.userDismissedPrompt() || !this.deferredPrompt) {
             return;
         }
@@ -167,6 +223,9 @@ class PWAManager {
     }
 
     static checkPWAStatus() {
+        // Skip on admin pages
+        if (this.isAdminPage) return false;
+        
         const isInstalled = 
             window.matchMedia('(display-mode: standalone)').matches ||
             window.navigator.standalone ||
@@ -188,31 +247,36 @@ class PWAManager {
     }
 
     static setupUserEngagement() {
-      let userEngaged = false;
-      
-      const engagementEvents = ['click', 'keydown', 'scroll', 'mousemove'];
-      
-      engagementEvents.forEach(eventType => {
-          document.addEventListener(eventType, () => {
-              if (!userEngaged) {
-                  userEngaged = true;
-                  console.log('✅ User engagement detected');
-                  // Now we can show install prompt
-                  setTimeout(() => {
-                      this.showInstallPromptIfEligible();
-                  }, 1000);
-              }
-          }, { once: false, passive: true });
-      });
+        // Skip on admin pages
+        if (this.isAdminPage) return;
+        
+        let userEngaged = false;
+        
+        const engagementEvents = ['click', 'keydown', 'scroll', 'mousemove'];
+        
+        engagementEvents.forEach(eventType => {
+            document.addEventListener(eventType, () => {
+                if (!userEngaged) {
+                    userEngaged = true;
+                    console.log('✅ User engagement detected');
+                    // Now we can show install prompt
+                    setTimeout(() => {
+                        this.showInstallPromptIfEligible();
+                    }, 1000);
+                }
+            }, { once: false, passive: true });
+        });
     }
 
     static setupServiceWorkerListeners() {
+        // Skip on admin pages
+        if (this.isAdminPage) return;
+        
         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 console.log('🔄 Service Worker controller changed');
             });
             
-            // FIX: Add null check for service worker state access
             navigator.serviceWorker.ready.then((registration) => {
                 if (registration && registration.active) {
                     console.log('✅ Service Worker ready and active');
@@ -226,71 +290,69 @@ class PWAManager {
     }
 
     static async registerServiceWorker() {
+        // CRITICAL: Skip service worker on admin pages to avoid scope/control / reload loops
+        try {
+            const path = window.location.pathname || '';
+            if (path.includes('/admin') || 
+                path.endsWith('/admin/') || 
+                path.endsWith('/admin/index.html') || 
+                path.includes('/admin/')) {
+                console.log('🔒 Skipping Service Worker registration on admin pages for stability');
+                return null;
+            }
+        } catch (e) {
+            // if any error reading location, continue to register (safe fallback)
+            console.warn('Could not determine pathname for SW guard, proceeding', e);
+        }
+
         if ('serviceWorker' in navigator) {
             try {
                 console.log('🔄 Registering Service Worker...');
-                
-                // Only unregister if there are issues
+
+                // Only unregister if there are issues (keep existing logic)
                 const registrations = await navigator.serviceWorker.getRegistrations();
                 let shouldUnregister = false;
-                
+
                 for (let registration of registrations) {
-                    // Only unregister if it's not our current service worker
+                    // Only unregister if it's clearly not our intended scope
                     if (!registration.active || registration.scope !== window.location.origin + '/') {
-                        await registration.unregister();
-                        console.log('🗑️ Unregistered old service worker:', registration.scope);
-                        shouldUnregister = true;
+                        try {
+                            await registration.unregister();
+                            console.log('🗑️ Unregistered old service worker:', registration.scope);
+                            shouldUnregister = true;
+                        } catch (err) {
+                            console.warn('Could not unregister service worker:', registration.scope, err);
+                        }
                     }
                 }
-                
-                // Wait briefly if we unregistered anything
+
                 if (shouldUnregister) {
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
-                
-                // Register the service worker
+
                 const registration = await navigator.serviceWorker.register('/sw.js', {
                     scope: '/',
                     updateViaCache: 'none'
                 });
-                
+
                 console.log('✅ ServiceWorker registered:', registration.scope);
-                
-                // FIX: Add null checks for service worker state tracking
+
+                // Track installation state safely
                 if (registration.installing) {
                     await new Promise((resolve, reject) => {
                         const worker = registration.installing;
-                        if (!worker) {
-                            resolve();
-                            return;
-                        }
-                        
+                        if (!worker) return resolve();
                         worker.addEventListener('statechange', () => {
                             console.log('🔧 Service Worker state:', worker.state);
-                            if (worker.state === 'activated') {
-                                console.log('🎯 Service Worker activated!');
-                                resolve();
-                            } else if (worker.state === 'redundant') {
-                                console.warn('⚠️ Service Worker became redundant');
-                                reject(new Error('Service Worker redundant'));
-                            }
+                            if (worker.state === 'activated') resolve();
+                            if (worker.state === 'redundant') reject(new Error('Service Worker redundant'));
                         });
-                        
-                        // Safety timeout
-                        setTimeout(() => {
-                            if (worker.state !== 'activated') {
-                                console.warn('⏰ Service Worker activation timeout');
-                                resolve(); // Resolve anyway to prevent blocking
-                            }
-                        }, 10000);
-                    });
+                        setTimeout(() => resolve(), 10000);
+                    }).catch(err => console.warn('SW installing promise rejected:', err));
                 } else if (registration.active) {
                     console.log('✅ Service Worker already active');
-                } else if (registration.waiting) {
-                    console.log('⏳ Service Worker waiting');
                 }
-                
-                // FIX: Add global error handler for service worker events
+
                 registration.addEventListener('updatefound', () => {
                     const newWorker = registration.installing;
                     if (newWorker) {
@@ -299,9 +361,8 @@ class PWAManager {
                         });
                     }
                 });
-                
+
                 return registration;
-                
             } catch (error) {
                 console.error('❌ ServiceWorker registration failed:', error);
                 return null;
@@ -312,6 +373,9 @@ class PWAManager {
     }
 
     static setupOfflineDetection() {
+        // Skip on admin pages
+        if (this.isAdminPage) return;
+        
         window.addEventListener('online', () => {
             this.updateOnlineStatus(true);
         });
@@ -331,6 +395,9 @@ class PWAManager {
     }
 
     static updateInstallUI(show) {
+        // Skip on admin pages
+        if (this.isAdminPage) return;
+        
         const prompt = document.getElementById('pwaPrompt');
         if (prompt) {
             prompt.style.display = show ? 'block' : 'none';
@@ -338,6 +405,12 @@ class PWAManager {
     }
 
     static showManualInstallInstructions() {
+        // Skip on admin pages
+        if (this.isAdminPage) {
+            console.log('🔒 Manual install instructions disabled on admin pages');
+            return;
+        }
+        
         const modalContent = `
             <div style="text-align: center; padding: 20px;">
                 <i class="fas fa-download" style="font-size: 3rem; color: var(--primary-blue); margin-bottom: 15px;"></i>
@@ -360,16 +433,21 @@ class PWAManager {
             </div>
         `;
         
-        ModalManager.openModal(modalContent, {
-            title: 'Install CasaLink App',
-            submitText: 'Close',
-            showFooter: true
-        });
+        if (window.ModalManager) {
+            ModalManager.openModal(modalContent, {
+                title: 'Install CasaLink App',
+                submitText: 'Close',
+                showFooter: true
+            });
+        } else {
+            alert('Install CasaLink: Look for the install icon in your browser\'s address bar or menu.');
+        }
     }
 
     // Debug methods
     static debugInstallPrompt() {
         console.log('🐛 PWA Debug Info:', {
+            isAdminPage: this.isAdminPage,
             deferredPrompt: !!this.deferredPrompt,
             isInstalled: this.isInstalled,
             userDismissed: this.userDismissedPrompt(),

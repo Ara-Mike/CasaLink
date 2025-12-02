@@ -1,4 +1,4 @@
-// js/admin/adminAuth.js - IMPROVED VERSION
+// js/admin/adminAuth.js - IMPROVED VERSION WITH FIXES
 console.log('AdminAuth loading...');
 
 // Prevent duplicate loading
@@ -17,6 +17,16 @@ if (window.AdminAuthClass) {
             this.dbInitialized = false;
             this.authStateUnsubscribe = null;
             this.redirectTimeout = null;
+            
+            // CRITICAL: Check if we're on login page
+            this.isLoginPage = window.location.pathname.includes('index.html') || 
+                               window.location.pathname.endsWith('/admin/');
+            
+            // CRITICAL: Set flag to prevent auto-redirect on login page
+            if (this.isLoginPage) {
+                sessionStorage.setItem('disable_auto_redirect', 'true');
+                console.log('🔐 Login page detected - disabling auto-redirects');
+            }
             
             // Initialize immediately
             this.safeInit();
@@ -39,11 +49,19 @@ if (window.AdminAuthClass) {
             
             // Check for logout/cleanup parameters
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('logout') || urlParams.has('cleanup')) {
-                console.log('Logout detected, doing cleanup but still initializing');
-                // Clear storage but continue with init
+            const hasLogoutParam = urlParams.has('logout') || urlParams.has('cleanup');
+            
+            if (hasLogoutParam) {
+                console.log('Logout detected, performing cleanup...');
                 localStorage.removeItem('admin_session');
                 sessionStorage.clear();
+                
+                // CRITICAL: Clear logout params from URL
+                urlParams.delete('logout');
+                urlParams.delete('cleanup');
+                const cleanUrl = window.location.pathname + 
+                    (urlParams.toString() ? '?' + urlParams.toString() : '');
+                window.history.replaceState({}, document.title, cleanUrl);
             }
             
             try {
@@ -90,16 +108,18 @@ if (window.AdminAuthClass) {
                     
                     this.isInitialized = true;
                     
-                    // Setup login form
+                    // CRITICAL: Setup login form BEFORE auth listener
                     this.setupLoginForm();
                     
-                    // Setup auth state listener (but only if not on login page with logout param)
-                    if (!urlParams.has('logout')) {
+                    // CRITICAL: Only setup auth listener if NOT on login page with logout param
+                    if (!this.isLoginPage || !hasLogoutParam) {
                         this.setupAuthStateListener();
                     }
                     
-                    // Check for existing session
-                    this.checkExistingSession();
+                    // CRITICAL: Only check existing session if not on login page
+                    if (!this.isLoginPage) {
+                        this.checkExistingSession();
+                    }
                     
                 } catch (firebaseError) {
                     console.error('Firebase initialization error:', firebaseError);
@@ -249,6 +269,9 @@ if (window.AdminAuthClass) {
                     }
                 }
                 
+                // CRITICAL: Remove auto-redirect blocker before login
+                sessionStorage.removeItem('disable_auto_redirect');
+                
                 // Sign in with Firebase
                 const userCredential = await this.adminAuth.signInWithEmailAndPassword(email, password);
                 const user = userCredential.user;
@@ -264,12 +287,20 @@ if (window.AdminAuthClass) {
                 // Clear login form
                 e.target.reset();
                 
+                // CRITICAL: Wait a moment before redirecting
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
                 // Redirect to dashboard
                 console.log('✅ Login successful, redirecting...');
                 window.location.href = 'dashboard.html';
                 
             } catch (error) {
                 console.error('❌ Admin login error:', error);
+                
+                // CRITICAL: Re-enable auto-redirect blocker on login failure
+                if (this.isLoginPage) {
+                    sessionStorage.setItem('disable_auto_redirect', 'true');
+                }
                 
                 // Handle specific Firebase errors
                 if (error.code === 'auth/network-request-failed') {
@@ -410,24 +441,18 @@ if (window.AdminAuthClass) {
                 const isRecent = Date.now() - sessionData.timestamp < (24 * 60 * 60 * 1000);
                 
                 if (isRecent && this.adminAuth) {
-                    // Check if we're on login page
-                    const isLoginPage = window.location.pathname.includes('index.html');
-                    const hasLogoutParam = window.location.search.includes('logout');
-                    
-                    // If on login page and not logging out, auto-redirect
-                    if (isLoginPage && !hasLogoutParam) {
-                        console.log('Existing session found, checking auth state...');
-                        
-                        // Listen for auth state to confirm
-                        this.adminAuth.onAuthStateChanged((user) => {
-                            if (user && this.isInitialized) {
-                                console.log('User already authenticated, redirecting...');
-                                setTimeout(() => {
-                                    window.location.href = 'dashboard.html';
-                                }, 500);
-                            }
-                        });
+                    // If on login page, DON'T auto-redirect - let user click login
+                    if (this.isLoginPage) {
+                        console.log('Existing session found on login page - NOT auto-redirecting');
+                        return;
                     }
+                    
+                    // For non-login pages, check auth state
+                    this.adminAuth.onAuthStateChanged((user) => {
+                        if (user && this.isInitialized) {
+                            console.log('User already authenticated on protected page');
+                        }
+                    });
                 } else if (!isRecent) {
                     // Session expired
                     localStorage.removeItem('admin_session');
@@ -442,8 +467,19 @@ if (window.AdminAuthClass) {
         setupAuthStateListener() {
             if (!this.adminAuth) return;
             
+            // CRITICAL: Clear any existing listener
+            if (this.authStateUnsubscribe) {
+                this.authStateUnsubscribe();
+            }
+            
             this.authStateUnsubscribe = this.adminAuth.onAuthStateChanged(async (user) => {
-                console.log('Auth state changed:', user ? 'User present' : 'No user');
+                console.log('🔐 Auth state changed:', user ? 'User present' : 'No user');
+                
+                // CRITICAL: Check if auto-redirect is disabled (for login page)
+                if (sessionStorage.getItem('disable_auto_redirect') === 'true' && this.isLoginPage) {
+                    console.log('🔐 Auto-redirect disabled on login page');
+                    return;
+                }
                 
                 if (user) {
                     // User is signed in
@@ -472,21 +508,28 @@ if (window.AdminAuthClass) {
                         
                         console.log('✅ Admin auto-authenticated:', this.currentAdmin.email);
                         
-                        // If on login page, redirect to dashboard
-                        const isLoginPage = window.location.pathname.includes('index.html');
+                        // CRITICAL: Only redirect if NOT on login page OR if login was just completed
+                        const isLoginPage = this.isLoginPage;
                         const hasLogoutParam = window.location.search.includes('logout');
                         
-                        if (isLoginPage && !hasLogoutParam) {
-                            console.log('Redirecting from login page to dashboard...');
-                            setTimeout(() => {
-                                window.location.href = 'dashboard.html';
-                            }, 1000);
+                        if (!isLoginPage || hasLogoutParam) {
+                            // Already on dashboard or other protected page
+                            console.log('Already on protected page, no redirect needed');
+                        } else {
+                            // On login page with authenticated user - wait for manual login
+                            console.log('On login page with authenticated user - waiting for manual login');
                         }
                     } else {
                         // Not an admin, sign out
                         console.log('User is not an admin, signing out...');
                         await this.adminAuth.signOut();
                         localStorage.removeItem('admin_session');
+                        
+                        // CRITICAL: If on login page, show message
+                        if (this.isLoginPage) {
+                            this.showError(document.getElementById('adminLoginError'), 
+                                'Not an administrator. Please use admin credentials.');
+                        }
                     }
                 }
             } catch (error) {
@@ -506,6 +549,9 @@ if (window.AdminAuthClass) {
             if (isProtectedPage) {
                 console.log('User signed out on protected page, redirecting...');
                 localStorage.removeItem('admin_session');
+                
+                // CRITICAL: Clear any auto-redirect blocker
+                sessionStorage.removeItem('disable_auto_redirect');
                 
                 setTimeout(() => {
                     window.location.href = 'index.html?session_expired=true';
@@ -553,8 +599,8 @@ if (window.AdminAuthClass) {
             try {
                 console.log('🔄 Starting logout process...');
                 
-                // Set logout flag
-                sessionStorage.setItem('admin_logout', 'true');
+                // CRITICAL: Set flag to prevent auto-redirect on next login page load
+                sessionStorage.setItem('disable_auto_redirect', 'true');
                 
                 // Clear storage first
                 localStorage.removeItem('admin_session');
@@ -569,10 +615,13 @@ if (window.AdminAuthClass) {
                 this.currentAdmin = null;
                 this.isAdmin = false;
                 
-                // Don't delete the Firebase app - just clear the reference
-                // This prevents issues when logging back in
-                
                 console.log('✅ Logout complete');
+                
+                // CRITICAL: Clear any pending timeouts
+                if (this.redirectTimeout) {
+                    clearTimeout(this.redirectTimeout);
+                    this.redirectTimeout = null;
+                }
                 
                 // Redirect to login page with logout parameter
                 window.location.href = 'index.html?logout=true&t=' + Date.now();

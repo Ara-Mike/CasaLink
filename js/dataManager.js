@@ -58,20 +58,12 @@ class DataManager {
         }
     }
 
-    async getLease() {
-        if (!this.user) throw new Error('User not authenticated');
-        
+    static async getLease(leaseId) {
+        if (!leaseId) throw new Error('Missing leaseId');
         try {
-            console.log('🔍 Fetching lease:', leaseId);
-            const doc = await this.db.collection('leases').doc(leaseId).get();
-            
-            if (!doc.exists) {
-                throw new Error('Lease not found');
-            }
-            
-            const leaseData = doc.data();
-            console.log('✅ Lease data found:', leaseData);
-            return leaseData;
+            const doc = await firebaseDb.collection('leases').doc(leaseId).get();
+            if (!doc.exists) return null;
+            return { id: doc.id, ...doc.data() };
         } catch (error) {
             console.error('❌ Error getting lease:', error);
             throw error;

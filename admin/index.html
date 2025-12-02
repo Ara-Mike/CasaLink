@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CasaLink - Admin Login</title>
-    <!-- Add cache control headers to prevent redirect loops -->
+    <!-- Cache control headers (reduced to just one) -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    
     
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/admin.css">
@@ -147,6 +144,12 @@
                 
                 <div class="login-footer">
                     <a href="../index.html">← Back to Main Site</a>
+                    <br>
+                    <small style="color: #666; margin-top: 10px; display: block;">
+                        <a href="javascript:clearAllStorage()" style="color: #dc2626;">
+                            <i class="fas fa-trash-alt"></i> Clear all storage
+                        </a>
+                    </small>
                 </div>
             </form>
             
@@ -174,62 +177,45 @@
     <script src="../js/admin/adminAuth.js"></script>
     
     <script>
-        // Add the force logout function
+        // Add the force logout function - FIXED VERSION
         function forceLogout() {
             console.log('🔴 Force logout initiated');
             
             // Show protection overlay
             showLogoutProtection();
             
-            // Set a flag to prevent auto-login
-            sessionStorage.setItem('force_logout', 'true');
-            localStorage.setItem('logout_timestamp', Date.now().toString());
+            try {
+                // Set a short-lived cookie flag to prevent redirect loops
+                document.cookie = 'casalink_redirected=1; max-age=5; path=/'; // Only 5 seconds
+            } catch (e) {
+                console.warn('Could not set cookie flag', e);
+            }
             
-            // Clear all storage
+            // Clear storages
             localStorage.clear();
             sessionStorage.clear();
             
-            // Clear all Firebase instances
-            if (typeof firebase !== 'undefined' && firebase.apps) {
-                try {
-                    const apps = firebase.apps;
-                    apps.forEach(app => {
-                        try {
-                            app.delete();
-                            console.log('Deleted Firebase app');
-                        } catch (e) {
-                            console.log('Could not delete app:', e.message);
-                        }
-                    });
-                } catch (e) {
-                    console.log('Firebase cleanup error:', e.message);
+            // Clear cookies except our guard cookie
+            document.cookie.split(";").forEach(function(c) {
+                const name = c.split('=')[0].trim();
+                if (name && name !== 'casalink_redirected') {
+                    document.cookie = name + "=;expires=" + new Date(0).toUTCString() + ";path=/";
                 }
-            }
+            });
             
-            // Delete any adminAuth instance
-            if (window.adminAuthInstance) {
-                try {
-                    if (window.adminAuthInstance.authStateUnsubscribe) {
-                        window.adminAuthInstance.authStateUnsubscribe();
-                    }
-                    delete window.adminAuthInstance;
-                    console.log('Admin auth instance removed');
-                } catch (e) {
-                    console.log('Error removing auth instance:', e.message);
-                }
+            // Check if we already have the cookie to prevent multiple redirects
+            if (document.cookie.includes('casalink_redirected=1')) {
+                console.log('✅ Redirect guard present, performing single redirect');
+                setTimeout(() => {
+                    window.location.replace('index.html?force_logout=true&t=' + Date.now());
+                }, 300);
+            } else {
+                // Set cookie and redirect
+                document.cookie = 'casalink_redirected=1; max-age=5; path=/';
+                setTimeout(() => {
+                    window.location.replace('index.html?force_logout=true&t=' + Date.now());
+                }, 300);
             }
-            
-            // Clear all timeouts and intervals
-            const maxId = setTimeout(() => {}, 0);
-            for (let i = 0; i < maxId; i++) {
-                clearTimeout(i);
-                clearInterval(i);
-            }
-            
-            // Force redirect with cache busting
-            setTimeout(() => {
-                window.location.replace('index.html?force_logout=true&t=' + Date.now());
-            }, 500);
         }
         
         function showLogoutProtection() {
@@ -243,18 +229,29 @@
         function forceCleanup() {
             console.log('Force cleanup initiated');
             
-            // Clear everything
+            // Set short-lived cookie to prevent reload loop
+            try {
+                document.cookie = 'casalink_redirected=1; max-age=5; path=/';
+            } catch (e) {
+                console.warn('Could not set cookie flag', e);
+            }
+            
+            // Clear storage
             localStorage.clear();
             sessionStorage.clear();
             
-            // Clear cookies
+            // Clear cookies (do NOT remove casalink_redirected)
             document.cookie.split(";").forEach(function(c) {
-                document.cookie = c.replace(/^ +/, "")
-                    .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                const name = c.split('=')[0].trim();
+                if (name && name !== 'casalink_redirected') {
+                    document.cookie = name + "=;expires=" + new Date(0).toUTCString() + ";path=/";
+                }
             });
             
-            // Redirect
-            window.location.replace('index.html?cleanup=true&t=' + Date.now());
+            // Redirect once
+            setTimeout(() => {
+                window.location.replace('index.html?cleanup=true&t=' + Date.now());
+            }, 300);
         }
         
         function refreshPage() {
@@ -265,12 +262,21 @@
             if (confirm('Clear all browser storage? This will log you out from all sessions.')) {
                 localStorage.clear();
                 sessionStorage.clear();
+                
+                // Clear all cookies
+                document.cookie.split(";").forEach(function(c) {
+                    const name = c.split('=')[0].trim();
+                    document.cookie = name + "=;expires=" + new Date(0).toUTCString() + ";path=/";
+                });
+                
                 alert('Storage cleared. Refreshing page...');
-                window.location.reload();
+                setTimeout(() => {
+                    window.location.reload();
+                }, 300);
             }
         }
         
-        // Main initialization
+        // Main initialization - SIMPLIFIED
         (function() {
             console.log('🔐 Admin login page loading...');
             
@@ -279,13 +285,11 @@
             if (urlParams.has('force_logout') || urlParams.has('cleanup')) {
                 console.log('Force logout/cleanup detected');
                 
-                // Clear everything
+                // Clear storage
                 localStorage.clear();
                 sessionStorage.clear();
                 
                 // Clean URL
-                urlParams.delete('force_logout');
-                urlParams.delete('cleanup');
                 const cleanUrl = window.location.pathname;
                 window.history.replaceState({}, document.title, cleanUrl);
                 
@@ -298,9 +302,6 @@
                     statusDiv.style.background = '#d1fae5';
                     statusDiv.style.borderLeft = '3px solid #10b981';
                 }
-                
-                // Prevent Firebase initialization
-                window.preventFirebaseInit = true;
             }
             
             // Check for logout parameter
@@ -309,7 +310,10 @@
                 
                 // Clear session
                 localStorage.removeItem('admin_session');
-                sessionStorage.setItem('logout_flag', Date.now().toString());
+                
+                // Clean URL
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
                 
                 // Show logout message
                 const statusDiv = document.getElementById('loginStatus');
@@ -325,39 +329,12 @@
                         statusDiv.style.display = 'none';
                     }, 5000);
                 }
-                
-                // Clean URL
-                urlParams.delete('logout');
-                const cleanUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-                window.history.replaceState({}, document.title, cleanUrl);
             }
             
             // Clear any pending redirect timeouts
             if (window.redirectTimeout) {
                 clearTimeout(window.redirectTimeout);
                 delete window.redirectTimeout;
-            }
-            
-            // Check for recent logout to prevent auto-redirect
-            const logoutFlag = sessionStorage.getItem('logout_flag');
-            if (logoutFlag) {
-                const logoutTime = parseInt(logoutFlag);
-                const timeSinceLogout = Date.now() - logoutTime;
-                
-                // If logout was less than 10 seconds ago, prevent auto-redirect
-                if (timeSinceLogout < 10000) {
-                    console.log('Recent logout detected, preventing auto-redirect');
-                    sessionStorage.setItem('prevent_redirect', 'true');
-                    
-                    // Clear flag after 10 seconds
-                    setTimeout(() => {
-                        sessionStorage.removeItem('logout_flag');
-                        sessionStorage.removeItem('prevent_redirect');
-                    }, 10000);
-                } else {
-                    sessionStorage.removeItem('logout_flag');
-                    sessionStorage.removeItem('prevent_redirect');
-                }
             }
             
             // Check for existing session (for display only)
@@ -381,7 +358,7 @@
             }
         })();
         
-        // Form submission handler
+        // Form submission handler - SIMPLIFIED
         document.addEventListener('DOMContentLoaded', function() {
             const loginForm = document.getElementById('adminLoginForm');
             const loginLoading = document.getElementById('loginLoading');
@@ -476,11 +453,6 @@
             if (event.persisted) {
                 console.log('Page loaded from cache, refreshing form state');
                 document.getElementById('adminLoginForm')?.reset();
-                
-                // Clear any potential stale auth state
-                if (sessionStorage.getItem('logout_flag')) {
-                    console.log('Cache reload after logout, preventing auto-redirect');
-                }
             }
         });
         
@@ -496,7 +468,7 @@
     </script>
 
     <script>
-        // Enhanced login page initialization
+        // Enhanced login page initialization - SIMPLIFIED
         (function() {
             console.log('Login page initialization...');
             
@@ -512,10 +484,7 @@
                 localStorage.removeItem('admin_session');
                 
                 // Remove logout parameter from URL for cleaner appearance
-                urlParams.delete('logout');
-                urlParams.delete('t');
-                const cleanUrl = window.location.pathname + 
-                    (urlParams.toString() ? '?' + urlParams.toString() : '');
+                const cleanUrl = window.location.pathname;
                 window.history.replaceState({}, document.title, cleanUrl);
                 
                 // Show logout message
@@ -533,93 +502,6 @@
                 }
             }
             
-            // Force reinitialize adminAuth if needed
-            setTimeout(() => {
-                if (window.adminAuthInstance) {
-                    console.log('Checking adminAuth status...');
-                    // Check if getStatus method exists
-                    if (typeof adminAuthInstance.getDatabaseStatus === 'function') {
-                        const status = adminAuthInstance.getDatabaseStatus();
-                        console.log('AdminAuth status:', status);
-                        
-                        // If not initialized, try to reinitialize Firebase
-                        if (!status || !status.initialized) {
-                            console.log('AdminAuth not initialized, trying to fix...');
-                            if (typeof adminAuthInstance.init === 'function') {
-                                adminAuthInstance.init().catch(err => {
-                                    console.error('Reinit failed:', err);
-                                });
-                            }
-                        }
-                    }
-                }
-            }, 1500);
-            
-            // Add form validation
-            const loginForm = document.getElementById('adminLoginForm');
-            if (loginForm) {
-                // Already has event listener, but add client-side validation
-                const originalSubmit = loginForm.onsubmit;
-                loginForm.addEventListener('submit', function(e) {
-                    const email = document.getElementById('adminEmail').value.trim();
-                    const password = document.getElementById('adminPassword').value;
-                    
-                    if (!email) {
-                        e.preventDefault();
-                        showValidationError('Please enter your email address');
-                        document.getElementById('adminEmail').focus();
-                        return false;
-                    }
-                    
-                    if (!password) {
-                        e.preventDefault();
-                        showValidationError('Please enter your password');
-                        document.getElementById('adminPassword').focus();
-                        return false;
-                    }
-                    
-                    if (!isValidEmail(email)) {
-                        e.preventDefault();
-                        showValidationError('Please enter a valid email address');
-                        document.getElementById('adminEmail').focus();
-                        return false;
-                    }
-                    
-                    return true;
-                }, false);
-                
-                function showValidationError(message) {
-                    const errorElement = document.getElementById('adminLoginError');
-                    if (errorElement) {
-                        errorElement.textContent = message;
-                        errorElement.classList.remove('hidden');
-                        
-                        // Scroll to error
-                        errorElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                        
-                        // Auto-hide after 5 seconds
-                        setTimeout(() => {
-                            errorElement.classList.add('hidden');
-                        }, 5000);
-                    } else {
-                        alert(message);
-                    }
-                }
-                
-                function isValidEmail(email) {
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                    return emailRegex.test(email);
-                }
-            }
-            
-            // Auto-focus email field
-            setTimeout(() => {
-                const emailField = document.getElementById('adminEmail');
-                if (emailField) {
-                    emailField.focus();
-                }
-            }, 300);
-            
             // Monitor adminAuth initialization
             let authCheckCount = 0;
             const maxAuthChecks = 10;
@@ -635,55 +517,16 @@
                 if (!window.adminAuthInstance) {
                     console.log(`Auth check ${authCheckCount}: adminAuthInstance not found`);
                     setTimeout(checkAuthInitialization, 500);
-                } else if (!adminAuthInstance.isInitialized) {
+                } else if (adminAuthInstance.isInitialized === false) {
                     console.log(`Auth check ${authCheckCount}: adminAuthInstance not initialized`);
                     setTimeout(checkAuthInitialization, 500);
                 } else {
-                    console.log('✅ adminAuth fully initialized');
-                    updateLoginStatus('Authentication system ready', 'success');
+                    console.log('✅ adminAuth ready');
                 }
             }
             
             // Start checking
             setTimeout(checkAuthInitialization, 1000);
-            
-            function updateLoginStatus(message, type) {
-                const statusDiv = document.getElementById('loginStatus');
-                const statusText = document.getElementById('statusText');
-                
-                if (statusDiv && statusText) {
-                    statusDiv.style.display = 'block';
-                    
-                    const icon = type === 'success' ? 
-                        '<i class="fas fa-check-circle"></i>' : 
-                        '<i class="fas fa-info-circle"></i>';
-                    
-                    statusText.innerHTML = `${icon} ${message}`;
-                    
-                    if (type === 'success') {
-                        statusDiv.style.background = '#d1fae5';
-                        statusDiv.style.borderLeft = '3px solid #10b981';
-                    } else {
-                        statusDiv.style.background = '#e3f2fd';
-                        statusDiv.style.borderLeft = '3px solid #1A73E8';
-                    }
-                    
-                    // Auto-hide success messages after 3 seconds
-                    if (type === 'success') {
-                        setTimeout(() => {
-                            statusDiv.style.display = 'none';
-                        }, 3000);
-                    }
-                }
-            }
-            
-            // Add logout cleanup on page unload
-            window.addEventListener('beforeunload', function() {
-                // If we're navigating away from login page (likely to dashboard),
-                // clear any logout flags
-                sessionStorage.removeItem('logout_flag');
-                sessionStorage.removeItem('prevent_redirect');
-            });
             
             // Add real-time form validation
             const emailField = document.getElementById('adminEmail');
@@ -707,13 +550,13 @@
                 });
             }
             
-            // Add enter key support (submit form when pressing enter in password field)
+            // Add enter key support
             const adminKeyField = document.getElementById('adminKey');
             if (passwordField) {
                 passwordField.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        loginForm.dispatchEvent(new Event('submit'));
+                        document.getElementById('adminLoginForm').dispatchEvent(new Event('submit'));
                     }
                 });
             }
@@ -722,32 +565,11 @@
                 adminKeyField.addEventListener('keypress', function(e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        loginForm.dispatchEvent(new Event('submit'));
+                        document.getElementById('adminLoginForm').dispatchEvent(new Event('submit'));
                     }
                 });
             }
         })();
-        
-        // Force reinitialization on login page if needed
-        document.addEventListener('DOMContentLoaded', function() {
-            // Check if we're on the login page
-            if (window.location.pathname.includes('index.html')) {
-                // Clear any logout flags
-                sessionStorage.removeItem('logout_in_progress');
-                
-                // Force reinitialize adminAuth if it exists
-                if (window.adminAuthInstance) {
-                    console.log('Force reinitializing adminAuth for login page...');
-                    setTimeout(() => {
-                        if (adminAuthInstance && typeof adminAuthInstance.init === 'function') {
-                            adminAuthInstance.init().catch(err => {
-                                console.error('Reinitialization failed:', err);
-                            });
-                        }
-                    }, 500);
-                }
-            }
-        });
     </script>
 </body>
 </html>

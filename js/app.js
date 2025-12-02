@@ -2,7 +2,7 @@ class CasaLink {
     constructor() {
         console.log('🏠 CasaLink constructor starting...');
         
-        this.appVersion = '1.0.3';
+        this.appVersion = '1.0.4';
         this.currentUser = null;
         this.currentRole = null;
         this.isOnline = navigator.onLine;
@@ -572,7 +572,7 @@ class CasaLink {
 
     async getReportsPage() {
         console.log('📊 Loading reports page content...');
-        
+       
         return `
             <div class="reports-dashboard">
                 <div class="page-header">
@@ -586,6 +586,7 @@ class CasaLink {
                         </button>
                     </div>
                 </div>
+
 
                 <!-- Quick Stats Overview -->
                 <div class="quick-stats-row">
@@ -607,12 +608,100 @@ class CasaLink {
                     </div>
                 </div>
 
+
+                <!-- PREDICTIVE ANALYTICS SECTION -->
+                <div class="predictive-section">
+                    <div class="section-title">
+                        <i class="fas fa-crystal-ball"></i> Predictive Insights
+                        <span class="beta-badge">AI-Powered</span>
+                    </div>
+                   
+                    <div class="predictive-cards-grid">
+                        <!-- Revenue Forecast Card -->
+                        <div class="predictive-card">
+                            <div class="predictive-card-header">
+                                <h4><i class="fas fa-chart-line"></i> Revenue Forecast</h4>
+                                <span class="confidence-badge">85% Accurate</span>
+                            </div>
+                            <div class="prediction-content">
+                                <div class="prediction-value">₱<span id="nextMonthRevenue">87,200</span></div>
+                                <div class="prediction-label">Next Month Prediction</div>
+                                <div class="prediction-trend positive">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span id="revenueGrowthRate">+3.2%</span> vs current
+                                </div>
+                            </div>
+                            <div class="prediction-chart-mini">
+                                <canvas id="revenueForecastMiniChart" height="60"></canvas>
+                            </div>
+                        </div>
+
+
+                        <!-- Occupancy Forecast Card -->
+                        <div class="predictive-card">
+                            <div class="predictive-card-header">
+                                <h4><i class="fas fa-home"></i> Occupancy Forecast</h4>
+                                <span class="confidence-badge">78% Accurate</span>
+                            </div>
+                            <div class="prediction-content">
+                                <div class="prediction-value"><span id="nextMonthOccupancy">92</span>%</div>
+                                <div class="prediction-label">Next Month Prediction</div>
+                                <div class="prediction-risk">
+                                    <i class="fas fa-exclamation-triangle"></i>
+                                    <span id="atRiskUnits">2</span> units at risk
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <!-- Maintenance Forecast Card -->
+                        <div class="predictive-card">
+                            <div class="predictive-card-header">
+                                <h4><i class="fas fa-tools"></i> Maintenance Forecast</h4>
+                                <span class="confidence-badge">72% Accurate</span>
+                            </div>
+                            <div class="prediction-content">
+                                <div class="prediction-value">₱<span id="nextMonthMaintenance">2,380</span></div>
+                                <div class="prediction-label">Next Month Prediction</div>
+                                <div class="prediction-trend warning">
+                                    <i class="fas fa-arrow-up"></i>
+                                    <span>+10.7%</span> vs average
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <!-- AI Recommendations Card -->
+                        <div class="predictive-card recommendation-card">
+                            <div class="predictive-card-header">
+                                <h4><i class="fas fa-robot"></i> AI Recommendations</h4>
+                                <span class="recommendation-badge">3 Actions</span>
+                            </div>
+                            <div class="recommendations-list" id="aiRecommendationsList">
+                                <div class="recommendation-item">
+                                    <i class="fas fa-lightbulb"></i>
+                                    <span>Focus on lease renewals for 2 at-risk tenants</span>
+                                </div>
+                                <div class="recommendation-item">
+                                    <i class="fas fa-lightbulb"></i>
+                                    <span>Budget for higher maintenance in coming months</span>
+                                </div>
+                                <div class="recommendation-item">
+                                    <i class="fas fa-lightbulb"></i>
+                                    <span>Consider rent adjustment for under-market units</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
                 <!-- Charts Grid -->
                 <div class="charts-grid">
                     <!-- Row 1 -->
                     <div class="chart-card large">
                         <div class="chart-header">
-                            <h3>Monthly Revenue Trend</h3>
+                            <h3>Monthly Revenue Trend & Forecast</h3>
                             <div class="chart-actions">
                                 <select class="filter-select" id="revenuePeriod">
                                     <option>Last 6 Months</option>
@@ -626,6 +715,7 @@ class CasaLink {
                         </div>
                     </div>
 
+
                     <div class="chart-card">
                         <div class="chart-header">
                             <h3>Payment Methods</h3>
@@ -634,6 +724,7 @@ class CasaLink {
                             <canvas id="paymentMethodsChart"></canvas>
                         </div>
                     </div>
+
 
                     <!-- Row 2 -->
                     <div class="chart-card">
@@ -645,14 +736,16 @@ class CasaLink {
                         </div>
                     </div>
 
+
                     <div class="chart-card">
                         <div class="chart-header">
-                            <h3>Occupancy Status</h3>
+                            <h3>Occupancy Status & Forecast</h3>
                         </div>
                         <div class="chart-container">
                             <canvas id="occupancyChart"></canvas>
                         </div>
                     </div>
+
 
                     <div class="chart-card">
                         <div class="chart-header">
@@ -663,15 +756,17 @@ class CasaLink {
                         </div>
                     </div>
 
+
                     <!-- Row 3 - Additional Metrics -->
                     <div class="chart-card">
                         <div class="chart-header">
-                            <h3>Maintenance Costs</h3>
+                            <h3>Maintenance Costs & Forecast</h3>
                         </div>
                         <div class="chart-container">
                             <canvas id="maintenanceCostsChart"></canvas>
                         </div>
                     </div>
+
 
                     <div class="chart-card">
                         <div class="chart-header">
@@ -682,6 +777,7 @@ class CasaLink {
                         </div>
                     </div>
 
+
                     <div class="chart-card">
                         <div class="chart-header">
                             <h3>Rent vs Market</h3>
@@ -691,6 +787,7 @@ class CasaLink {
                         </div>
                     </div>
                 </div>
+
 
                 <!-- Key Metrics Summary -->
                 <div class="metrics-summary">
@@ -737,6 +834,8 @@ class CasaLink {
             </div>
         `;
     }
+
+
 
     async showEditProfileModal() {
         console.log('📝 Opening edit profile modal...');
@@ -1052,6 +1151,8 @@ class CasaLink {
             return this.getErrorDashboard('tenantProfile', error.message);
         }
     }
+
+
 
     // Add this method - returns just the dashboard content, not the full layout
     getDashboardContentHTML() {
@@ -1487,131 +1588,156 @@ class CasaLink {
         const ninetyDaysAgo = new Date();
         ninetyDaysAgo.setDate(now.getDate() - 90);
         
+        const userId = this.currentUser?.id || this.currentUser?.uid || null;
+        const isTenant = this.currentUser?.role === 'tenant';
+
         console.log('📅 Date range for queries:', {
             from: ninetyDaysAgo.toISOString(),
             to: now.toISOString(),
-            user: this.currentUser.uid
+            user: userId,
+            role: this.currentUser?.role
         });
 
         try {
             const fetchPromises = [];
             
-            // 1. Fetch Recent Tenants - SIMPLIFIED
-            console.log('🔍 Fetching recent tenants...');
-            fetchPromises.push(
-                firebaseDb.collection('users')
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .where('role', '==', 'tenant')
-                    .orderBy('createdAt', 'desc')
-                    .limit(20)
-                    .get().then(snapshot => {
-                        console.log(`✅ Found ${snapshot.size} tenants total`);
-                        snapshot.forEach(doc => {
-                            const tenant = doc.data();
-                            // Check if tenant is within date range
-                            const tenantDate = new Date(tenant.createdAt);
-                            if (tenantDate >= ninetyDaysAgo && tenantDate <= now) {
-                                activities.push({
-                                    type: 'new_tenant',
-                                    title: 'New Tenant Registered',
-                                    description: `${tenant.name} - ${tenant.roomNumber || 'No room'}`,
-                                    timestamp: tenant.createdAt,
-                                    icon: 'fas fa-user-plus',
-                                    color: 'var(--success)',
-                                    data: { ...tenant, id: doc.id }
-                                });
-                            }
-                        });
-                    }).catch(error => {
-                        console.error('❌ Error fetching tenants:', error);
-                    })
-            );
+            // 1. Fetch Recent Tenants (only for landlords)
+            if (!isTenant) {
+                console.log('🔍 Fetching recent tenants (landlord view)...');
+                fetchPromises.push(
+                    firebaseDb.collection('users')
+                        .where('landlordId', '==', userId)
+                        .where('role', '==', 'tenant')
+                        .orderBy('createdAt', 'desc')
+                        .limit(20)
+                        .get().then(snapshot => {
+                            console.log(`✅ Found ${snapshot.size} tenants total`);
+                            snapshot.forEach(doc => {
+                                const tenant = doc.data();
+                                // Check if tenant is within date range
+                                const tenantDate = new Date(tenant.createdAt);
+                                if (tenantDate >= ninetyDaysAgo && tenantDate <= now) {
+                                    activities.push({
+                                        type: 'new_tenant',
+                                        title: 'New Tenant Registered',
+                                        description: `${tenant.name} - ${tenant.roomNumber || 'No room'}`,
+                                        timestamp: tenant.createdAt,
+                                        icon: 'fas fa-user-plus',
+                                        color: 'var(--success)',
+                                        data: { ...tenant, id: doc.id }
+                                    });
+                                }
+                            });
+                        }).catch(error => {
+                            console.error('❌ Error fetching tenants:', error);
+                        })
+                );
+            }
 
             // 2. Fetch Recent Payments - SIMPLIFIED
             console.log('🔍 Fetching recent payments...');
+            // For tenants, only fetch payments related to them. For landlords, fetch payments received for their properties.
+            let paymentsQuery = firebaseDb.collection('payments')
+                .orderBy('paymentDate', 'desc')
+                .limit(50);
+
+            if (isTenant) {
+                paymentsQuery = paymentsQuery.where('tenantId', '==', userId);
+            } else {
+                paymentsQuery = paymentsQuery.where('landlordId', '==', userId);
+            }
+
             fetchPromises.push(
-                firebaseDb.collection('payments')
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .orderBy('paymentDate', 'desc')
-                    .limit(20)
-                    .get().then(snapshot => {
-                        console.log(`✅ Found ${snapshot.size} payments total`);
-                        snapshot.forEach(doc => {
-                            const payment = doc.data();
-                            const paymentDate = new Date(payment.paymentDate || payment.createdAt);
-                            if (paymentDate >= ninetyDaysAgo && paymentDate <= now) {
-                                activities.push({
-                                    type: 'payment_received',
-                                    title: 'Payment Received',
-                                    description: `₱${payment.amount?.toLocaleString()} from ${payment.tenantName || 'Tenant'}`,
-                                    timestamp: payment.paymentDate || payment.createdAt,
-                                    icon: 'fas fa-credit-card',
-                                    color: 'var(--success)',
-                                    data: { ...payment, id: doc.id }
-                                });
-                            }
-                        });
-                    }).catch(error => {
-                        console.error('❌ Error fetching payments:', error);
-                    })
+                paymentsQuery.get().then(snapshot => {
+                    console.log(`✅ Found ${snapshot.size} payments total`);
+                    snapshot.forEach(doc => {
+                        const payment = doc.data();
+                        const paymentDate = new Date(payment.paymentDate || payment.createdAt);
+                        if (paymentDate >= ninetyDaysAgo && paymentDate <= now) {
+                            activities.push({
+                                type: 'payment_received',
+                                title: 'Payment Received',
+                                description: `₱${payment.amount?.toLocaleString()} from ${payment.tenantName || 'Tenant'}`,
+                                timestamp: payment.paymentDate || payment.createdAt,
+                                icon: 'fas fa-credit-card',
+                                color: 'var(--success)',
+                                data: { ...payment, id: doc.id }
+                            });
+                        }
+                    });
+                }).catch(error => {
+                    console.error('❌ Error fetching payments:', error);
+                })
             );
 
             // 3. Fetch Recent Bills - SIMPLIFIED
             console.log('🔍 Fetching recent bills...');
+            let billsQuery = firebaseDb.collection('bills')
+                .orderBy('createdAt', 'desc')
+                .limit(50);
+
+            if (isTenant) {
+                billsQuery = billsQuery.where('tenantId', '==', userId);
+            } else {
+                billsQuery = billsQuery.where('landlordId', '==', userId);
+            }
+
             fetchPromises.push(
-                firebaseDb.collection('bills')
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .orderBy('createdAt', 'desc')
-                    .limit(20)
-                    .get().then(snapshot => {
-                        console.log(`✅ Found ${snapshot.size} bills total`);
-                        snapshot.forEach(doc => {
-                            const bill = doc.data();
-                            const billDate = new Date(bill.createdAt);
-                            if (billDate >= ninetyDaysAgo && billDate <= now) {
-                                activities.push({
-                                    type: 'bill_generated',
-                                    title: bill.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill Created',
-                                    description: `₱${bill.totalAmount?.toLocaleString()} for ${bill.tenantName || 'Tenant'}`,
-                                    timestamp: bill.createdAt,
-                                    icon: 'fas fa-file-invoice',
-                                    color: bill.isAutoGenerated ? 'var(--warning)' : 'var(--info)',
-                                    data: { ...bill, id: doc.id }
-                                });
-                            }
-                        });
-                    }).catch(error => {
-                        console.error('❌ Error fetching bills:', error);
-                    })
+                billsQuery.get().then(snapshot => {
+                    console.log(`✅ Found ${snapshot.size} bills total`);
+                    snapshot.forEach(doc => {
+                        const bill = doc.data();
+                        const billDate = new Date(bill.createdAt);
+                        if (billDate >= ninetyDaysAgo && billDate <= now) {
+                            activities.push({
+                                type: 'bill_generated',
+                                title: bill.isAutoGenerated ? 'Auto-Generated Bill' : 'Manual Bill Created',
+                                description: `₱${bill.totalAmount?.toLocaleString()} for ${bill.tenantName || 'Tenant'}`,
+                                timestamp: bill.createdAt,
+                                icon: 'fas fa-file-invoice',
+                                color: bill.isAutoGenerated ? 'var(--warning)' : 'var(--info)',
+                                data: { ...bill, id: doc.id }
+                            });
+                        }
+                    });
+                }).catch(error => {
+                    console.error('❌ Error fetching bills:', error);
+                })
             );
 
             // 4. Fetch Maintenance Requests - SIMPLIFIED
             console.log('🔍 Fetching maintenance requests...');
+            let maintenanceQuery = firebaseDb.collection('maintenance')
+                .orderBy('createdAt', 'desc')
+                .limit(50);
+
+            if (isTenant) {
+                maintenanceQuery = maintenanceQuery.where('tenantId', '==', userId);
+            } else {
+                maintenanceQuery = maintenanceQuery.where('landlordId', '==', userId);
+            }
+
             fetchPromises.push(
-                firebaseDb.collection('maintenance')
-                    .where('landlordId', '==', this.currentUser.uid)
-                    .orderBy('createdAt', 'desc')
-                    .limit(20)
-                    .get().then(snapshot => {
-                        console.log(`✅ Found ${snapshot.size} maintenance requests total`);
-                        snapshot.forEach(doc => {
-                            const request = doc.data();
-                            const requestDate = new Date(request.createdAt);
-                            if (requestDate >= ninetyDaysAgo && requestDate <= now) {
-                                activities.push({
-                                    type: 'maintenance_request',
-                                    title: 'Maintenance Request',
-                                    description: `${request.type || 'General'} issue from ${request.tenantName || 'Tenant'}`,
-                                    timestamp: request.createdAt,
-                                    icon: 'fas fa-tools',
-                                    color: 'var(--info)',
-                                    data: { ...request, id: doc.id }
-                                });
-                            }
-                        });
-                    }).catch(error => {
-                        console.error('❌ Error fetching maintenance:', error);
-                    })
+                maintenanceQuery.get().then(snapshot => {
+                    console.log(`✅ Found ${snapshot.size} maintenance requests total`);
+                    snapshot.forEach(doc => {
+                        const request = doc.data();
+                        const requestDate = new Date(request.createdAt);
+                        if (requestDate >= ninetyDaysAgo && requestDate <= now) {
+                            activities.push({
+                                type: 'maintenance_request',
+                                title: 'Maintenance Request',
+                                description: `${request.type || 'General'} issue from ${request.tenantName || 'Tenant'}`,
+                                timestamp: request.createdAt,
+                                icon: 'fas fa-tools',
+                                color: 'var(--info)',
+                                data: { ...request, id: doc.id }
+                            });
+                        }
+                    });
+                }).catch(error => {
+                    console.error('❌ Error fetching maintenance:', error);
+                })
             );
 
             // Wait for all queries
@@ -1664,6 +1790,8 @@ class CasaLink {
             return this.getSampleActivities();
         }
     }
+
+
 
     testActivitiesPagination() {
         console.log('🧪 Testing activities pagination...');
@@ -3013,6 +3141,7 @@ class CasaLink {
                     </div>
                 </div>
 
+
                 <!-- ACCOUNT OVERVIEW SECTION -->
                 <div class="card-group-title">Account Overview</div>
                 <div class="card-group">
@@ -3025,6 +3154,7 @@ class CasaLink {
                         <div class="card-subtitle" id="balanceDueDate">Due in 0 days</div>
                     </div>
 
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Payment Status</div>
@@ -3033,6 +3163,7 @@ class CasaLink {
                         <div class="card-value" id="paymentStatus">Current</div>
                         <div class="card-subtitle" id="paymentStatusDetails">Up to date</div>
                     </div>
+
 
                     <div class="card">
                         <div class="card-header">
@@ -3043,6 +3174,7 @@ class CasaLink {
                         <div class="card-subtitle">Your unit</div>
                     </div>
 
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Monthly Rent</div>
@@ -3052,6 +3184,7 @@ class CasaLink {
                         <div class="card-subtitle">Monthly payment</div>
                     </div>
                 </div>
+
 
                 <!-- BILLING & PAYMENTS SECTION -->
                 <div class="card-group-title">Billing & Payments</div>
@@ -3065,6 +3198,7 @@ class CasaLink {
                         <div class="card-subtitle">Unpaid invoices</div>
                     </div>
 
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Next Due Date</div>
@@ -3073,6 +3207,7 @@ class CasaLink {
                         <div class="card-value" id="nextDueDate">N/A</div>
                         <div class="card-subtitle">Upcoming payment</div>
                     </div>
+
 
                     <div class="card">
                         <div class="card-header">
@@ -3083,6 +3218,7 @@ class CasaLink {
                         <div class="card-subtitle" id="lastPaymentDate">No payments</div>
                     </div>
                 </div>
+
 
                 <!-- MAINTENANCE SECTION -->
                 <div class="card-group-title">Maintenance</div>
@@ -3096,6 +3232,7 @@ class CasaLink {
                         <div class="card-subtitle">Active maintenance</div>
                     </div>
 
+
                     <div class="card">
                         <div class="card-header">
                             <div class="card-title">Recent Updates</div>
@@ -3106,56 +3243,53 @@ class CasaLink {
                     </div>
                 </div>
 
-                <!-- QUICK ACTIONS SECTION -->
-                <div class="card-group-title">Quick Actions</div>
-                <div class="card-group">
-                    <div class="card quick-action-card" onclick="casaLink.showPage('tenantBilling')">
-                        <div class="card-header">
-                            <div class="card-title">View Bills</div>
-                            <div class="card-icon revenue"><i class="fas fa-file-invoice-dollar"></i></div>
-                        </div>
-                        <p>Check your billing history and invoices</p>
-                        <div class="quick-action-link">
-                            View Bills <i class="fas fa-arrow-right"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="card quick-action-card" onclick="casaLink.showPaymentModal()">
-                        <div class="card-header">
-                            <div class="card-title">Make Payment</div>
-                            <div class="card-icon success"><i class="fas fa-credit-card"></i></div>
-                        </div>
-                        <p>Pay your rent or outstanding balance</p>
-                        <div class="quick-action-link">
-                            Pay Now <i class="fas fa-arrow-right"></i>
-                        </div>
-                    </div>
-                    
-                    <div class="card quick-action-card" onclick="casaLink.showPage('tenantMaintenance')">
-                        <div class="card-header">
-                            <div class="card-title">Maintenance</div>
-                            <div class="card-icon maintenance"><i class="fas fa-tools"></i></div>
-                        </div>
-                        <p>Submit or track maintenance requests</p>
-                        <div class="quick-action-link">
-                            View Requests <i class="fas fa-arrow-right"></i>
+
+                <!-- RECENT ACTIVITY (Tenant) -->
+                <div class="card-group-title">Recent Activity</div>
+                <div class="recent-activity-container">
+                    <div class="recent-activity-header">
+                        <h3>Recent Activities</h3>
+                        <div class="activities-pagination-info" id="activitiesPaginationInfo">
+                            Showing 0–0 of 0 activities
                         </div>
                     </div>
 
-                    <div class="card quick-action-card" onclick="casaLink.showMaintenanceRequestForm()">
-                        <div class="card-header">
-                            <div class="card-title">New Request</div>
-                            <div class="card-icon backlog"><i class="fas fa-plus-circle"></i></div>
+
+                    <div id="recentActivityList" class="recent-activity-list">
+                        <div class="activity-loading">
+                            <i class="fas fa-spinner fa-spin"></i> Loading recent activity...
                         </div>
-                        <p>Submit a new maintenance request</p>
-                        <div class="quick-action-link">
-                            Submit Request <i class="fas fa-arrow-right"></i>
+                    </div>
+
+
+                    <!-- Pagination Controls -->
+                    <div class="pagination-container" id="activitiesPagination" style="display: none; margin-top: 20px;">
+                        <div class="pagination-controls">
+                            <button class="btn btn-sm btn-secondary" id="activitiesPrevPage">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </button>
+                            <div class="pagination-numbers" id="activitiesPageNumbers"></div>
+                            <button class="btn btn-sm btn-secondary" id="activitiesNextPage">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </button>
                         </div>
+                    </div>
+
+
+                    <div class="recent-activity-footer">
+                        <button class="btn btn-secondary btn-sm" onclick="casaLink.loadMoreActivities()">
+                            <i class="fas fa-history"></i> Load Older Activities
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="casaLink.markAllAsRead()">
+                            <i class="fas fa-check-double"></i> Mark All as Read
+                        </button>
                     </div>
                 </div>
             </div>
         `;
     }
+
+
 
     static async initializeBillingSystem() {
         console.log('💰 Initializing billing system...');

@@ -41,8 +41,7 @@
     <!-- Styles & Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=1.0.3">
-    
+    <link rel="stylesheet" href="css/style.css?v=1.0.4">
     
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -264,18 +263,20 @@
     <script>
         // Cache busting and sequential script loader
         (function() {
-            const CACHE_BUSTER = 'v=1.0.3-' + new Date().getTime();
+            const CACHE_BUSTER = 'v=1.0.4-' + new Date().getTime();
             const scripts = [
+                'config/firebase.js',      // Firebase config FIRST
+                'js/dataManager.js',       // DataManager SECOND - MUST be before auth
+                'js/auth.js',              // Auth THIRD - needs DataManager
                 'js/sendpulseService.js',
-                'config/firebase.js', 
-                'js/dataManager.js',
-                'js/auth.js',
                 'js/modalManager.js',
                 'js/notificationManager.js',
                 'js/pwaManager.js',
                 'js/analytics.js',
                 'js/performance.js',
-                'js/chartsManager.js', 
+                'js/chartsManager.js',
+                'js/predictiveAnalytics.js',  // Predictive analytics from first file
+                'js/predictionCharts.js',     // Prediction charts from first file
                 'js/sectionManager.js',
                 'js/reportsManager.js',
                 'js/app.js'
@@ -317,11 +318,30 @@
                                 window.chartsManager = new ChartsManager();
                                 console.log('✅ Charts Manager initialized');
                                 
-                                // Initialize Reports Manager
+                                // Initialize Reports Manager - using flexible approach
                                 if (window.dataManager && window.casaLink.currentUser) {
                                     window.reportsManager = new ReportsManager(window.dataManager);
-                                    window.reportsManager.initialize(window.casaLink.currentUser);
-                                    console.log('✅ Reports Manager initialized');
+                                    
+                                    // Try both initialization methods for compatibility
+                                    if (typeof window.reportsManager.init === 'function') {
+                                        // First file's method (promise-based)
+                                        window.reportsManager.init(window.casaLink.currentUser).then(() => {
+                                            console.log('✅ Reports Manager initialized (promise method)');
+                                        }).catch(error => {
+                                            console.warn('⚠️ Promise-based init failed, trying initialize method:', error);
+                                            // Fall back to second file's method
+                                            if (typeof window.reportsManager.initialize === 'function') {
+                                                window.reportsManager.initialize(window.casaLink.currentUser);
+                                                console.log('✅ Reports Manager initialized (initialize method)');
+                                            }
+                                        });
+                                    } else if (typeof window.reportsManager.initialize === 'function') {
+                                        // Second file's method
+                                        window.reportsManager.initialize(window.casaLink.currentUser);
+                                        console.log('✅ Reports Manager initialized (initialize method)');
+                                    } else {
+                                        console.warn('⚠️ Reports Manager has no recognized initialization method');
+                                    }
                                 }
                                 
                                 // Initialize Section Manager
@@ -364,17 +384,18 @@
 
             function initializeManagers() {
                 try {
+                    // Initialize all managers
                     if (window.PWAManager) {
-                        PWAManager.init();
+                        PWAManager.init(); // Uncommented from second file
+                        console.log('✅ PWA Manager initialized');
                     }
                     if (window.AnalyticsManager) {
                         AnalyticsManager.init();
+                        console.log('✅ Analytics Manager initialized');
                     }
                     if (window.PerformanceOptimizer) {
                         PerformanceOptimizer.init();
-                    }
-                    if (window.ReportsManager) {
-                        ReportsManager.init();
+                        console.log('✅ Performance Optimizer initialized');
                     }
                     
                     // Hide loading spinner after a delay
@@ -382,6 +403,7 @@
                         const spinner = document.getElementById('loadingSpinner');
                         if (spinner) {
                             spinner.style.display = 'none';
+                            console.log('✅ Loading spinner hidden');
                         }
                     }, 2000);
                 } catch (managerError) {
@@ -472,9 +494,9 @@
         })();
     </script>
     
-    <!-- Reports Manager Script -->
+    <!-- Reports Manager Script - Merged version -->
     <script>
-        // Reports Manager for handling reports functionality
+        // Reports Manager for handling reports functionality - merged version
         window.ReportsManager = {
             init: function() {
                 console.log('📊 Initializing Reports Manager...');
@@ -800,11 +822,17 @@
                 if (reportsSection) {
                     reportsSection.style.display = 'none';
                 }
+            },
+            
+            // Add both initialization methods for compatibility
+            initialize: function(user) {
+                // Alias for init for compatibility with second file
+                return this.init();
             }
         };
     </script>
 
-    <!-- Rest of the diagnostic and PWA scripts remain unchanged -->
+    <!-- Rest of the diagnostic and PWA scripts (merged from both) -->
     <script>
         // Check PWA requirements
         function checkPWARequirements() {
@@ -845,7 +873,7 @@
             // Initialize PWA manager after a short delay
             setTimeout(() => {
                 if (window.PWAManager) {
-                    
+                    // Already initialized in initializeManagers()
                 }
             }, 1000);
         });
@@ -1058,7 +1086,7 @@ function checkManifestRequirements(manifest) {
     <script>
     // Cache Busting and Version Control
     (function() {
-        const APP_VERSION = '1.0.3';
+        const APP_VERSION = '1.0.4'; // Updated to match CSS version
         const storedVersion = localStorage.getItem('casalink_app_version');
         
         console.log('🔍 Cache Check:', {
@@ -1128,19 +1156,7 @@ function checkManifestRequirements(manifest) {
         
         // Show main app after loading (2 second delay for demo)
         setTimeout(() => {
-            // Hide loading spinner
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const mainApp = document.getElementById('mainApp');
-            
-            if (loadingSpinner) {
-                loadingSpinner.style.display = 'none';
-                console.log('✅ Loading spinner hidden');
-            }
-            
-            if (mainApp) {
-                mainApp.style.display = 'block';
-                console.log('✅ Main app displayed');
-            }
+            // Hide loading spinner (moved to initializeManagers for better timing)
             
             // Initialize section manager if not already done
             if (window.sectionManager) {
@@ -1166,7 +1182,6 @@ function checkManifestRequirements(manifest) {
         }, 2000); // 2 second delay
     });
     </script>
-
 
 </body>
 </html>
