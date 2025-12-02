@@ -54,6 +54,30 @@ class CasaLink {
         this.init();
     }
 
+    onLoginSuccess(user) {
+        // Remove login-page class from body
+        document.body.classList.remove('login-page');
+        document.body.classList.add('logged-in');
+        
+        // Hide admin portal link
+        const adminLink = document.querySelector('.admin-portal-link');
+        if (adminLink) {
+            adminLink.style.display = 'none';
+        }
+    }
+
+    onLogout() {
+        // Add login-page class back to body
+        document.body.classList.add('login-page');
+        document.body.classList.remove('logged-in');
+        
+        // Show admin portal link
+        const adminLink = document.querySelector('.admin-portal-link');
+        if (adminLink) {
+            adminLink.style.display = 'block';
+        }
+    }
+
     setupCacheBusting() {
         // Clear cache on new version
         const storedVersion = localStorage.getItem('casalink_app_version');
@@ -9714,6 +9738,16 @@ class CasaLink {
                     
                     <div style="text-align: center; margin-top: 20px; color: var(--dark-gray);">
                         <small>Don't have an account? Contact your landlord for credentials.</small>
+                    </div>
+
+                    <div class="admin-login-link" style="text-align: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                        <a href="/admin" style="color: #666; text-decoration: none; font-size: 14px; display: inline-flex; align-items: center; gap: 8px;">
+                            <i class="fas fa-user-shield"></i>
+                            Access Admin Portal
+                        </a>
+                        <p style="font-size: 12px; color: #999; margin-top: 5px;">
+                            For system administrators only
+                        </p>
                     </div>
                 </div>
             </div>
