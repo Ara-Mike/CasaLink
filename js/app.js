@@ -2689,6 +2689,72 @@ class CasaLink {
                     </div>
                 </div>
 
+                <!-- UNIT GRID SECTION -->
+                <div class="card-group-title">Apartment Unit Layout</div>
+                
+                <!-- Horizontal Legend -->
+                <div class="unit-legend-horizontal">
+                    <div class="legend-title">Unit Status:</div>
+                    <div class="legend-items-horizontal">
+                        <div class="legend-item">
+                            <div class="legend-color vacant"></div>
+                            <span>Vacant</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color occupied"></div>
+                            <span>Occupied</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color maintenance"></div>
+                            <span>Maintenance</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color late-payment"></div>
+                            <span>Late Payment</span>
+                        </div>
+                    </div>
+                    <div class="legend-stats-horizontal">
+                        <div class="stat-item">
+                            <span class="stat-label">Total:</span>
+                            <span class="stat-value">22</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Vacant:</span>
+                            <span class="stat-value" id="vacantCount">0</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Occupied:</span>
+                            <span class="stat-value" id="occupiedCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="unit-grid-container">
+                    <!-- Complete Grid Layout -->
+                    <div class="unit-grid-layout">
+                        <!-- Column Labels (A-E) -->
+                        <div class="column-labels-grid">
+                            ${['A', 'B', 'C', 'D', 'E'].map(letter => `
+                                <div class="column-label-grid">${letter}</div>
+                            `).join('')}
+                        </div>
+                        
+                        <!-- Row Labels (1-4 + Rooftop) -->
+                        <div class="row-labels-grid">
+                            ${['Floor 1', 'Floor 2', 'Floor 3', 'Floor 4', '<i class="fas fa-building"></i> Rooftop'].map((label, index) => `
+                                <div class="row-label-grid ${index === 4 ? 'rooftop-row-label-grid' : ''}">
+                                    ${index === 4 ? label : label}
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <!-- Unit Grid Cells -->
+                        <div class="unit-grid-cells">
+                            ${this.generateAligned5x4Grid()}
+                        </div>
+                    </div>
+                </div>
+
                 <!-- PROPERTY OVERVIEW SECTION -->
                 <div class="card-group-title">Property Overview</div>
                 <div class="card-group">
@@ -2833,6 +2899,69 @@ class CasaLink {
             </div>
         `;
     }
+
+        generateAligned5x4Grid() {
+        let html = '';
+        const rows = 5; // 5 rows (1-4 + rooftop as row 5)
+        const columns = 5; // 5 columns (A-E)
+        
+        for (let row = 1; row <= rows; row++) {
+            for (let col = 1; col <= columns; col++) {
+                const columnLetter = String.fromCharCode(64 + col); // A, B, C, D, E
+                
+                // For rows 1-4, all 5 columns have units
+                if (row <= 4) {
+                    const unitId = `${row}${columnLetter}`; // 1A, 1B, etc.
+                    const unitNumber = ((row - 1) * columns) + col; // Numeric ID: 1-20
+                    
+                    html += `
+                        <div class="unit-cell-grid" data-unit="${unitId}" data-unit-number="${unitNumber}" data-status="vacant">
+                            <div class="unit-id-grid">${unitId}</div>
+                            <div class="unit-number-grid">(${unitNumber})</div>
+                            <div class="unit-status-dot-grid"></div>
+                            <div class="unit-hover-info-grid">
+                                <div class="hover-unit-id-grid">Unit ${unitId}</div>
+                                <div class="hover-unit-number-grid">(#${unitNumber})</div>
+                                <div class="hover-unit-status-grid">Vacant</div>
+                                <div class="hover-unit-action-grid">Click for details</div>
+                            </div>
+                        </div>
+                    `;
+                } 
+                // For rooftop (row 5), only columns A and B have units (5A, 5B)
+                else if (row === 5 && col <= 2) {
+                    const unitId = `5${columnLetter}`; // 5A, 5B
+                    const unitNumber = 20 + col; // Units 21 and 22
+                    
+                    html += `
+                        <div class="unit-cell-grid rooftop-unit-cell-grid" data-unit="${unitId}" data-unit-number="${unitNumber}" data-status="vacant">
+                            <div class="unit-id-grid">${unitId}</div>
+                            <div class="unit-number-grid">(${unitNumber})</div>
+                            <div class="unit-status-dot-grid"></div>
+                            <div class="unit-hover-info-grid">
+                                <div class="hover-unit-id-grid">Unit ${unitId}</div>
+                                <div class="hover-unit-number-grid">(#${unitNumber})</div>
+                                <div class="hover-unit-status-grid">Vacant</div>
+                                <div class="hover-unit-action-grid">Click for details</div>
+                            </div>
+                        </div>
+                    `;
+                }
+                // Empty spaces for rooftop columns C, D, E (no units there)
+                else if (row === 5 && col > 2) {
+                    html += `
+                        <div class="empty-unit-cell-grid">
+                            <div class="empty-unit-label">-</div>
+                            <div class="empty-unit-subtitle">Empty</div>
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        return html;
+    }
+
 
 
 
