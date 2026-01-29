@@ -345,8 +345,12 @@
                                 }
                                 
                                 // Initialize Section Manager
-                                window.sectionManager = new SectionManager();
-                                console.log('✅ Section Manager initialized');
+                                if (typeof SectionManager !== 'undefined') {
+                                    window.sectionManager = new SectionManager();
+                                    console.log('✅ Section Manager initialized');
+                                } else {
+                                    console.error('❌ SectionManager class not available yet');
+                                }
                                 
                             } catch (appError) {
                                 console.error('❌ CasaLink initialization failed:', appError);
@@ -1150,36 +1154,36 @@ function checkManifestRequirements(manifest) {
 
 
     <script>
-    // Main App Initialization
+    // Main App Initialization - WAITS FOR SCRIPTS TO LOAD
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('🚀 DOM loaded, initializing app...');
+        console.log('🚀 DOM loaded, waiting for app initialization...');
         
-        // Show main app after loading (2 second delay for demo)
-        setTimeout(() => {
-            // Hide loading spinner (moved to initializeManagers for better timing)
-            
-            // Initialize section manager if not already done
-            if (window.sectionManager) {
-                console.log('✅ Section Manager already initialized');
-            } else {
-                console.log('🔄 Initializing Section Manager...');
+        // Wait for app to be fully initialized by sequential loader
+        const checkAppReady = setInterval(() => {
+            if (window.sectionManager && window.casaLink) {
+                clearInterval(checkAppReady);
+                console.log('✅ App fully initialized');
+                
+                // Ensure dashboard is active
                 try {
-                    window.sectionManager = new SectionManager();
-                    console.log('✅ Section Manager initialized successfully');
+                    window.sectionManager.showSection('dashboardSection');
+                    console.log('✅ Dashboard section activated');
                 } catch (error) {
-                    console.error('❌ Failed to initialize Section Manager:', error);
+                    console.error('❌ Error activating dashboard:', error);
                 }
             }
-            
-            // Ensure dashboard is active
-            if (window.sectionManager) {
-                window.sectionManager.showSection('dashboardSection');
-                console.log('✅ Dashboard section activated');
-            } else {
-                console.error('❌ Section Manager not available');
+        }, 100);
+        
+        // Timeout after 10 seconds to avoid infinite checking
+        setTimeout(() => {
+            clearInterval(checkAppReady);
+            if (!window.sectionManager) {
+                console.error('❌ Section Manager failed to initialize within timeout');
             }
-            
-        }, 2000); // 2 second delay
+            if (!window.casaLink) {
+                console.error('❌ CasaLink app failed to initialize within timeout');
+            }
+        }, 10000);
     });
     </script>
 

@@ -453,11 +453,15 @@ class AuthManager {
     }
 
     static syncUserToDataManager(userData) {
-        if (window.DataManager && typeof DataManager.setUser === 'function') {
-            console.log('🔄 Syncing user to DataManager:', userData ? userData.email : 'null');
-            DataManager.setUser(userData);
+        // DataManager sync is informational only - auth doesn't depend on it
+        if (window.DataManager) {
+            console.log('✅ User data available in DataManager context:', userData ? userData.email : 'null');
+            // Store user info in DataManager currentUser if available
+            if (window.DataManager && typeof window.DataManager.currentUser !== 'undefined') {
+                window.DataManager.currentUser = userData;
+            }
         } else {
-            console.warn('⚠️ DataManager not available for user sync');
+            console.warn('⚠️ DataManager not yet available (non-critical)');
         }
     }
 
