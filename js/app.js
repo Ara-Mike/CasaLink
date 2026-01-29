@@ -282,6 +282,21 @@ class CasaLink {
         }
     }
 
+    setupDashboardEventListeners() {
+        console.log('🎯 Setting up dashboard event listeners...');
+        
+        // Use event delegation for dynamically created buttons
+        document.addEventListener('click', (e) => {
+            const openUnitLayoutBtn = e.target.closest('#openUnitLayoutBtn');
+            if (openUnitLayoutBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🏢 Unit layout button clicked via delegation');
+                this.showUnitLayoutDashboard();
+            }
+        });
+    }
+
     async init() {
         console.log('🔄 CasaLink init() called');
         
@@ -295,16 +310,21 @@ class CasaLink {
             // Wait for Firebase to be available
             await this.waitForFirebase();
             
+            // Bind methods to window.app
+            this.bindMethodsToWindow();
+            
             // Setup features that don't require auth
             this.setupPWAFeatures();
             this.setupOfflineHandling();
             this.setupNavigationEvents();
+             this.setupDashboardEventListeners();
+            this.setupGlobalEventListeners(); // Make sure this is called
             
             // Initialize billing system
             if (this.currentUser?.role === 'landlord') {
                 setTimeout(() => {
                     this.initializeBillingSystem();
-                }, 3000); // Wait a bit after app loads
+                }, 3000);
             }
             
             // Mark app as initialized
@@ -1166,8 +1186,20 @@ class CasaLink {
     }
 
     setupGlobalEventListeners() {
-
+        console.log('🎯 Setting up global event listeners...');
+        
         document.addEventListener('click', (e) => {
+            // Check for unit layout button first
+            const openUnitLayoutBtn = e.target.closest('#openUnitLayoutBtn');
+            if (openUnitLayoutBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🏢 Unit layout button clicked via delegation');
+                this.showUnitLayoutDashboard();
+                return;
+            }
+            
+            // Only process clickable cards on dashboard
             if (this.currentPage !== 'dashboard') return;
 
             const clickableCard = e.target.closest('[data-clickable]');
@@ -2674,6 +2706,219 @@ class CasaLink {
         console.log('✅ All dashboard events setup complete');
     }
 
+    
+    async addNewUnit() {
+        try {
+            const modalContent = `
+                <div class="new-unit-form">
+                    <form id="addUnitForm">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Unit Number *</label>
+                                <input type="text" class="form-control" name="unitNumber" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Floor *</label>
+                                <input type="text" class="form-control" name="floor" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Unit Type *</label>
+                                <select class="form-select" name="type" required>
+                                    <option value="">Select Type</option>
+                                    <option value="Studio">Studio</option>
+                                    <option value="1 Bedroom">1 Bedroom</option>
+                                    <option value="2 Bedroom">2 Bedroom</option>
+                                    <option value="3 Bedroom">3 Bedroom</option>
+                                    <option value="Penthouse">Penthouse</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Monthly Rent ($) *</label>
+                                <input type="number" class="form-control" name="monthlyRent" min="0" step="0.01" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Bedrooms</label>
+                                <input type="number" class="form-control" name="bedrooms" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Bathrooms</label>
+                                <input type="number" class="form-control" name="bathrooms" min="0" step="0.5">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Size (sqft)</label>
+                                <input type="number" class="form-control" name="size" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Initial Status</label>
+                                <select class="form-select" name="status">
+                                    <option value="vacant" selected>Vacant</option>
+                                    <option value="occupied">Occupied</option>
+                                    <option value="maintenance">Under Maintenance</option>
+                                    <option value="reserved">Reserved</option>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Amenities (comma separated)</label>
+                                <input type="text" class="form-control" name="amenities" 
+                                    placeholder="e.g., Parking, Gym, Pool, Laundry">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Notes</label>
+                                <textarea class="form-control" name="notes" rows="3"></textarea>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            ModalManager.openModal(modalContent, {
+                title: 'Add New Apartment Unit',
+                showFooter: true,
+                footerButtons: [
+                    {
+                        text: 'Cancel',
+                        class: 'btn btn-secondary',
+                        onClick: () => ModalManager.closeModal()
+                    },
+                    {
+                        text: 'Add Unit',
+                        class: 'btn btn-primary',
+                        onClick: async () => {
+                            const form = document.getElementById('addUnitForm');
+                            if (!form.checkValidity()) {
+                                form.reportValidity();
+                                return;
+                            }
+                            
+                            const formData = new FormData(form);
+                            const unitData = {
+                                unitNumber: formData.get('unitNumber'),
+                                floor: formData.get('floor'),
+                                type: formData.get('type'),
+                                monthlyRent: parseFloat(formData.get('monthlyRent')),
+                                bedrooms: parseInt(formData.get('bedrooms')) || 0,
+                                bathrooms: parseFloat(formData.get('bathrooms')) || 0,
+                                size: parseInt(formData.get('size')) || 0,
+                                status: formData.get('status'),
+                                amenities: formData.get('amenities') ? 
+                                    formData.get('amenities').split(',').map(a => a.trim()).filter(a => a) : [],
+                                notes: formData.get('notes'),
+                                landlordId: this.currentUser.uid,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                            };
+                            
+                            try {
+                                await firebaseDb.collection('rooms').add(unitData);
+                                ToastManager.showToast('Unit added successfully!', 'success');
+                                ModalManager.closeModal();
+                                
+                                // Refresh the unit layout if it's open
+                                const unitModal = document.querySelector('.modal[data-modal-id^="modal-"]');
+                                if (unitModal && unitModal.querySelector('.unit-layout-dashboard')) {
+                                    await this.refreshUnitLayout();
+                                }
+                            } catch (error) {
+                                console.error('Error adding unit:', error);
+                                ToastManager.showToast('Error adding unit: ' + error.message, 'error');
+                            }
+                        }
+                    }
+                ]
+            });
+            
+        } catch (error) {
+            console.error('Error in addNewUnit:', error);
+            ToastManager.showToast('Error opening unit form', 'error');
+        }
+    }
+
+    
+    refreshUnitLayout() {
+        console.log('🔃 Refreshing unit layout...');
+        
+        ToastManager.showToast('Refreshing unit data...', 'info');
+        
+        // Find the currently open unit layout modal
+        const modal = document.querySelector('.modal-overlay .modal-content');
+        if (!modal) {
+            console.log('ℹ️ No unit layout modal found, fetching fresh data');
+            // You might want to reload the dashboard if modal is not open
+            return;
+        }
+        
+        // Trigger a manual refresh by fetching data again
+        DataManager.getLandlordUnits(this.currentUser.uid)
+            .then(units => {
+                console.log('📊 Refreshed units:', units.length);
+                this.updateUnitLayout(units, modal.closest('.modal-overlay'));
+                ToastManager.showToast('Unit layout refreshed successfully!', 'success');
+            })
+            .catch(error => {
+                console.error('❌ Error refreshing unit layout:', error);
+                ToastManager.showToast('Error refreshing unit data.', 'error');
+            });
+    }
+
+    debugUnitLayout() {
+        console.log('🐛 Unit Layout Debug Information:');
+        console.log('================================');
+        console.log('Current User:', this.currentUser?.uid);
+        console.log('Current Role:', this.currentRole);
+        console.log('Current Page:', this.currentPage);
+        
+        // Check if modal is open
+        const modal = document.querySelector('.modal-overlay');
+        console.log('Modal Open:', !!modal);
+        
+        if (modal) {
+            console.log('Modal Element:', modal);
+            console.log('Unit Cards in Modal:', modal.querySelectorAll('.unit-card').length);
+            console.log('Tab Elements:', modal.querySelectorAll('[data-bs-toggle="tab"]').length);
+        }
+        
+        // Test data fetching
+        DataManager.getLandlordUnits(this.currentUser.uid)
+            .then(units => {
+                console.log('Units from Database:', units.length);
+                console.log('Sample Unit:', units[0]);
+            })
+            .catch(error => {
+                console.error('Database Error:', error);
+            });
+    }
+
+    bindMethodsToWindow() {
+    console.log('🔗 Binding methods to window.app...');
+    
+    // Ensure window.app exists
+    if (!window.app) {
+        window.app = this;
+        console.log('✅ Created window.app');
+    }
+    
+    // List all methods that should be globally accessible
+    const methodsToBind = [
+        'showUnitLayoutDashboard',
+        'showUnitDetails',
+        'showAddUnitForm',
+        'exportUnitReport',
+        'refreshUnitLayout',
+        'setupUnitClickHandlers',
+        'generateDynamicUnitLayout'
+    ];
+    
+    // Bind each method
+    methodsToBind.forEach(methodName => {
+        if (typeof this[methodName] === 'function') {
+            window.app[methodName] = this[methodName].bind(this);
+            console.log(`✅ Bound ${methodName} to window.app`);
+        } else {
+            console.warn(`⚠️ Method ${methodName} not found`);
+        }
+    });
+}
+
 
 
     getLandlordDashboardHTML() {
@@ -2691,67 +2936,43 @@ class CasaLink {
 
                 <!-- UNIT GRID SECTION -->
                 <div class="card-group-title">Apartment Unit Layout</div>
-                
-                <!-- Horizontal Legend -->
+
+                <!-- Live Stats -->
                 <div class="unit-legend-horizontal">
                     <div class="legend-title">Unit Status:</div>
                     <div class="legend-items-horizontal">
-                        <div class="legend-item">
-                            <div class="legend-color vacant"></div>
-                            <span>Vacant</span>
-                        </div>
                         <div class="legend-item">
                             <div class="legend-color occupied"></div>
                             <span>Occupied</span>
                         </div>
                         <div class="legend-item">
-                            <div class="legend-color maintenance"></div>
-                            <span>Maintenance</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color late-payment"></div>
-                            <span>Late Payment</span>
+                            <div class="legend-color vacant"></div>
+                            <span>Vacant</span>
                         </div>
                     </div>
                     <div class="legend-stats-horizontal">
                         <div class="stat-item">
-                            <span class="stat-label">Total:</span>
-                            <span class="stat-value">22</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Vacant:</span>
-                            <span class="stat-value" id="vacantCount">0</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-label">Occupied:</span>
-                            <span class="stat-value" id="occupiedCount">0</span>
+                            <span class="stat-label">View:</span>
+                            <span class="stat-value">Database Units</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="unit-grid-container">
-                    <!-- Complete Grid Layout -->
-                    <div class="unit-grid-layout">
-                        <!-- Column Labels (A-E) -->
-                        <div class="column-labels-grid">
-                            ${['A', 'B', 'C', 'D', 'E'].map(letter => `
-                                <div class="column-label-grid">${letter}</div>
-                            `).join('')}
+                <div class="unit-grid-container" style="min-height: 300px;">
+                    <div style="text-align: center; padding: 30px;">
+                        <div style="margin-bottom: 20px;">
+                            <i class="fas fa-building" style="font-size: 3rem; color: var(--royal-blue);"></i>
                         </div>
-                        
-                        <!-- Row Labels (1-4 + Rooftop) -->
-                        <div class="row-labels-grid">
-                            ${['Floor 1', 'Floor 2', 'Floor 3', 'Floor 4', '<i class="fas fa-building"></i> Rooftop'].map((label, index) => `
-                                <div class="row-label-grid ${index === 4 ? 'rooftop-row-label-grid' : ''}">
-                                    ${index === 4 ? label : label}
-                                </div>
-                            `).join('')}
-                        </div>
-                        
-                        <!-- Unit Grid Cells -->
-                        <div class="unit-grid-cells">
-                            ${this.generateAligned5x4Grid()}
-                        </div>
+                        <h4 style="margin-bottom: 10px; color: var(--text-dark);">Apartment Unit Layout</h4>
+                        <p style="color: var(--dark-gray); margin-bottom: 25px;">
+                            View all your apartment units in an interactive layout
+                        </p>
+                        <button class="btn btn-primary" id="openUnitLayoutBtn">
+                            <i class="fas fa-th-large"></i> Open Unit Layout
+                        </button>
+                        <p style="color: var(--dark-gray); font-size: 0.85rem; margin-top: 15px;">
+                            Shows only units that exist in your database
+                        </p>
                     </div>
                 </div>
 
@@ -2900,67 +3121,2011 @@ class CasaLink {
         `;
     }
 
-        generateAligned5x4Grid() {
-        let html = '';
-        const rows = 5; // 5 rows (1-4 + rooftop as row 5)
-        const columns = 5; // 5 columns (A-E)
+    
+
+    async showUnitLayoutDashboard() {
+        try {
+            console.log('🏢 Loading dynamic apartment unit layout...');
+            
+            // Show loading modal
+            const modalContent = `
+                <div class="loading-container" style="padding: 40px; text-align: center;">
+                    <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-3" style="font-size: 1.1rem; color: var(--gray-600);">
+                        Loading units from database...
+                    </p>
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(modalContent, {
+                title: 'Apartment Unit Layout',
+                showFooter: false,
+                width: '98%',
+                maxWidth: '1800px',
+                height: '90vh'
+            });
+            
+            // Fetch units from Firestore
+            console.log('📡 Fetching units from Firestore...');
+            const units = await this.fetchAllUnitsFromFirestore();
+            
+            if (!units || units.length === 0) {
+                this.showNoUnitsFoundView(modal);
+                return;
+            }
+            
+            console.log(`✅ Loaded ${units.length} units from Firestore`);
+            
+            // Generate and display the dynamic layout
+            this.generateDynamicUnitLayout(modal, units);
+            
+            // Setup real-time updates
+            this.setupRealtimeUpdates(modal, units);
+            
+            // Setup click handlers
+            this.setupUnitClickHandlers(modal);
+            
+        } catch (error) {
+            console.error('❌ Error loading unit layout:', error);
+            ModalManager.closeModal();
+            ToastManager.showToast('Error loading unit layout: ' + error.message, 'error');
+        }
+    }
+
+    setupRealtimeUpdates(modal, initialUnits) {
+        console.log('📡 Setting up real-time updates...');
         
-        for (let row = 1; row <= rows; row++) {
-            for (let col = 1; col <= columns; col++) {
-                const columnLetter = String.fromCharCode(64 + col); // A, B, C, D, E
+        const unsubscribe = DataManager.getUnitsWithRealtimeUpdates(
+            this.currentUser.uid,
+            (updatedUnits) => {
+                console.log('🔄 Real-time update received:', updatedUnits.length, 'units');
                 
-                // For rows 1-4, all 5 columns have units
-                if (row <= 4) {
-                    const unitId = `${row}${columnLetter}`; // 1A, 1B, etc.
-                    const unitNumber = ((row - 1) * columns) + col; // Numeric ID: 1-20
-                    
-                    html += `
-                        <div class="unit-cell-grid" data-unit="${unitId}" data-unit-number="${unitNumber}" data-status="vacant">
-                            <div class="unit-id-grid">${unitId}</div>
-                            <div class="unit-number-grid">(${unitNumber})</div>
-                            <div class="unit-status-dot-grid"></div>
-                            <div class="unit-hover-info-grid">
-                                <div class="hover-unit-id-grid">Unit ${unitId}</div>
-                                <div class="hover-unit-number-grid">(#${unitNumber})</div>
-                                <div class="hover-unit-status-grid">Vacant</div>
-                                <div class="hover-unit-action-grid">Click for details</div>
-                            </div>
-                        </div>
-                    `;
-                } 
-                // For rooftop (row 5), only columns A and B have units (5A, 5B)
-                else if (row === 5 && col <= 2) {
-                    const unitId = `5${columnLetter}`; // 5A, 5B
-                    const unitNumber = 20 + col; // Units 21 and 22
-                    
-                    html += `
-                        <div class="unit-cell-grid rooftop-unit-cell-grid" data-unit="${unitId}" data-unit-number="${unitNumber}" data-status="vacant">
-                            <div class="unit-id-grid">${unitId}</div>
-                            <div class="unit-number-grid">(${unitNumber})</div>
-                            <div class="unit-status-dot-grid"></div>
-                            <div class="unit-hover-info-grid">
-                                <div class="hover-unit-id-grid">Unit ${unitId}</div>
-                                <div class="hover-unit-number-grid">(#${unitNumber})</div>
-                                <div class="hover-unit-status-grid">Vacant</div>
-                                <div class="hover-unit-action-grid">Click for details</div>
-                            </div>
-                        </div>
-                    `;
-                }
-                // Empty spaces for rooftop columns C, D, E (no units there)
-                else if (row === 5 && col > 2) {
-                    html += `
-                        <div class="empty-unit-cell-grid">
-                            <div class="empty-unit-label">-</div>
-                            <div class="empty-unit-subtitle">Empty</div>
-                        </div>
-                    `;
+                if (modal && document.body.contains(modal)) {
+                    this.generateDynamicUnitLayout(modal, updatedUnits);
+                    this.setupUnitClickHandlers(modal);
+                    console.log('✅ Layout updated with real-time data');
                 }
             }
+        );
+        
+        // Store unsubscribe function for cleanup
+        modal.dataset.unsubscribe = unsubscribe;
+        
+        // Clean up on modal close
+        modal.addEventListener('hidden.bs.modal', () => {
+            if (unsubscribe && typeof unsubscribe === 'function') {
+                unsubscribe();
+                console.log('🧹 Cleaned up real-time listener');
+            }
+        });
+    }
+
+    showAddUnitForm() {
+        const formHTML = `
+            <div style="max-width: 600px; margin: 0 auto;">
+                <h4 style="margin-bottom: 25px; color: var(--royal-blue);">
+                    <i class="fas fa-plus-circle"></i> Add New Unit
+                </h4>
+                
+                <div class="form-group">
+                    <label class="form-label">Room Number</label>
+                    <input type="text" class="form-input" id="newUnitNumber" 
+                        placeholder="e.g., 1A, 2B, 5A" required>
+                    <small style="color: #666; font-size: 0.85rem;">
+                        Format: FloorNumber + Letter (1A, 2B, 5A for rooftop)
+                    </small>
+                </div>
+                
+                <div class="row" style="margin-bottom: 20px;">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="form-label">Floor</label>
+                            <select class="form-input" id="newUnitFloor">
+                                <option value="1">Floor 1</option>
+                                <option value="2">Floor 2</option>
+                                <option value="3">Floor 3</option>
+                                <option value="4">Floor 4</option>
+                                <option value="5">Rooftop</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="form-label">Status</label>
+                            <select class="form-input" id="newUnitStatus">
+                                <option value="vacant">Vacant</option>
+                                <option value="occupied">Occupied</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Monthly Rent (₱)</label>
+                    <input type="number" class="form-input" id="newUnitRent" 
+                        min="0" step="100" value="5000" required>
+                </div>
+                
+                <div class="row" style="margin-bottom: 20px;">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="form-label">Bedrooms</label>
+                            <input type="number" class="form-input" id="newUnitBedrooms" 
+                                min="0" max="5" value="1">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label class="form-label">Bathrooms</label>
+                            <input type="number" class="form-input" id="newUnitBathrooms" 
+                                min="0" max="5" step="0.5" value="1">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Maximum Occupants</label>
+                    <input type="number" class="form-input" id="newUnitMaxOccupants" 
+                        min="1" max="10" value="2">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Security Deposit (₱)</label>
+                    <input type="number" class="form-input" id="newUnitDeposit" 
+                        min="0" step="100" value="5000">
+                </div>
+            </div>
+        `;
+        
+        ModalManager.openModal(formHTML, {
+            title: 'Add New Unit',
+            onSubmit: async () => {
+                const unitData = {
+                    roomNumber: document.getElementById('newUnitNumber').value.trim(),
+                    floor: document.getElementById('newUnitFloor').value,
+                    isAvailable: document.getElementById('newUnitStatus').value === 'vacant',
+                    monthlyRent: parseFloat(document.getElementById('newUnitRent').value) || 0,
+                    numberOfBedrooms: parseInt(document.getElementById('newUnitBedrooms').value) || 0,
+                    numberOfBathrooms: parseFloat(document.getElementById('newUnitBathrooms').value) || 0,
+                    maxMembers: parseInt(document.getElementById('newUnitMaxOccupants').value) || 0,
+                    securityDeposit: parseFloat(document.getElementById('newUnitDeposit').value) || 0,
+                    numberOfMembers: 0,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                if (!unitData.roomNumber) {
+                    ToastManager.showToast('Please enter a room number', 'error');
+                    return;
+                }
+                
+                try {
+                    // Check if unit already exists
+                    const existingQuery = await firebaseDb.collection('rooms')
+                        .where('roomNumber', '==', unitData.roomNumber)
+                        .get();
+                    
+                    if (!existingQuery.empty) {
+                        ToastManager.showToast(`Unit ${unitData.roomNumber} already exists`, 'error');
+                        return;
+                    }
+                    
+                    // Add to Firestore
+                    await firebaseDb.collection('rooms').add(unitData);
+                    
+                    ToastManager.showToast(`Unit ${unitData.roomNumber} added successfully!`, 'success');
+                    ModalManager.closeModal();
+                    
+                    // Refresh the unit layout if it's open
+                    const unitLayoutModal = document.querySelector('.modal.show');
+                    if (unitLayoutModal) {
+                        const units = await this.fetchAllUnitsFromFirestore();
+                        this.generateDynamicUnitLayout(unitLayoutModal, units);
+                        this.setupUnitClickHandlers(unitLayoutModal);
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Error adding unit:', error);
+                    ToastManager.showToast('Error adding unit: ' + error.message, 'error');
+                }
+            }
+        });
+    }
+
+    showNoUnitsFoundView(modal) {
+        modal.querySelector('.modal-body').innerHTML = `
+            <div style="padding: 60px 20px; text-align: center;">
+                <div style="font-size: 4rem; margin-bottom: 20px; color: var(--royal-blue);">
+                    <i class="fas fa-building"></i>
+                </div>
+                <h4 style="margin-bottom: 15px; color: var(--text-dark);">No Units Found</h4>
+                <p style="color: var(--dark-gray); margin-bottom: 25px; max-width: 500px; margin-left: auto; margin-right: auto;">
+                    No apartment units found in the database. Add your first unit to get started.
+                </p>
+                <div style="display: flex; gap: 15px; justify-content: center; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
+                        <i class="fas fa-plus"></i> Add First Unit
+                    </button>
+                    <button class="btn btn-secondary" onclick="testFirestoreData()">
+                        <i class="fas fa-database"></i> Check Firestore Data
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    async fetchAllUnitsFromFirestore() {
+        try {
+            console.log('🔄 Fetching all units from Firestore...');
+            
+            const roomsSnapshot = await firebaseDb.collection('rooms').get();
+            
+            if (roomsSnapshot.empty) {
+                console.log('📦 No rooms found in Firestore');
+                return [];
+            }
+            
+            const units = roomsSnapshot.docs.map(doc => {
+                const room = doc.data();
+                return {
+                    id: doc.id,
+                    roomNumber: room.roomNumber || `Unit-${doc.id.substring(0, 8)}`,
+                    floor: parseInt(room.floor) || room.floor || 1,
+                    status: room.isAvailable === false ? 'occupied' : 'vacant',
+                    isAvailable: room.isAvailable !== false,
+                    occupiedBy: room.occupiedBy || null,
+                    tenantName: room.occupiedBy ? 'Occupied' : 'Vacant',
+                    numberOfMembers: room.numberOfMembers || 0,
+                    maxMembers: room.maxMembers || 0,
+                    monthlyRent: room.monthlyRent || 0,
+                    numberOfBedrooms: room.numberOfBedrooms || 0,
+                    numberOfBathrooms: room.numberOfBathrooms || 0,
+                    securityDeposit: room.securityDeposit || 0,
+                    occupiedAt: room.occupiedAt || null,
+                    createdAt: room.createdAt || null,
+                    updatedAt: room.updatedAt || null,
+                    ...room // Include all original fields
+                };
+            });
+            
+            console.log(`✅ Found ${units.length} units in Firestore`);
+            
+            // Log sample units for debugging
+            if (units.length > 0) {
+                console.log('📋 Sample units:', units.slice(0, 3).map(u => ({
+                    roomNumber: u.roomNumber,
+                    floor: u.floor,
+                    status: u.status,
+                    isAvailable: u.isAvailable
+                })));
+            }
+            
+            return units;
+            
+        } catch (error) {
+            console.error('❌ Error fetching units from Firestore:', error);
+            return [];
         }
+    }
+
+    groupUnitsByFloor(units) {
+        const unitsByFloor = {};
+        
+        units.forEach(unit => {
+            const floor = unit.floor || 'unknown';
+            if (!unitsByFloor[floor]) {
+                unitsByFloor[floor] = [];
+            }
+            unitsByFloor[floor].push(unit);
+        });
+        
+        // Sort floors
+        const sortedFloors = Object.keys(unitsByFloor).sort((a, b) => {
+            if (a === 'unknown') return 1;
+            if (b === 'unknown') return -1;
+            if (a === 'rooftop' || a === 'Rooftop' || a === '5') return 1;
+            if (b === 'rooftop' || b === 'Rooftop' || b === '5') return -1;
+            return parseInt(a) - parseInt(b);
+        });
+        
+        // Sort units within each floor by room number
+        sortedFloors.forEach(floor => {
+            unitsByFloor[floor].sort((a, b) => {
+                return (a.roomNumber || '').localeCompare(b.roomNumber || '');
+            });
+        });
+        
+        return { unitsByFloor, sortedFloors };
+    }
+
+    generateFloorUnitCards(units) {
+        return units.map(unit => {
+            const isOccupied = unit.status === 'occupied';
+            const statusClass = isOccupied ? 'occupied' : 'vacant';
+            const statusText = isOccupied ? 'OCCUPIED' : 'VACANT';
+            
+            // Format tenant info if occupied
+            const tenantInfo = unit.occupiedBy 
+                ? `<div class="unit-details">${unit.occupiedBy.substring(0, 12)}...</div>`
+                : `<div class="unit-details">Available</div>`;
+            
+            // Format rent
+            const rentInfo = unit.monthlyRent 
+                ? `<div class="unit-rent">₱${unit.monthlyRent.toLocaleString()}</div>`
+                : `<div class="unit-details">Rent not set</div>`;
+            
+            return `
+                <div class="unit-card-dynamic ${statusClass}" 
+                    data-unit-id="${unit.id}" 
+                    data-room-number="${unit.roomNumber}"
+                    data-status="${statusClass}">
+                    
+                    <div class="unit-badge ${statusClass}"></div>
+                    
+                    <div class="unit-number">${unit.roomNumber}</div>
+                    
+                    <div class="unit-status ${statusClass}">${statusText}</div>
+                    
+                    ${tenantInfo}
+                    
+                    ${rentInfo}
+                    
+                    <div class="unit-details" style="margin-top: 5px; font-size: 0.8rem; color: #999;">
+                        ${unit.numberOfBedrooms || 0} bed • ${unit.numberOfBathrooms || 0} bath
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    generateFloorLayouts(unitsByFloorData) {
+        const { unitsByFloor, sortedFloors } = unitsByFloorData;
+        let html = '';
+        
+        sortedFloors.forEach(floor => {
+            const floorUnits = unitsByFloor[floor];
+            const floorName = floor === '5' || floor.toLowerCase().includes('rooftop') 
+                ? 'Rooftop' 
+                : `Floor ${floor}`;
+            
+            const floorIcon = floor === '5' || floor.toLowerCase().includes('rooftop')
+                ? '<i class="fas fa-star" style="color: #1565c0;"></i>'
+                : '<i class="fas fa-building" style="color: var(--royal-blue);"></i>';
+            
+            html += `
+                <div class="floor-section">
+                    <div class="floor-title">
+                        ${floorIcon} ${floorName}
+                        <span class="floor-badge">${floorUnits.length} units</span>
+                    </div>
+                    
+                    <div class="unit-grid-dynamic">
+                        ${this.generateFloorUnitCards(floorUnits)}
+                    </div>
+                </div>
+            `;
+        });
         
         return html;
     }
+
+    exportUnitReport() {
+        // This would generate and download a report
+        ToastManager.showToast('Export feature coming soon!', 'info');
+    }
+
+    generateDynamicUnitLayout(modal, units) {
+        console.log('🏗️ Generating dynamic unit layout...');
+        
+        // Calculate statistics
+        const totalUnits = units.length;
+        const occupiedUnits = units.filter(u => u.status === 'occupied').length;
+        const vacantUnits = totalUnits - occupiedUnits;
+        const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
+        
+        // Group units by floor
+        const unitsByFloor = this.groupUnitsByFloor(units);
+        
+        // Generate the layout HTML
+        const layoutHTML = `
+            <div class="dynamic-unit-layout">
+                <!-- Header -->
+                <div class="layout-header" style="margin-bottom: 30px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 20px;">
+                        <div>
+                            <h3 style="margin: 0 0 10px 0; color: var(--royal-blue);">Apartment Unit Layout</h3>
+                            <p style="margin: 0; color: var(--dark-gray); font-size: 0.95rem;">
+                                Showing ${totalUnits} units from database • Real-time updates active
+                            </p>
+                        </div>
+                        
+                        <!-- Quick Stats -->
+                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--royal-blue);">${totalUnits}</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Total Units</div>
+                            </div>
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--success);">${occupiedUnits}</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupied</div>
+                            </div>
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: #dc3545;">${vacantUnits}</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Vacant</div>
+                            </div>
+                            <div style="text-align: center; min-width: 100px;">
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning);">${occupancyRate}%</div>
+                                <div style="font-size: 0.85rem; color: var(--dark-gray);">Occupancy</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Legend -->
+                <div class="unit-legend" style="
+                    background: white;
+                    padding: 15px 20px;
+                    border-radius: 8px;
+                    border: 1px solid #e9ecef;
+                    margin-bottom: 25px;
+                    display: flex;
+                    align-items: center;
+                    gap: 25px;
+                    flex-wrap: wrap;
+                ">
+                    <div style="font-weight: 600; color: var(--text-dark);">Unit Status:</div>
+                    <div style="display: flex; gap: 20px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 14px; height: 14px; border-radius: 4px; background: var(--success); border: 1px solid var(--success);"></div>
+                            <span style="font-size: 0.9rem;">Occupied</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div style="width: 14px; height: 14px; border-radius: 4px; background: #f8f9fa; border: 1px solid #dc3545;"></div>
+                            <span style="font-size: 0.9rem;">Vacant</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Floor Layouts -->
+                <div class="floor-layouts-container">
+                    ${this.generateFloorLayouts(unitsByFloor)}
+                </div>
+                
+                <!-- Actions -->
+                <div style="margin-top: 40px; padding-top: 25px; border-top: 1px solid #e9ecef; text-align: center;">
+                    <button class="btn btn-primary" onclick="window.app.showAddUnitForm()">
+                        <i class="fas fa-plus-circle"></i> Add New Unit
+                    </button>
+                    <button class="btn btn-secondary" onclick="window.app.exportUnitReport()" style="margin-left: 10px;">
+                        <i class="fas fa-download"></i> Export Report
+                    </button>
+                </div>
+            </div>
+            
+            <style>
+                .dynamic-unit-layout {
+                    padding: 10px;
+                }
+                
+                .floor-section {
+                    margin-bottom: 40px;
+                }
+                
+                .floor-title {
+                    font-size: 1.2rem;
+                    font-weight: 600;
+                    color: var(--royal-blue);
+                    margin-bottom: 20px;
+                    padding-bottom: 10px;
+                    border-bottom: 2px solid var(--royal-blue);
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                }
+                
+                .unit-grid-dynamic {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+                    gap: 15px;
+                    margin-bottom: 20px;
+                }
+                
+                .unit-card-dynamic {
+                    background: white;
+                    border-radius: 10px;
+                    border: 2px solid #e9ecef;
+                    padding: 20px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    position: relative;
+                    min-height: 140px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    text-align: center;
+                }
+                
+                .unit-card-dynamic:hover {
+                    transform: translateY(-3px);
+                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+                }
+                
+                .unit-card-dynamic.occupied {
+                    border-color: var(--success);
+                    background: linear-gradient(135deg, rgba(52, 168, 83, 0.05) 0%, white 100%);
+                }
+                
+                .unit-card-dynamic.vacant {
+                    border-color: #e9ecef;
+                    background: linear-gradient(135deg, #f8f9fa 0%, white 100%);
+                }
+                
+                .unit-card-dynamic .unit-number {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    color: var(--royal-blue);
+                    margin-bottom: 8px;
+                }
+                
+                .unit-card-dynamic.occupied .unit-number {
+                    color: var(--success);
+                }
+                
+                .unit-status {
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    margin-bottom: 10px;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                .unit-status.occupied {
+                    background: rgba(52, 168, 83, 0.1);
+                    color: var(--success);
+                    border: 1px solid rgba(52, 168, 83, 0.3);
+                }
+                
+                .unit-status.vacant {
+                    background: rgba(220, 53, 69, 0.1);
+                    color: #dc3545;
+                    border: 1px solid rgba(220, 53, 69, 0.3);
+                }
+                
+                .unit-details {
+                    font-size: 0.85rem;
+                    color: var(--dark-gray);
+                    margin-top: 5px;
+                }
+                
+                .unit-rent {
+                    font-size: 0.9rem;
+                    font-weight: 600;
+                    color: var(--royal-blue);
+                    margin-top: 8px;
+                }
+                
+                .unit-badge {
+                    position: absolute;
+                    top: 10px;
+                    right: 10px;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                }
+                
+                .unit-badge.occupied {
+                    background: var(--success);
+                    box-shadow: 0 0 0 3px rgba(52, 168, 83, 0.2);
+                }
+                
+                .unit-badge.vacant {
+                    background: #e9ecef;
+                    border: 1px solid #dc3545;
+                }
+                
+                .floor-badge {
+                    background: var(--royal-blue);
+                    color: white;
+                    padding: 2px 10px;
+                    border-radius: 12px;
+                    font-size: 0.8rem;
+                    font-weight: 600;
+                    margin-left: 10px;
+                }
+                
+                @media (max-width: 768px) {
+                    .unit-grid-dynamic {
+                        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+                        gap: 12px;
+                    }
+                    
+                    .unit-card-dynamic {
+                        padding: 15px;
+                        min-height: 120px;
+                    }
+                    
+                    .unit-number {
+                        font-size: 1.3rem;
+                    }
+                }
+            </style>
+        `;
+        
+        modal.querySelector('.modal-body').innerHTML = layoutHTML;
+        console.log('✅ Dynamic layout generated successfully');
+    }
+
+    generateUnitLayoutDashboard(units, modal) {
+        console.log('📊 Generating unit layout dashboard for', units.length, 'units');
+        
+        // Group units by floor
+        const floors = {};
+        units.forEach(unit => {
+            const floorNum = unit.floor || 'Unknown';
+            if (!floors[floorNum]) {
+                floors[floorNum] = [];
+            }
+            floors[floorNum].push(unit);
+        });
+        
+        // Sort floors numerically
+        const sortedFloors = Object.keys(floors).sort((a, b) => {
+            if (a === 'Unknown') return 1;
+            if (b === 'Unknown') return -1;
+            return parseInt(b) - parseInt(a); // Show higher floors first
+        });
+        
+        // Calculate counts
+        const occupiedCount = this.getUnitCountByStatus(units, 'occupied');
+        const vacantCount = this.getUnitCountByStatus(units, 'vacant');
+        const maintenanceCount = this.getUnitCountByStatus(units, 'maintenance');
+        const reservedCount = this.getUnitCountByStatus(units, 'reserved');
+        
+        // Create dashboard layout
+        const dashboardHTML = `
+            <div class="unit-layout-dashboard">
+                <!-- Dashboard Header -->
+                <div class="dashboard-header" style="margin-bottom: 30px;">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5 style="margin: 0; font-weight: 600;">Apartment Unit Layout</h5>
+                            <p style="margin: 5px 0 0 0; color: var(--gray-600); font-size: 0.9rem;">
+                                ${units.length} units across ${sortedFloors.length} floors
+                                <span class="realtime-indicator" style="margin-left: 10px;">
+                                    <i class="fas fa-circle text-success" style="font-size: 0.7rem;"></i>
+                                    <span style="font-size: 0.8rem; margin-left: 5px;">Real-time updates active</span>
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            <div class="status-legend" style="display: inline-flex; gap: 15px; flex-wrap: wrap; justify-content: flex-end;">
+                                <div class="legend-item">
+                                    <span class="status-dot" style="background-color: #28a745;"></span>
+                                    <span>Occupied</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="status-dot" style="background-color: #dc3545;"></span>
+                                    <span>Vacant</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="status-dot" style="background-color: #ffc107;"></span>
+                                    <span>Maintenance</span>
+                                </div>
+                                <div class="legend-item">
+                                    <span class="status-dot" style="background-color: #17a2b8;"></span>
+                                    <span>Reserved</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Statistics Cards -->
+                <div class="row mb-4">
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #28a74515, #28a74505);">
+                            <div class="stat-icon" style="background-color: #28a74520; color: #28a745;">
+                                <i class="fas fa-home"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="occupiedUnitsStat">${occupiedCount}</div>
+                                <div class="stat-label">Occupied Units</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #dc354515, #dc354505);">
+                            <div class="stat-icon" style="background-color: #dc354520; color: #dc3545;">
+                                <i class="fas fa-door-open"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="vacantUnitsStat">${vacantCount}</div>
+                                <div class="stat-label">Vacant Units</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #ffc10715, #ffc10705);">
+                            <div class="stat-icon" style="background-color: #ffc10720; color: #ffc107;">
+                                <i class="fas fa-tools"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="maintenanceUnitsStat">${maintenanceCount}</div>
+                                <div class="stat-label">Under Maintenance</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-md-6 mb-3">
+                        <div class="stat-card" style="background: linear-gradient(135deg, #17a2b815, #17a2b805);">
+                            <div class="stat-icon" style="background-color: #17a2b820; color: #17a2b8;">
+                                <i class="fas fa-calendar-check"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="reservedUnitsStat">${reservedCount}</div>
+                                <div class="stat-label">Reserved Units</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Floor Navigation Tabs -->
+                <div class="floor-navigation mb-4">
+                    <ul class="nav nav-tabs" id="floorTabs" role="tablist">
+                        ${sortedFloors.map((floor, index) => `
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link ${index === 0 ? 'active' : ''}" 
+                                        id="floor-${floor}-tab" 
+                                        data-bs-toggle="tab" 
+                                        data-bs-target="#floor-${floor}" 
+                                        type="button" 
+                                        role="tab">
+                                    <i class="fas fa-building me-2"></i>
+                                    ${floor === 'Unknown' ? 'Unknown Floor' : `Floor ${floor}`}
+                                    <span class="badge bg-secondary ms-2">${floors[floor].length}</span>
+                                </button>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+                
+                <!-- Floor Content -->
+                <div class="tab-content" id="floorContent" style="min-height: 400px;">
+                    ${sortedFloors.map((floor, index) => `
+                        <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" 
+                            id="floor-${floor}" 
+                            role="tabpanel">
+                            ${this.generateFloorLayout(floors[floor], floor)}
+                        </div>
+                    `).join('')}
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="quick-actions mt-4 pt-4 border-top">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-primary" id="refreshUnitLayout">
+                            <i class="fas fa-sync-alt"></i> Refresh Layout
+                        </button>
+                        <button class="btn btn-outline-success" id="addNewUnitBtn">
+                            <i class="fas fa-plus"></i> Add New Unit
+                        </button>
+                        <button class="btn btn-outline-info" id="exportUnitData">
+                            <i class="fas fa-download"></i> Export Report
+                        </button>
+                        <button class="btn btn-outline-warning" id="unitAnalyticsBtn">
+                            <i class="fas fa-chart-bar"></i> View Analytics
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <style>
+                .unit-layout-dashboard {
+                    padding: 5px;
+                }
+                
+                .stat-card {
+                    border-radius: 12px;
+                    padding: 20px;
+                    border: 1px solid var(--border-color);
+                    display: flex;
+                    align-items: center;
+                    gap: 15px;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                }
+                
+                .stat-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                }
+                
+                .stat-icon {
+                    width: 50px;
+                    height: 50px;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.5rem;
+                }
+                
+                .stat-value {
+                    font-size: 1.8rem;
+                    font-weight: 700;
+                    line-height: 1;
+                }
+                
+                .stat-label {
+                    color: var(--gray-600);
+                    font-size: 0.9rem;
+                    margin-top: 5px;
+                }
+                
+                .status-legend {
+                    font-size: 0.85rem;
+                }
+                
+                .legend-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                }
+                
+                .status-dot {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                    display: inline-block;
+                }
+                
+                .floor-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                    gap: 20px;
+                    padding: 15px 0;
+                }
+                
+                .unit-card {
+                    border: 1px solid var(--border-color);
+                    border-radius: 10px;
+                    padding: 20px;
+                    transition: all 0.3s;
+                    cursor: pointer;
+                    position: relative;
+                }
+                
+                .unit-card:hover {
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                    transform: translateY(-2px);
+                }
+                
+                .unit-card.occupied {
+                    border-left: 4px solid #28a745;
+                    background: linear-gradient(to right, #28a74508, transparent);
+                }
+                
+                .unit-card.vacant {
+                    border-left: 4px solid #dc3545;
+                    background: linear-gradient(to right, #dc354508, transparent);
+                }
+                
+                .unit-card.maintenance {
+                    border-left: 4px solid #ffc107;
+                    background: linear-gradient(to right, #ffc10708, transparent);
+                }
+                
+                .unit-card.reserved {
+                    border-left: 4px solid #17a2b8;
+                    background: linear-gradient(to right, #17a2b808, transparent);
+                }
+                
+                .unit-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: flex-start;
+                    margin-bottom: 15px;
+                }
+                
+                .unit-number {
+                    font-size: 1.5rem;
+                    font-weight: 700;
+                    color: var(--text-color);
+                }
+                
+                .unit-status-badge {
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                .badge-occupied {
+                    background-color: #28a74520;
+                    color: #28a745;
+                    border: 1px solid #28a74530;
+                }
+                
+                .badge-vacant {
+                    background-color: #dc354520;
+                    color: #dc3545;
+                    border: 1px solid #dc354530;
+                }
+                
+                .badge-maintenance {
+                    background-color: #ffc10720;
+                    color: #ffc107;
+                    border: 1px solid #ffc10730;
+                }
+                
+                .badge-reserved {
+                    background-color: #17a2b820;
+                    color: #17a2b8;
+                    border: 1px solid #17a2b830;
+                }
+                
+                .unit-details {
+                    margin-top: 15px;
+                }
+                
+                .detail-row {
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 8px;
+                    font-size: 0.9rem;
+                }
+                
+                .detail-label {
+                    color: var(--gray-600);
+                    font-weight: 500;
+                }
+                
+                .detail-value {
+                    color: var(--text-color);
+                    font-weight: 600;
+                    text-align: right;
+                }
+                
+                .tenant-name {
+                    color: var(--primary-color);
+                    font-weight: 600;
+                }
+                
+                .unit-actions {
+                    display: flex;
+                    gap: 10px;
+                    margin-top: 15px;
+                    padding-top: 15px;
+                    border-top: 1px solid var(--border-color);
+                }
+                
+                .action-btn {
+                    flex: 1;
+                    padding: 6px 12px;
+                    font-size: 0.8rem;
+                    border-radius: 6px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 5px;
+                    transition: all 0.2s;
+                    border: 1px solid transparent;
+                    cursor: pointer;
+                }
+                
+                .action-btn:hover {
+                    transform: translateY(-1px);
+                }
+                
+                .action-btn.view {
+                    background-color: #0d6efd;
+                    color: white;
+                }
+                
+                .action-btn.view:hover {
+                    background-color: #0b5ed7;
+                }
+                
+                .action-btn.edit {
+                    background-color: #198754;
+                    color: white;
+                }
+                
+                .action-btn.edit:hover {
+                    background-color: #157347;
+                }
+                
+                .action-btn.delete {
+                    background-color: #dc3545;
+                    color: white;
+                }
+                
+                .action-btn.delete:hover {
+                    background-color: #bb2d3b;
+                }
+                
+                /* Prevent action buttons from triggering card clicks */
+                .unit-card .action-btn,
+                .unit-card .action-btn * {
+                    pointer-events: auto !important;
+                }
+                
+                .unit-card *:not(.action-btn):not(.action-btn *) {
+                    pointer-events: none;
+                }
+                
+                @media (max-width: 768px) {
+                    .floor-grid {
+                        grid-template-columns: 1fr;
+                    }
+                    
+                    .stat-card {
+                        padding: 15px;
+                    }
+                    
+                    .stat-value {
+                        font-size: 1.5rem;
+                    }
+                }
+            </style>
+        `;
+        
+        // Update modal content
+        modal.querySelector('.modal-body').innerHTML = dashboardHTML;
+        
+        console.log('✅ Dashboard HTML generated');
+        
+        // Note: Click handlers will be set up in showUnitLayoutDashboard method
+        // via setupUnitClickHandlers() for better management
+    }
+
+    generateFloorLayout(units, floorNumber) {
+        console.log('🏗️ Generating layout for floor', floorNumber, 'with', units.length, 'units');
+        
+        // Sort units by unit number (1A, 1B, etc.)
+        const sortedUnits = units.sort((a, b) => {
+            return a.roomNumber?.localeCompare(b.roomNumber) || 0;
+        });
+        
+        // Calculate floor statistics
+        const floorOccupied = units.filter(u => u.status === 'occupied').length;
+        const floorVacant = units.filter(u => u.status === 'vacant').length;
+        
+        return `
+            <div class="floor-layout">
+                <div class="floor-header mb-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 style="font-weight: 600; margin: 0;">
+                                ${floorNumber === 'rooftop' ? '🏠 Rooftop Units' : `🏢 Floor ${floorNumber}`}
+                                <span class="badge bg-primary ms-2">${units.length} units</span>
+                            </h6>
+                            <p style="color: var(--gray-600); font-size: 0.9rem; margin: 5px 0 0 0;">
+                                ${floorNumber === 'rooftop' ? 'Premium rooftop units with views' : `Apartment units on floor ${floorNumber}`}
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="floor-stats" style="display: flex; gap: 15px; justify-content: flex-end; flex-wrap: wrap;">
+                                <div class="stat-item">
+                                    <span class="stat-dot" style="background-color: var(--success);"></span>
+                                    <span class="stat-count">${floorOccupied}</span>
+                                    <span class="stat-label">Occupied</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-dot" style="background-color: #e9ecef; border: 1px solid #dc3545;"></span>
+                                    <span class="stat-count">${floorVacant}</span>
+                                    <span class="stat-label">Vacant</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="unit-grid-container">
+                    <!-- Simplified Horizontal Legend -->
+                    <div class="unit-legend-horizontal">
+                        <div class="legend-title">Unit Status Legend</div>
+                        <div class="legend-items-horizontal">
+                            <div class="legend-item">
+                                <span class="legend-color occupied"></span>
+                                <span>Occupied</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-color vacant"></span>
+                                <span>Vacant</span>
+                            </div>
+                        </div>
+                        <div class="legend-stats-horizontal">
+                            <div class="stat-item">
+                                <span class="stat-label">Units:</span>
+                                <span class="stat-value">${units.length}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Occupancy:</span>
+                                <span class="stat-value">${units.length > 0 ? Math.round((floorOccupied / units.length) * 100) : 0}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Perfect Grid Alignment System -->
+                    <div class="unit-grid-layout">
+                        <!-- TOP ROW - Column Labels (A-E) -->
+                        <div class="column-labels-grid">
+                            ${['A', 'B', 'C', 'D', 'E'].map(letter => `
+                                <div class="column-label-grid">${letter}</div>
+                            `).join('')}
+                        </div>
+                        
+                        <!-- LEFT COLUMN - Row Labels (1-4 + Rooftop) -->
+                        <div class="row-labels-grid">
+                            ${[4, 3, 2, 1, 'Rooftop'].map(label => `
+                                <div class="row-label-grid">
+                                    ${label === 'Rooftop' 
+                                        ? `<span class="rooftop-row-label-grid">
+                                            <i class="fas fa-star" style="color: #1565c0;"></i>
+                                            ${label}
+                                        </span>`
+                                        : `Floor ${label}`
+                                    }
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <!-- MAIN GRID CELLS - Perfect alignment -->
+                        <div class="unit-grid-cells">
+                            ${this.generateAligned5x4Grid(units)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    generateUnitCard(unit) {
+        const status = unit.status || 'vacant';
+        const statusClass = `unit-card ${status}`;
+        const statusBadgeClass = `unit-status-badge badge-${status}`;
+        
+        // Status badge text
+        const statusText = status.charAt(0).toUpperCase() + status.slice(1);
+        
+        // Unit details
+        const unitType = unit.type || 'Apartment';
+        const bedrooms = unit.bedrooms || 'N/A';
+        const bathrooms = unit.bathrooms || 'N/A';
+        const size = unit.size ? `${unit.size} sqft` : 'N/A';
+        const rent = unit.monthlyRent ? `$${unit.monthlyRent}/month` : 'Not set';
+        
+        // Tenant info if occupied
+        let tenantInfo = '';
+        let leaseInfo = '';
+        
+        if (status === 'occupied' && unit.currentTenant) {
+            tenantInfo = `
+                <div class="detail-row">
+                    <span class="detail-label">Tenant:</span>
+                    <span class="detail-value tenant-name">${unit.currentTenant.name || 'Unknown'}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Phone:</span>
+                    <span class="detail-value">${unit.currentTenant.phone || 'N/A'}</span>
+                </div>
+            `;
+            
+            if (unit.currentLease) {
+                const leaseEnd = unit.currentLease.leaseEnd ? 
+                    new Date(unit.currentLease.leaseEnd).toLocaleDateString() : 'N/A';
+                const daysRemaining = unit.currentLease.leaseEnd ? 
+                    Math.ceil((new Date(unit.currentLease.leaseEnd) - new Date()) / (1000 * 60 * 60 * 24)) : 0;
+                
+                leaseInfo = `
+                    <div class="detail-row">
+                        <span class="detail-label">Lease Ends:</span>
+                        <span class="detail-value ${daysRemaining < 30 ? 'text-danger' : ''}">
+                            ${leaseEnd} (${daysRemaining} days)
+                        </span>
+                    </div>
+                `;
+            }
+        }
+        
+        return `
+            <div class="${statusClass}" data-unit-id="${unit.id}">
+                <div class="unit-header">
+                    <div>
+                        <div class="unit-number">${unit.unitNumber || 'Unit N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--gray-600); margin-top: 2px;">
+                            ${unitType}
+                        </div>
+                    </div>
+                    <div class="${statusBadgeClass}">${statusText}</div>
+                </div>
+                
+                <div class="unit-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Rent:</span>
+                        <span class="detail-value">${rent}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Size:</span>
+                        <span class="detail-value">${size}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Bed/Bath:</span>
+                        <span class="detail-value">${bedrooms} bed • ${bathrooms} bath</span>
+                    </div>
+                    
+                    ${tenantInfo}
+                    ${leaseInfo}
+                </div>
+                
+                <div class="unit-actions">
+                    <button class="action-btn btn btn-outline-primary btn-sm" 
+                            onclick="event.stopPropagation(); app.showUnitDetails('${unit.id}')">
+                        <i class="fas fa-eye"></i> View
+                    </button>
+                    <button class="action-btn btn btn-outline-success btn-sm" 
+                            onclick="event.stopPropagation(); app.editUnit('${unit.id}')">
+                        <i class="fas fa-edit"></i> Edit
+                    </button>
+                    ${status === 'vacant' ? `
+                        <button class="action-btn btn btn-outline-info btn-sm" 
+                                onclick="event.stopPropagation(); app.addTenantToUnit('${unit.id}')">
+                            <i class="fas fa-user-plus"></i> Assign
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    getUnitCountByStatus(units, status) {
+        return units.filter(unit => unit.status === status).length;
+    }
+
+    updateUnitLayout(units, modal) {
+        try {
+            console.log('🔄 Updating unit layout with new data...');
+            
+            if (!modal || !modal.querySelector) {
+                console.error('❌ Invalid modal element');
+                return;
+            }
+            
+            if (!units || !Array.isArray(units)) {
+                console.error('❌ Invalid units data:', units);
+                return;
+            }
+            
+            // Validate units have required fields
+            const invalidUnits = units.filter(u => !u.floor || !u.unitNumber || !u.status);
+            if (invalidUnits.length > 0) {
+                console.warn(`⚠️ ${invalidUnits.length} units missing required fields`);
+            }
+            
+            // Update statistics cards
+            const occupiedCount = units.filter(u => u.status === 'occupied').length;
+            const vacantCount = units.filter(u => u.status === 'vacant').length;
+            const maintenanceCount = units.filter(u => u.status === 'maintenance').length;
+            const reservedCount = units.filter(u => u.status === 'reserved').length;
+            
+            // Update stat cards
+            const occupiedStat = modal.querySelector('#occupiedUnitsStat');
+            const vacantStat = modal.querySelector('#vacantUnitsStat');
+            const maintenanceStat = modal.querySelector('#maintenanceUnitsStat');
+            const reservedStat = modal.querySelector('#reservedUnitsStat');
+            
+            if (occupiedStat) occupiedStat.textContent = occupiedCount;
+            if (vacantStat) vacantStat.textContent = vacantCount;
+            if (maintenanceStat) maintenanceStat.textContent = maintenanceCount;
+            if (reservedStat) reservedStat.textContent = reservedCount;
+            
+            // Group units by floor
+            const unitsByFloor = {};
+            units.forEach(unit => {
+                if (!unitsByFloor[unit.floor]) {
+                    unitsByFloor[unit.floor] = [];
+                }
+                unitsByFloor[unit.floor].push(unit);
+            });
+            
+            // Update each floor tab content
+            const floors = [1, 2, 3, 4, 'rooftop'];
+            floors.forEach(floor => {
+                const floorTabId = floor === 'rooftop' ? 'rooftop-tab' : `floor${floor}-tab`;
+                const floorTab = modal.querySelector(`#${floorTabId}`);
+                if (floorTab) {
+                    const floorUnits = floor === 'rooftop' 
+                        ? units.filter(u => u.floor === 5 || u.floor === 'rooftop' || u.floor === '5')
+                        : units.filter(u => u.floor === floor);
+                    
+                    // Find the floor content pane
+                    const floorPaneId = floorTabId.replace('-tab', '');
+                    const floorPane = modal.querySelector(`#${floorPaneId}`);
+                    if (floorPane) {
+                        // Regenerate floor content
+                        floorPane.innerHTML = this.generateFloorLayout(floorUnits, floor);
+                    }
+                }
+            });
+            
+            // Re-attach click handlers AFTER DOM update
+            // Use nextTick pattern to ensure DOM is fully updated
+            setTimeout(() => {
+                console.log('🔌 Re-attaching click handlers after DOM update');
+                this.setupUnitClickHandlers(modal);
+            }, 50);
+            
+            console.log('✅ Unit layout updated successfully');
+            
+        } catch (error) {
+            console.error('❌ Error updating unit layout:', error);
+        }
+    }
+
+    // Debug function to test unit clicks
+    debugUnitClicks() {
+        console.log('🐛 Debugging unit clicks...');
+        
+        // Get the unit layout modal
+        const modal = document.querySelector('.modal.show');
+        if (!modal) {
+            console.log('❌ No modal found. Open the unit layout first.');
+            return;
+        }
+        
+        // Check unit cells
+        const unitCells = modal.querySelectorAll('.unit-cell-grid');
+        console.log(`🔍 Found ${unitCells.length} unit cells`);
+        
+        unitCells.forEach((cell, index) => {
+            console.log(`Cell ${index + 1}:`, {
+                roomNumber: cell.dataset.roomNumber,
+                unitId: cell.dataset.unitId,
+                status: cell.dataset.status,
+                hasClickListener: cell.hasAttribute('data-click-bound')
+            });
+        });
+        
+        // Test click simulation on first occupied unit
+        const firstOccupied = modal.querySelector('.unit-cell-grid[data-status="occupied"]');
+        if (firstOccupied) {
+            console.log('🧪 Simulating click on first occupied unit:', firstOccupied.dataset.roomNumber);
+            setTimeout(() => {
+                firstOccupied.click();
+            }, 1000);
+        }
+    }
+
+    // Function to test Firestore data
+    async testFirestoreData() {
+        console.log('🧪 Testing Firestore data...');
+        
+        try {
+            // Get all rooms
+            const querySnapshot = await firebaseDb.collection('rooms').get();
+            console.log(`📊 Total rooms in Firestore: ${querySnapshot.size}`);
+            
+            querySnapshot.forEach(doc => {
+                const room = doc.data();
+                console.log(`   - ${room.roomNumber}: isAvailable=${room.isAvailable}, occupiedBy=${room.occupiedBy || 'none'}`);
+            });
+            
+            // Check specific rooms
+            const roomsToCheck = ['1A', '1B', '2A', '5A'];
+            for (const roomNumber of roomsToCheck) {
+                const query = await firebaseDb.collection('rooms')
+                    .where('roomNumber', '==', roomNumber)
+                    .limit(1)
+                    .get();
+                
+                if (!query.empty) {
+                    const room = query.docs[0].data();
+                    console.log(`✅ ${roomNumber}: exists, isAvailable=${room.isAvailable}`);
+                } else {
+                    console.log(`❌ ${roomNumber}: does not exist in Firestore`);
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Error testing Firestore:', error);
+        }
+    }
+
+    setupUnitClickHandlers(modal) {
+        const unitCards = modal.querySelectorAll('.unit-card-dynamic');
+        console.log(`🖱️ Setting up click handlers for ${unitCards.length} unit cards`);
+        
+        unitCards.forEach(card => {
+            // Remove existing listeners
+            card.removeEventListener('click', this.handleUnitCardClick);
+            
+            // Add new listener
+            card.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                const unitId = card.dataset.unitId;
+                const roomNumber = card.dataset.roomNumber;
+                
+                console.log('✅ Unit card clicked:', { unitId, roomNumber });
+                
+                if (unitId) {
+                    this.showUnitDetails(unitId);
+                } else {
+                    ToastManager.showToast('Error: Unit ID not found', 'error');
+                }
+            });
+        });
+    }
+
+    // Add this new method to create units from grid clicks
+    async createUnitFromGrid(unitKey, status) {
+        try {
+            console.log('🏗️ Creating unit from grid:', unitKey);
+            
+            // Parse unit number and floor from key (e.g., "3B")
+            const floor = parseInt(unitKey[0]);
+            const position = unitKey[1];
+            
+            const modalContent = `
+                <div class="create-unit-form">
+                    <h5>Create Unit ${unitKey}</h5>
+                    <p class="text-muted">Fill in the details for this new unit.</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Unit Number</label>
+                        <input type="text" class="form-control" id="unitNumber" value="${unitKey}" readonly>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Floor</label>
+                            <input type="number" class="form-control" id="floor" value="${floor}" min="1" max="5">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Status</label>
+                            <select class="form-control" id="status">
+                                <option value="vacant" ${status === 'vacant' ? 'selected' : ''}>Vacant</option>
+                                <option value="occupied" ${status === 'occupied' ? 'selected' : ''}>Occupied</option>
+                                <option value="maintenance" ${status === 'maintenance' ? 'selected' : ''}>Maintenance</option>
+                                <option value="reserved" ${status === 'reserved' ? 'selected' : ''}>Reserved</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Monthly Rent (₱)</label>
+                        <input type="number" class="form-control" id="monthlyRent" min="0" step="100" placeholder="5000">
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Bedrooms</label>
+                            <input type="number" class="form-control" id="bedrooms" min="0" value="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Bathrooms</label>
+                            <input type="number" class="form-control" id="bathrooms" min="0" step="0.5" value="1">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Size (sq. ft.)</label>
+                        <input type="number" class="form-control" id="size" min="0" placeholder="850">
+                    </div>
+                </div>
+            `;
+            
+            const createModal = ModalManager.openModal(modalContent, {
+                title: 'Create New Unit',
+                onSubmit: async () => {
+                    const unitData = {
+                        unitNumber: document.getElementById('unitNumber').value,
+                        floor: parseInt(document.getElementById('floor').value),
+                        status: document.getElementById('status').value,
+                        monthlyRent: parseFloat(document.getElementById('monthlyRent').value) || 0,
+                        bedrooms: parseInt(document.getElementById('bedrooms').value) || 0,
+                        bathrooms: parseFloat(document.getElementById('bathrooms').value) || 0,
+                        size: parseInt(document.getElementById('size').value) || 0,
+                        type: this.getUnitType(parseInt(document.getElementById('bedrooms').value)),
+                        amenities: [],
+                        landlordId: this.currentUser.uid,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    };
+                    
+                    try {
+                        // Save to Firestore
+                        const docRef = await firebaseDb.collection('rooms').add(unitData);
+                        console.log('✅ Unit created with ID:', docRef.id);
+                        
+                        ToastManager.showToast(`Unit ${unitKey} created successfully!`, 'success');
+                        ModalManager.closeModal(createModal);
+                        
+                        // Refresh the unit layout
+                        this.refreshUnitLayout();
+                        
+                    } catch (error) {
+                        console.error('❌ Error creating unit:', error);
+                        ToastManager.showToast('Error creating unit. Please try again.', 'error');
+                    }
+                }
+            });
+            
+        } catch (error) {
+            console.error('❌ Error in createUnitFromGrid:', error);
+            ToastManager.showToast('Error creating unit form.', 'error');
+        }
+    }
+
+    // Helper method to determine unit type from bedroom count
+    getUnitType(bedrooms) {
+        switch (bedrooms) {
+            case 0: return 'Studio';
+            case 1: return '1 Bedroom';
+            case 2: return '2 Bedrooms';
+            case 3: return '3 Bedrooms';
+            default: return `${bedrooms} Bedrooms`;
+        }
+    }
+
+    testUnitClicks() {
+        console.clear();
+        console.log('🧪 TEST: Starting unit click test...');
+        
+        // Check if app exists
+        if (!window.app) {
+            console.error('❌ window.app not found!');
+            console.log('Try: window.app = new CasaLink()');
+            return;
+        }
+        
+        // Check current user
+        if (!window.app.currentUser) {
+            console.error('❌ Not logged in!');
+            return;
+        }
+        
+        // Open unit layout
+        console.log('🚀 Opening unit layout...');
+        window.app.showUnitLayoutDashboard();
+        
+        // After 2 seconds, add manual test
+        setTimeout(() => {
+            console.log('⏰ Adding manual test click...');
+            
+            const modal = document.querySelector('.modal-overlay');
+            if (modal) {
+                // Find first clickable element
+                const clickable = modal.querySelector('.unit-cell-grid, .unit-card');
+                if (clickable) {
+                    clickable.style.border = '3px solid #00ff00';
+                    clickable.style.boxShadow = '0 0 20px #00ff00';
+                    console.log('✅ Highlighted element:', clickable);
+                    console.log('👉 Click the green highlighted element');
+                }
+            }
+        }, 2000);
+    }
+
+    async showUnitDetails(unitId) {
+        console.log('🔍 showUnitDetails called with ID:', unitId);
+        
+        if (!unitId || unitId === 'undefined') {
+            console.error('❌ No valid unitId provided');
+            ToastManager.showToast('Please select a valid unit', 'error');
+            return;
+        }
+        
+        try {
+            // Show loading modal
+            const loadingHTML = `
+                <div style="padding: 40px; text-align: center;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 2em; color: var(--royal-blue); margin-bottom: 20px;"></i>
+                    <p style="font-size: 1.1em; color: #666;">Loading room details...</p>
+                </div>
+            `;
+            
+            const modal = ModalManager.openModal(loadingHTML, {
+                title: 'Room Details',
+                width: '700px',
+                showFooter: false
+            });
+            
+            console.log('⏳ Fetching room data for ID:', unitId);
+            
+            // Try to fetch from Firestore - check if it's a document ID or room number
+            let roomDoc;
+            
+            if (unitId.length === 20) { // Looks like a Firestore document ID
+                roomDoc = await firebaseDb.collection('rooms').doc(unitId).get();
+            } else {
+                // Try to find by roomNumber
+                const querySnapshot = await firebaseDb.collection('rooms')
+                    .where('roomNumber', '==', unitId)
+                    .limit(1)
+                    .get();
+                
+                if (!querySnapshot.empty) {
+                    roomDoc = querySnapshot.docs[0];
+                }
+            }
+            
+            if (!roomDoc || !roomDoc.exists) {
+                console.error('❌ Room document not found for ID:', unitId);
+                modal.querySelector('.modal-body').innerHTML = `
+                    <div style="padding: 40px; text-align: center;">
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2em; color: var(--danger); margin-bottom: 20px;"></i>
+                        <h4>Room Not Found</h4>
+                        <p>Room ID: ${unitId}</p>
+                        <p style="color: #999; font-size: 0.9em;">This room doesn't exist in the database yet.</p>
+                        <button class="btn btn-primary mt-3" onclick="window.app.createUnitFromGrid('${unitId}', 'vacant')">
+                            <i class="fas fa-plus"></i> Create This Unit
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            const room = roomDoc.data();
+            console.log('📦 Room data loaded:', room);
+            
+            // Format dates
+            const createdDate = room.createdAt ? 
+                new Date(room.createdAt).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                }) : 'Not set';
+            
+            const updatedDate = room.updatedAt ? 
+                new Date(room.updatedAt).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                }) : 'Not set';
+            
+            const occupiedDate = room.occupiedAt ? 
+                new Date(room.occupiedAt).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                }) : 'Not occupied';
+            
+            // Get tenant details if occupied
+            let tenantInfo = '';
+            if (room.isAvailable === false && room.occupiedBy) {
+                try {
+                    const tenantDoc = await firebaseDb.collection('users').doc(room.occupiedBy).get();
+                    if (tenantDoc.exists) {
+                        const tenant = tenantDoc.data();
+                        tenantInfo = `
+                            <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; border-left: 4px solid var(--success);">
+                                <h6 style="margin: 0 0 10px 0; color: var(--success);">
+                                    <i class="fas fa-user me-2"></i>Current Tenant
+                                </h6>
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                                    <div>
+                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 2px;">Name</div>
+                                        <div style="font-weight: 600;">${tenant.name || 'N/A'}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.85em; color: #666; margin-bottom: 2px;">Email</div>
+                                        <div style="font-weight: 600;">${tenant.email || 'N/A'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    console.log('ℹ️ No tenant details found');
+                }
+            }
+            
+            // Build the detailed view
+            const detailsHTML = `
+                <div style="padding: 20px;">
+                    <!-- Header with room number and status -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #f0f0f0;">
+                        <div>
+                            <h4 style="margin: 0; color: var(--royal-blue);">Unit ${room.roomNumber || 'N/A'}</h4>
+                            <p style="margin: 5px 0 0 0; color: #666; font-size: 0.9em;">Floor ${room.floor || 'N/A'}</p>
+                        </div>
+                        <div style="padding: 8px 16px; background: ${room.isAvailable === false ? 'var(--success)' : '#e9ecef'}; color: ${room.isAvailable === false ? 'white' : '#666'}; border-radius: 20px; font-weight: 600; font-size: 0.9em;">
+                            ${room.isAvailable === false ? 'OCCUPIED' : 'VACANT'}
+                        </div>
+                    </div>
+                    
+                    <!-- Room Details Grid -->
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 25px;">
+                        <div class="detail-card">
+                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Monthly Rent</div>
+                            <div style="font-size: 1.5em; font-weight: 700; color: var(--royal-blue);">₱${(room.monthlyRent || 0).toLocaleString()}</div>
+                        </div>
+                        
+                        <div class="detail-card">
+                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Security Deposit</div>
+                            <div style="font-size: 1.2em; font-weight: 600; color: var(--royal-blue);">₱${(room.securityDeposit || 0).toLocaleString()}</div>
+                        </div>
+                        
+                        <div class="detail-card">
+                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Bedrooms</div>
+                            <div style="font-size: 1.2em; font-weight: 600;">${room.numberOfBedrooms || 0}</div>
+                        </div>
+                        
+                        <div class="detail-card">
+                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Bathrooms</div>
+                            <div style="font-size: 1.2em; font-weight: 600;">${room.numberOfBathrooms || 0}</div>
+                        </div>
+                        
+                        <div class="detail-card">
+                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Current Occupants</div>
+                            <div style="font-size: 1.2em; font-weight: 600;">
+                                ${room.numberOfMembers || 0}/${room.maxMembers || 0}
+                                <span style="font-size: 0.8em; color: #666; margin-left: 5px;">persons</span>
+                            </div>
+                        </div>
+                        
+                        <div class="detail-card">
+                            <div style="font-size: 0.85em; color: #666; margin-bottom: 5px;">Occupied Since</div>
+                            <div style="font-size: 1em; font-weight: 600;">${occupiedDate}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tenant Information -->
+                    ${tenantInfo}
+                    
+                    <!-- Additional Information -->
+                    <div style="margin-top: 25px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                        <h6 style="margin: 0 0 10px 0; color: #666;">
+                            <i class="fas fa-info-circle me-2"></i>Additional Information
+                        </h6>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.9em;">
+                            <div>
+                                <span style="color: #666;">Created:</span>
+                                <span style="margin-left: 5px; font-weight: 500;">${createdDate}</span>
+                            </div>
+                            <div>
+                                <span style="color: #666;">Last Updated:</span>
+                                <span style="margin-left: 5px; font-weight: 500;">${updatedDate}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Actions -->
+                    <div style="margin-top: 25px; padding-top: 20px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; justify-content: flex-end;">
+                        <button class="btn btn-secondary" onclick="ModalManager.closeModal(this.closest('.modal-overlay'))">
+                            <i class="fas fa-times"></i> Close
+                        </button>
+                        <button class="btn btn-primary" onclick="window.app.editUnit('${roomDoc.id}')">
+                            <i class="fas fa-edit"></i> Edit Unit
+                        </button>
+                    </div>
+                </div>
+                
+                <style>
+                    .detail-card {
+                        padding: 15px;
+                        background: white;
+                        border-radius: 8px;
+                        border: 1px solid #e9ecef;
+                    }
+                </style>
+            `;
+            
+            modal.querySelector('.modal-body').innerHTML = detailsHTML;
+            console.log('✅ Unit details displayed successfully');
+            
+        } catch (error) {
+            console.error('❌ Error in showUnitDetails:', error);
+            ToastManager.showToast('Error loading unit details: ' + error.message, 'error');
+        }
+    }
+
+    generateUnitDetailsHTML(unit) {
+        const statusColors = {
+            occupied: '#28a745',
+            vacant: '#dc3545',
+            maintenance: '#ffc107',
+            reserved: '#17a2b8'
+        };
+        
+        return `
+            <div class="unit-details-modal">
+                <!-- Status Badge -->
+                <div style="margin-bottom: 25px;">
+                    <span style="
+                        background-color: ${statusColors[unit.status]}20;
+                        color: ${statusColors[unit.status]};
+                        padding: 8px 20px;
+                        border-radius: 20px;
+                        font-weight: 600;
+                        font-size: 0.9rem;
+                        border: 1px solid ${statusColors[unit.status]}40;
+                    ">
+                        ${unit.status?.toUpperCase() || 'UNKNOWN'}
+                    </span>
+                </div>
+                
+                <!-- Unit Information -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h6 style="font-weight: 600; margin-bottom: 15px; color: var(--gray-700);">
+                            <i class="fas fa-info-circle me-2"></i>Unit Information
+                        </h6>
+                        <table class="table table-sm" style="font-size: 0.9rem;">
+                            <tr>
+                                <td style="width: 40%; color: var(--gray-600);">Unit Number:</td>
+                                <td style="font-weight: 600;">${unit.unitNumber || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Floor:</td>
+                                <td style="font-weight: 600;">${unit.floor || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Type:</td>
+                                <td style="font-weight: 600;">${unit.type || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Bedrooms/Bathrooms:</td>
+                                <td style="font-weight: 600;">
+                                    ${unit.bedrooms || 'N/A'} bed • ${unit.bathrooms || 'N/A'} bath
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Size:</td>
+                                <td style="font-weight: 600;">${unit.size ? `${unit.size} sqft` : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Monthly Rent:</td>
+                                <td style="font-weight: 600; color: var(--primary-color);">
+                                    ${unit.monthlyRent ? `$${unit.monthlyRent}` : 'Not set'}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <h6 style="font-weight: 600; margin-bottom: 15px; color: var(--gray-700);">
+                            <i class="fas fa-calendar-alt me-2"></i>Additional Information
+                        </h6>
+                        <table class="table table-sm" style="font-size: 0.9rem;">
+                            <tr>
+                                <td style="width: 40%; color: var(--gray-600);">Amenities:</td>
+                                <td style="font-weight: 600;">${unit.amenities?.join(', ') || 'None specified'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Parking Spots:</td>
+                                <td style="font-weight: 600;">${unit.parkingSpots || '0'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Pet Friendly:</td>
+                                <td style="font-weight: 600;">
+                                    ${unit.petFriendly ? 
+                                        '<span class="text-success">Yes</span>' : 
+                                        '<span class="text-danger">No</span>'}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Furnished:</td>
+                                <td style="font-weight: 600;">
+                                    ${unit.furnished ? 
+                                        '<span class="text-success">Yes</span>' : 
+                                        '<span class="text-danger">No</span>'}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Last Renovated:</td>
+                                <td style="font-weight: 600;">${unit.lastRenovated || 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="color: var(--gray-600);">Notes:</td>
+                                <td style="font-weight: 600;">${unit.notes || 'No notes'}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- Current Occupancy Information -->
+                ${unit.status === 'occupied' && unit.currentTenant ? `
+                    <div class="current-occupancy mb-4">
+                        <h6 style="font-weight: 600; margin-bottom: 15px; color: var(--gray-700);">
+                            <i class="fas fa-user me-2"></i>Current Occupancy
+                        </h6>
+                        <div class="card" style="border: 1px solid var(--border-color); border-radius: 10px;">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6 style="font-weight: 600; color: var(--primary-color); margin-bottom: 10px;">
+                                            ${unit.currentTenant.name || 'Unknown Tenant'}
+                                        </h6>
+                                        <div style="font-size: 0.9rem;">
+                                            <div class="mb-2">
+                                                <i class="fas fa-envelope me-2"></i>
+                                                ${unit.currentTenant.email || 'N/A'}
+                                            </div>
+                                            <div class="mb-2">
+                                                <i class="fas fa-phone me-2"></i>
+                                                ${unit.currentTenant.phone || 'N/A'}
+                                            </div>
+                                            <div>
+                                                <i class="fas fa-calendar me-2"></i>
+                                                Joined: ${unit.currentTenant.createdAt ? 
+                                                    new Date(unit.currentTenant.createdAt).toLocaleDateString() : 'N/A'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    ${unit.currentLease ? `
+                                        <div class="col-md-6">
+                                            <h6 style="font-weight: 600; color: var(--gray-700); margin-bottom: 10px;">
+                                                Lease Information
+                                            </h6>
+                                            <div style="font-size: 0.9rem;">
+                                                <div class="mb-2">
+                                                    <strong>Lease ID:</strong> ${unit.currentLease.id.substring(0, 8)}...
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Start Date:</strong> 
+                                                    ${new Date(unit.currentLease.leaseStart).toLocaleDateString()}
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>End Date:</strong> 
+                                                    ${new Date(unit.currentLease.leaseEnd).toLocaleDateString()}
+                                                </div>
+                                                <div class="mb-2">
+                                                    <strong>Monthly Rent:</strong> 
+                                                    $${unit.currentLease.monthlyRent || unit.monthlyRent || 'N/A'}
+                                                </div>
+                                                <div>
+                                                    <strong>Status:</strong> 
+                                                    <span class="${unit.currentLease.isActive ? 'text-success' : 'text-danger'}">
+                                                        ${unit.currentLease.isActive ? 'Active' : 'Inactive'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+                
+                <!-- Maintenance History -->
+                <div class="maintenance-history">
+                    <h6 style="font-weight: 600; margin-bottom: 15px; color: var(--gray-700);">
+                        <i class="fas fa-tools me-2"></i>Recent Maintenance
+                    </h6>
+                    <div class="text-center py-4" style="color: var(--gray-500); font-style: italic;">
+                        Maintenance history would be displayed here
+                        <br>
+                        <small class="text-muted">(To be implemented)</small>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+
+    // Add this helper method to your CasaLink class
+    getStatusDisplay(status) {
+        const statusMap = {
+            'occupied': 'Occupied',
+            'vacant': 'Vacant',
+            'maintenance': 'Maintenance',
+            'reserved': 'Reserved'
+        };
+        return statusMap[status] || 'Vacant';
+    }
+
+
+        
 
 
 
@@ -5995,26 +8160,7 @@ class CasaLink {
     }
 
 
-    updateMaintenanceRequest(requestId) {
-        this.showNotification('Update maintenance request coming soon!', 'info');
-    }
-
-    assignMaintenance(requestId) {
-        this.showNotification('Assign maintenance coming soon!', 'info');
-    }
-
-    showAssignStaffForm() {
-        this.showNotification('Assign staff form coming soon!', 'info');
-    }
-
-    exportMaintenance() {
-        this.showNotification('Export maintenance reports coming soon!', 'info');
-    }
-
-    showMaintenanceSchedule() {
-        this.showNotification('Maintenance schedule coming soon!', 'info');
-    }
-
+    // Maintenance filtering and search methods
     searchMaintenance(searchTerm) {
         const rows = document.querySelectorAll('.maintenance-row');
         rows.forEach(row => {
@@ -6024,7 +8170,6 @@ class CasaLink {
     }
 
     filterMaintenance(filter) {
-        // Implement quick filters
         console.log('Filtering maintenance by:', filter);
     }
 
@@ -6070,7 +8215,7 @@ class CasaLink {
                 return;
             }
             
-            const typeCell = row.querySelector('td:nth-child(4)'); // Type column
+            const typeCell = row.querySelector('td:nth-child(4)');
             if (typeCell && typeCell.textContent.toLowerCase().includes(type.toLowerCase())) {
                 row.style.display = '';
             } else {
@@ -6079,8 +8224,8 @@ class CasaLink {
         });
     }
 
+    // Maintenance row event handlers
     setupMaintenanceRowClickHandlers() {
-        // Remove existing handlers first
         this.removeMaintenanceRowClickHandlers();
         
         this.maintenanceRowClickHandler = (e) => {
@@ -8722,23 +10867,6 @@ class CasaLink {
         return true;
     }
 
-
-    setupDashboardEvents() {
-        console.log('🔄 Setting up dashboard events with fresh data...');
-        
-        // Add Property Button
-        document.getElementById('addPropertyBtn')?.addEventListener('click', () => {
-            this.showAddPropertyForm();
-        });
-        
-        this.loadRecentActivities();
-        
-        // Setup real-time stats when dashboard is shown
-        this.updateActiveNavState('dashboard');
-        
-        console.log('✅ All dashboard events setup complete');
-    }
-
     setupNavigationEvents() {
         // This will handle navigation between pages
         document.addEventListener('click', (e) => {
@@ -10238,50 +12366,6 @@ class CasaLink {
         }
     }
 
-    updateMaintenanceRequest(requestId) {
-        this.showNotification('Update maintenance request feature coming soon!', 'info');
-    }
-
-    showAssignStaffForm() {
-        this.showNotification('Assign staff feature coming soon!', 'info');
-    }
-
-    editTenant(tenantId) {
-        this.showNotification('Edit tenant feature coming soon!', 'info');
-    }
-
-    sendMessage(tenantId) {
-        this.showNotification('Send message feature coming soon!', 'info');
-    }
-
-    deleteTenant(tenantId) {
-        this.showNotification('Delete tenant feature coming soon!', 'info');
-    }
-
-    viewBill(billId) {
-        this.showNotification('View bill feature coming soon!', 'info');
-    }
-
-    assignMaintenance(requestId) {
-        this.showNotification('Assign maintenance feature coming soon!', 'info');
-    }
-
-    showGenerateBillForm() {
-        this.showNotification('Bill generation feature coming soon!', 'info');
-    }
-
-    showPaymentModal(billId = null) {
-        this.showNotification('Payment processing feature coming soon!', 'info');
-    }
-
-    showMaintenanceRequestForm() {
-        this.showNotification('Maintenance request feature coming soon!', 'info');
-    }
-
-    showAddPropertyForm() {
-        this.showNotification('Add property feature coming soon!', 'info');
-    }
-
     // ===== DASHBOARD DATA METHODS =====
     async setupRealTimeStats() {
         // This would setup real-time data listeners
@@ -11441,12 +13525,6 @@ class CasaLink {
             element.className = 'card-change positive';
         });
     }
-
-    updateCard(elementId, value) {
-        const element = document.getElementById(elementId);
-        if (element) element.textContent = value;
-    }
-
     updateCard(elementId, value) {
         const element = document.getElementById(elementId);
         if (element) element.textContent = value;
@@ -11857,99 +13935,6 @@ class CasaLink {
         const due = new Date(dueDate);
         const diffTime = today - due;
         return Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    }
-
-    getBillStatusBadge(bill) {
-        const today = new Date();
-        const dueDate = new Date(bill.dueDate);
-        
-        if (bill.status === 'paid') {
-            return '<span class="status-badge active">Paid</span>';
-        } else if (dueDate < today) {
-            return '<span class="status-badge warning">Overdue</span>';
-        } else {
-            return '<span class="status-badge inactive">Pending</span>';
-        }
-    }
-
-    renderBillsTable(bills) {
-        return `
-            <div class="table-container">
-                <table class="tenants-table">
-                    <thead>
-                        <tr>
-                            <th>Tenant</th>
-                            <th>Room</th>
-                            <th>Description</th>
-                            <th>Amount</th>
-                            <th>Due Date</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${bills.map(bill => {
-                            const isOverdue = bill.status === 'pending' && new Date(bill.dueDate) < new Date();
-                            const statusBadge = this.getBillStatusBadge(bill);
-                            
-                            return `
-                                <tr class="bill-row" data-bill-id="${bill.id}">
-                                    <td>
-                                        <div class="tenant-info">
-                                            <div class="tenant-avatar">${bill.tenantName?.charAt(0)?.toUpperCase() || 'T'}</div>
-                                            <div class="tenant-details">
-                                                <div class="tenant-name">${bill.tenantName || 'N/A'}</div>
-                                                <small style="color: var(--dark-gray); font-size: 0.8rem;">
-                                                    ${bill.roomNumber || 'No room assigned'}
-                                                </small>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td>${bill.roomNumber || 'N/A'}</td>
-                                    <td>
-                                        <div style="font-weight: 500;">${bill.description || 'Monthly Rent'}</div>
-                                        <small style="color: var(--dark-gray); text-transform: capitalize;">
-                                            ${bill.type || 'rent'} ${bill.isAutoGenerated ? '(Auto-generated)' : '(Manual)'}
-                                        </small>
-                                    </td>
-                                    <td style="font-weight: 600; color: var(--royal-blue);">
-                                        ₱${(bill.totalAmount || 0).toLocaleString()}
-                                    </td>
-                                    <td>
-                                        <div>${new Date(bill.dueDate).toLocaleDateString()}</div>
-                                        ${isOverdue ? `
-                                            <small style="color: var(--danger); font-weight: 500;">
-                                                ${this.getDaysOverdue(bill.dueDate)} days overdue
-                                            </small>
-                                        ` : ''}
-                                    </td>
-                                    <td>
-                                        ${statusBadge}
-                                    </td>
-                                    <td>
-                                        <div class="action-buttons">
-                                            ${bill.status !== 'paid' ? `
-                                                <button class="btn btn-sm btn-success" onclick="event.stopPropagation(); casaLink.recordPaymentModal('${bill.id}')">
-                                                    <i class="fas fa-credit-card"></i> Pay
-                                                </button>
-                                            ` : ''}
-                                            ${bill.status !== 'paid' ? `
-                                                <button class="btn btn-sm btn-warning" onclick="event.stopPropagation(); casaLink.editBill('${bill.id}')">
-                                                    <i class="fas fa-edit"></i>
-                                                </button>
-                                            ` : ''}
-                                            <button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); casaLink.deleteBill('${bill.id}')">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
-            </div>
-        `;
     }
 
     updateBillsPaginationControls() {
@@ -14505,46 +16490,6 @@ class CasaLink {
             console.log('🔚 End Debug');
         }
 
-        async debugOnboardingFlow() {
-        console.log('🐛 DEBUG: Starting onboarding flow analysis...');
-        
-        const user = this.currentUser;
-        if (!user) {
-            console.log('❌ No current user');
-            return;
-        }
-        
-        console.log('👤 Current User:', {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-            passwordChanged: user.passwordChanged,
-            status: user.status,
-            requiresPasswordChange: user.requiresPasswordChange
-        });
-        
-        const lease = await DataManager.getTenantLease(user.uid);
-        console.log('📄 Lease Data:', {
-            exists: !!lease,
-            id: lease?.id,
-            roomNumber: lease?.roomNumber,
-            maxOccupants: lease?.maxOccupants,
-            occupants: lease?.occupants,
-            totalOccupants: lease?.totalOccupants
-        });
-        
-        if (lease?.roomNumber) {
-            const room = await this.getRoomByNumber(lease.roomNumber);
-            console.log('🏠 Room Data:', {
-                exists: !!room,
-                roomNumber: room?.roomNumber,
-                maxMembers: room?.maxMembers
-            });
-        }
-        
-        console.log('🔚 End Debug');
-    }
-
     async createLeaseDocument(tenantId, tenantData, leaseEndDate) {
         try {
             console.log('📝 Creating SINGLE lease document for tenant:', tenantId);
@@ -16243,6 +18188,77 @@ class CasaLink {
         return `Overdue by ${Math.abs(diffDays)} days`;
     }
 }
+
+window.testAppBinding = function() {
+    console.log('🧪 Testing app binding...');
+    
+    console.log('window.app exists:', !!window.app);
+    console.log('window.app type:', typeof window.app);
+    
+    if (window.app) {
+        console.log('Available methods on window.app:');
+        Object.getOwnPropertyNames(Object.getPrototypeOf(window.app))
+            .filter(prop => typeof window.app[prop] === 'function')
+            .forEach(method => {
+                console.log(`  - ${method}`);
+            });
+        
+        // Test specific methods
+        console.log('showUnitLayoutDashboard available:', 
+            typeof window.app.showUnitLayoutDashboard === 'function');
+        console.log('showUnitDetails available:', 
+            typeof window.app.showUnitDetails === 'function');
+    }
+};
+
+window.testFirestoreData = async function() {
+    console.log('🧪 Testing Firestore data...');
+    
+    try {
+        const roomsSnapshot = await firebaseDb.collection('rooms').get();
+        console.log(`📊 Total rooms in Firestore: ${roomsSnapshot.size}`);
+        
+        if (roomsSnapshot.size === 0) {
+            console.log('❌ No rooms found in Firestore!');
+            alert('No rooms found in Firestore!');
+            return;
+        }
+        
+        console.log('📋 Rooms in Firestore:');
+        roomsSnapshot.forEach(doc => {
+            const room = doc.data();
+            console.log(`   - ${doc.id}: ${room.roomNumber} (Floor: ${room.floor}, Available: ${room.isAvailable})`);
+        });
+        
+        // Show alert with summary
+        alert(`Found ${roomsSnapshot.size} rooms in Firestore. Check console for details.`);
+        
+    } catch (error) {
+        console.error('❌ Error testing Firestore:', error);
+        alert('Error testing Firestore: ' + error.message);
+    }
+};
+
+window.debugUnitLayout = function() {
+    console.log('🐛 Debugging unit layout...');
+    
+    const modal = document.querySelector('.modal.show');
+    if (!modal) {
+        console.log('❌ No unit layout modal open');
+        return;
+    }
+    
+    const unitCards = modal.querySelectorAll('.unit-card-dynamic');
+    console.log(`🔍 Found ${unitCards.length} unit cards in layout`);
+    
+    unitCards.forEach((card, index) => {
+        console.log(`Card ${index + 1}:`, {
+            unitId: card.dataset.unitId,
+            roomNumber: card.dataset.roomNumber,
+            status: card.dataset.status
+        });
+    });
+};
 
 // Initialize the app when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {

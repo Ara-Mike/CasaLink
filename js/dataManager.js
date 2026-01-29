@@ -16,6 +16,212 @@ class DataManager {
         console.log('✅ DataManager initialized');
     }
 
+    static async getLandlordUnits(landlordId) {
+        try {
+            console.log('📡 Fetching units for landlord:', landlordId);
+            
+            // Query rooms collection and convert to unit format
+            const querySnapshot = await firebaseDb.collection('rooms')
+                .orderBy('floor')
+                .orderBy('roomNumber')
+                .get();
+            
+            console.log('📊 Query snapshot size:', querySnapshot.size);
+            
+            const units = querySnapshot.docs.map(doc => {
+                const room = doc.data();
+                const floor = parseInt(room.floor) || room.floor;
+                
+                return {
+                    id: doc.id,
+                    roomNumber: room.roomNumber,
+                    unitNumber: room.roomNumber, // For compatibility
+                    floor: floor,
+                    status: room.isAvailable === false ? 'occupied' : 'vacant', // Map isAvailable to status
+                    tenantName: room.occupiedBy ? 'Occupied' : 'Vacant',
+                    occupiedBy: room.occupiedBy,
+                    numberOfMembers: room.numberOfMembers || 0,
+                    maxMembers: room.maxMembers || 0,
+                    monthlyRent: room.monthlyRent || 0,
+                    numberOfBedrooms: room.numberOfBedrooms || 0,
+                    numberOfBathrooms: room.numberOfBathrooms || 0,
+                    isAvailable: room.isAvailable,
+                    securityDeposit: room.securityDeposit || 0,
+                    occupiedAt: room.occupiedAt,
+                    createdAt: room.createdAt,
+                    updatedAt: room.updatedAt
+                };
+            });
+            
+            console.log('✅ Total units fetched:', units.length);
+            
+            // Log each unit for debugging
+            units.forEach(unit => {
+                console.log(`   - ${unit.roomNumber}: ${unit.status} (isAvailable: ${unit.isAvailable})`);
+            });
+            
+            return units;
+            
+        } catch (error) {
+            console.error('❌ Error fetching units:', error);
+            return [];
+        }
+    }
+
+    static async getUnitsWithRealtimeUpdates(landlordId, callback) {
+        try {
+            console.log('📡 Setting up real-time listener for units, landlord:', landlordId);
+            
+            if (!landlordId) {
+                console.error('❌ No landlordId provided for real-time listener');
+                return null;
+            }
+            
+            // Set up the real-time listener for rooms collection
+            const unsubscribe = firebaseDb
+                .collection('rooms')
+                .onSnapshot(
+                    (snapshot) => {
+                        console.log('📡 Firestore snapshot received');
+                        console.log('   - Total docs:', snapshot.size);
+                        console.log('   - Changes:', snapshot.docChanges().length);
+                        
+                        // Log change types
+                        snapshot.docChanges().forEach(change => {
+                            console.log(`   - ${change.type.toUpperCase()}: ${change.doc.id}`);
+                        });
+                        
+                        const units = [];
+                        snapshot.forEach(doc => {
+                            const room = doc.data();
+                            const floor = parseInt(room.floor) || room.floor;
+                            
+                            units.push({
+                                id: doc.id,
+                                roomNumber: room.roomNumber,
+                                unitNumber: room.roomNumber, // For compatibility
+                                floor: floor,
+                                status: room.isAvailable ? 'vacant' : 'occupied',
+                                tenantName: room.occupiedBy ? `Tenant` : '',
+                                occupiedBy: room.occupiedBy,
+                                numberOfMembers: room.numberOfMembers,
+                                maxMembers: room.maxMembers,
+                                monthlyRent: room.monthlyRent,
+                                numberOfBedrooms: room.numberOfBedrooms,
+                                numberOfBathrooms: room.numberOfBathrooms,
+                                isAvailable: room.isAvailable,
+                                occupiedAt: room.occupiedAt,
+                                createdAt: room.createdAt,
+                                updatedAt: room.updatedAt,
+                                ...room
+                            });
+                        });
+                        
+                        console.log('📡 Processed', units.length, 'units from snapshot');
+                        
+                        // Log sample unit
+                        if (units.length > 0) {
+                            console.log('   - Sample unit:', {
+                                id: units[0].id,
+                                roomNumber: units[0].roomNumber,
+                                floor: units[0].floor,
+                                status: units[0].status,
+                                isAvailable: units[0].isAvailable,
+                                occupiedBy: units[0].occupiedBy || 'N/A'
+                            });
+                        }
+                        
+                        // Validate units have required fields
+                        const validUnits = units.filter(u => u.floor && u.roomNumber && u.status !== undefined);
+                        if (validUnits.length !== units.length) {
+                            console.warn(`⚠️ Filtered out ${units.length - validUnits.length} invalid units`);
+                        }
+                        
+                        // Call the callback with updated units
+                        if (callback && typeof callback === 'function') {
+                            try {
+                                console.log('✅ Calling callback with', validUnits.length, 'valid units');
+                                callback(validUnits);
+                            } catch (callbackError) {
+                                console.error('❌ Error in callback function:', callbackError);
+                            }
+                        } else {
+                            console.warn('⚠️ No callback function provided for real-time updates');
+                        }
+                    },
+                    (error) => {
+                        console.error('❌ Error in real-time listener:', error);
+                        console.error('   - Error code:', error.code);
+                        console.error('   - Error message:', error.message);
+                        if (window.ToastManager) {
+                            ToastManager.showToast('Error receiving real-time updates. Please refresh.', 'error');
+                        }
+                    }
+                );
+            
+            console.log('✅ Real-time listener setup complete');
+            return unsubscribe;
+            
+        } catch (error) {
+            console.error('❌ Error setting up real-time listener:', error);
+            if (window.ToastManager) {
+                ToastManager.showToast('Error setting up real-time updates.', 'error');
+            }
+            return null;
+        }
+    }
+
+    static async getUnitDetails(unitId) {
+        try {
+            const unitDoc = await firebaseDb.collection('room').doc(unitId).get();
+            
+            if (!unitDoc.exists) {
+                return null;
+            }
+            
+            const unitData = {
+                id: unitDoc.id,
+                ...unitDoc.data()
+            };
+            
+            // Fetch current lease if unit is occupied
+            if (unitData.status === 'occupied') {
+                const leasesQuery = await firebaseDb.collection('leases')
+                    .where('unitId', '==', unitId)
+                    .where('isActive', '==', true)
+                    .limit(1)
+                    .get();
+                
+                if (!leasesQuery.empty) {
+                    const lease = leasesQuery.docs[0];
+                    unitData.currentLease = {
+                        id: lease.id,
+                        ...lease.data()
+                    };
+                    
+                    // Fetch tenant information
+                    if (unitData.currentLease.tenantId) {
+                        const tenantDoc = await firebaseDb.collection('users')
+                            .doc(unitData.currentLease.tenantId)
+                            .get();
+                        
+                        if (tenantDoc.exists) {
+                            unitData.currentTenant = {
+                                id: tenantDoc.id,
+                                ...tenantDoc.data()
+                            };
+                        }
+                    }
+                }
+            }
+            
+            return unitData;
+        } catch (error) {
+            console.error('Error fetching unit details:', error);
+            return null;
+        }
+    }
+
     async getTenants() {
         if (!this.user) throw new Error('User not authenticated');
         
