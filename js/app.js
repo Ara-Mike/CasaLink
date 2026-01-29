@@ -317,8 +317,9 @@ class CasaLink {
             this.setupPWAFeatures();
             this.setupOfflineHandling();
             this.setupNavigationEvents();
-             this.setupDashboardEventListeners();
-            this.setupGlobalEventListeners(); // Make sure this is called
+            
+            // NOTE: setupGlobalEventListeners() is already called in constructor (line 51)
+            // Do not call it again here to avoid duplicate event listeners
             
             // Initialize billing system
             if (this.currentUser?.role === 'landlord') {
